@@ -47,7 +47,11 @@ pip install -r requirements.txt
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-By default the service uses `sqlite:///./data/app.db`. Override with `DB_URL` if you want a different database backend. Uploaded PDFs are stored relative to the repository in `data/sessions/`.
+By default the service uses `sqlite:///./data/app.db`. Override with `DB_URL` if you want a different database backend. Uploaded PDFs are buffered in memory and written to temporary files only while parsing, so nothing persists under `data/` once the process exits.
+
+### Exit when idle
+
+To make the backend shut down automatically when no operator or patient WebSocket clients are connected, set `EXIT_WHEN_IDLE=true`. The shutdown is debounced by `EXIT_IDLE_DEBOUNCE_SEC` seconds (defaults to 20). When the timer expires and there are no active ingest/parse jobs, uvicorn is asked to exit gracefully (or the process receives `SIGINT` as a fallback). The development script (`scripts/dev.sh`) enables this behaviour with a 5-second debounce so closing the dev tabs returns control to the shell quickly. A convenience runner at [`backend/runner.py`](backend/runner.py) is available if you prefer to start uvicorn programmatically and capture the server instance in `app.state`.
 
 ## Frontend
 
