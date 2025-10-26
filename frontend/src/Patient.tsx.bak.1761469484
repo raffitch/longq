@@ -1,0 +1,52 @@
+import React, { useEffect, useState } from "react";
+import { banner } from "./api";
+
+export default function Patient({ sessionId }: { sessionId: number | null }) {
+  const [msg, setMsg] = useState<string>("Welcome to LongevityQ.");
+  const [data, setData] = useState<any | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    async function poll() {
+      if (!sessionId) { setTimeout(poll, 1000); return; }
+      try {
+        const b = await banner(sessionId);
+        if (!active) return;
+        setMsg(b.message);
+
+        const base = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+        const r = await fetch(`${base}/sessions/${sessionId}/parsed/food`);
+        if (r.ok) {
+          const json = await r.json();
+          if (active) setData(json.data);
+        } else {
+          if (active) setData(null);
+        }
+      } catch {
+        if (active) setData(null);
+      } finally {
+        if (active) setTimeout(poll, 1200);
+      }
+    }
+    poll();
+    return () => { active = false; };
+  }, [sessionId]);
+
+  if (!data) {
+    return (
+      <div style={{height:"100vh", display:"flex", alignItems:"center", justifyContent:"center",
+                   background:"#000", color:"#fff", fontSize:"28px", textAlign:"center"}}>
+        {msg}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{minHeight:"100vh", background:"#000", color:"#fff", padding:"24px"}}>
+      <h1 style={{fontSize:"22px", fontWeight:600, marginBottom:"8px"}}>Results</h1>
+      <pre style={{fontSize:"12px", background:"#111", padding:"16px", borderRadius:"8px", overflow:"auto"}}>
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </div>
+  );
+}

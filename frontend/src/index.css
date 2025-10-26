@@ -1,0 +1,5 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+button { cursor: pointer; border: none; }
+button:disabled { cursor: not-allowed; }
+input { outline: none; }

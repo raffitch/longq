@@ -1,0 +1,39 @@
+from pydantic import BaseModel
+from typing import Optional, Literal, Any
+
+class SessionCreate(BaseModel):
+    client_name: str
+
+class SessionOut(BaseModel):
+    id: int
+    code: str
+    client_name: str
+    state: Literal["CREATED","INGESTING","VALIDATING","PARSING","READY","PUBLISHED","CLOSED"]
+    published: bool
+
+class PublishRequest(BaseModel):
+    publish: bool = True
+
+class BannerOut(BaseModel):
+    message: str
+
+class FileOut(BaseModel):
+    id: int
+    kind: str
+    filename: str
+    status: str
+    error: Optional[str] = None
+
+class ParsedOut(BaseModel):
+    session_id: int
+    kind: str
+    data: Any
+
+# --- Fixed patient-screen binding schemas ---
+class DisplayOut(BaseModel):
+  session_id: Optional[int] = None
+  client_name: Optional[str] = None
+  published: Optional[bool] = None
+
+class DisplaySet(BaseModel):
+  session_id: Optional[int] = None  # set null to clear screen

@@ -1,0 +1,151 @@
+import React, { useEffect, useRef, useState } from "react";
+import { getDisplay, banner } from "./api";
+import { StatusBar } from "./components/StatusBar";
+
+// Adjust this type to exactly match your parser's output if needed
+type FoodData = {
+  pages: {
+    page: number;
+    section: string;
+    categories: { name: string; items: { name: string; score?: number }[] }[];
+  }[];
+};
+
+export default function Patient() {
+  const [msg, setMsg] = useState("Welcome to LongevityQ.");
+  const [data, setData] = useState<FoodData | null>(null);
+  const [lastNote, setLastNote] = useState<string>("");
+  const [step, setStep] = useState<string>("idle");
+  const [remaining, setRemaining] = useState<number>(0);
+  const lastSessionId = useRef<number | null>(null);
+
+  const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
+
+  async function refreshOnce() {
+    try {
+      const d = await getDisplay();
+      if (!d.session_id) {
+        lastSessionId.current = null;
+        setData(null);
+        setMsg("Welcome to LongevityQ.");
+        setStep("idle");
+        setRemaining(0);
+        return;
+      }
+      const sid = d.session_id;
+
+      // greet immediately when session changes
+      if (lastSessionId.current !== sid) {
+        const b = await banner(sid);
+        setMsg(b.message);
+        setLastNote(`Bound session #${sid}`);
+      }
+
+      // fetch parsed (403/404 until published)
+      const r = await fetch(`${base}/sessions/${sid}/parsed/food`);
+      if (r.ok) {
+        const json = await r.json();
+        setData(json.data as FoodData);
+        setStep("showing-results");
+      } else {
+        setData(null);
+        setStep("waiting-publish");
+      }
+
+      lastSessionId.current = sid;
+    } catch {
+      // keep previous frame
+    }
+  }
+
+  useEffect(() => {
+    // WebSocket push (backend broadcasts on displaySet/published)
+    const wsUrl = base.replace(/^http/, "ws") + "/ws/patient";
+    let ws: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+
+    function connect() {
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => { /* connected */ };
+        ws.onmessage = () => {
+          setLastNote("Update received");
+          refreshOnce();
+        };
+        ws.onclose = () => {
+          reconnectTimer = window.setTimeout(connect, 3000);
+        };
+        ws.onerror = () => {
+          try { ws?.close(); } catch {}
+        };
+      } catch {
+        reconnectTimer = window.setTimeout(connect, 3000);
+      }
+    }
+
+    connect();
+
+    // Slow 30s safety poll
+    const t = window.setInterval(refreshOnce, 30000);
+    refreshOnce();
+
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      clearInterval(t);
+      try { ws?.close(); } catch {}
+    };
+  }, []);
+
+  // ---- Presentation
+  if (!data) {
+    return (
+      <div style={{minHeight:"100vh", background:"#0b0d10", color:"#fff", fontFamily:"Inter,system-ui"}}>
+        <div style={{maxWidth:960, margin:"0 auto", padding:32}}>
+          <h1 style={{fontSize:28, fontWeight:700, marginBottom:8}}>LongevityQ</h1>
+          <div style={{opacity:.85, marginBottom:16}}>{msg}</div>
+          <div style={{padding:16, background:"#12151a", borderRadius:12}}>Waiting for published results…</div>
+        </div>
+        <StatusBar remaining={remaining} step={step} last={lastNote} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{minHeight:"100vh", background:"#0b0d10", color:"#fff", fontFamily:"Inter,system-ui"}}>
+      <div style={{maxWidth:960, margin:"0 auto", padding:32}}>
+        <h1 style={{fontSize:28, fontWeight:700, marginBottom:8}}>Results</h1>
+        <div style={{opacity:.85, marginBottom:16}}>{msg}</div>
+
+        <h2 style={{fontSize:22, marginTop:12}}>Food report</h2>
+        {data.pages.map((pg, i) => (
+          <div key={i} style={{marginTop:12, background:"#12151a", padding:16, borderRadius:12}}>
+            <div style={{opacity:.85, marginBottom:6}}>
+              Page {pg.page} — {pg.section}
+            </div>
+
+            {pg.categories.map((c, j) => (
+              <div key={j} style={{marginBottom:8}}>
+                <div style={{fontWeight:600}}>{c.name}</div>
+                <ul style={{margin:0, paddingLeft:18}}>
+                  {c.items.slice(0, 6).map((it, k) => (
+                    <li key={k} style={{lineHeight:"1.6"}}>
+                      {it.name}
+                      {typeof it.score !== "undefined" && (
+                        <> — <span style={{opacity:.8}}>score {it.score}</span></>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {c.items.length > 6 && (
+                  <div style={{opacity:.6, fontSize:12}}>+{c.items.length - 6} more</div>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <StatusBar remaining={remaining} step={step} last={lastNote} />
+    </div>
+  );
+}

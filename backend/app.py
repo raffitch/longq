@@ -1,0 +1,191 @@
+import hashlib, os, time, asyncio
+from secrets import token_hex
+from typing import List, Set
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import select, Session
+from db import init_db, get_session, engine
+from models import SessionRow, FileRow, ParsedRow, DisplayRow
+from schemas import SessionCreate, SessionOut, PublishRequest, BannerOut, FileOut, ParsedOut, DisplayOut, DisplaySet
+from storage import save_upload, session_dir
+from parser_adapter import parse_file
+
+app = FastAPI(title="LongevityQ Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], allow_credentials=True,
+    allow_methods=["*"], allow_headers=["*"],
+)
+
+# ----------------- WebSocket (patient push) -----------------
+patient_clients: Set[WebSocket] = set()
+
+@app.websocket("/ws/patient")
+async def ws_patient(ws: WebSocket):
+    await ws.accept()
+    patient_clients.add(ws)
+    try:
+        while True:
+            # optional: handle pings if you want
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        patient_clients.discard(ws)
+    except Exception:
+        try:
+            await ws.close()
+        finally:
+            patient_clients.discard(ws)
+
+async def broadcast(event: dict):
+    """Send JSON event to all connected patient screens."""
+    dead = []
+    for ws in list(patient_clients):
+        try:
+            await ws.send_json(event)
+        except Exception:
+            dead.append(ws)
+    for d in dead:
+        try:
+            d.close()
+        except Exception:
+            pass
+        patient_clients.discard(d)
+
+# ----------------- Startup -----------------
+@app.on_event("startup")
+def on_startup():
+    os.makedirs("./data", exist_ok=True)
+    init_db()
+    # Ensure one display row exists
+    with Session(engine) as db:
+        d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
+        if not d:
+            db.add(DisplayRow(code="main"))
+            db.commit()
+
+def short_code() -> str:
+    return token_hex(3).upper()  # 6 hex chars
+
+# ----------------- Sessions -----------------
+@app.post("/sessions", response_model=SessionOut)
+def create_session(payload: SessionCreate, db=Depends(get_session)):
+    s = SessionRow(client_name=payload.client_name, code=short_code())
+    db.add(s); db.commit(); db.refresh(s)
+    return SessionOut(id=s.id, code=s.code, client_name=s.client_name, state=s.state, published=s.published)
+
+@app.get("/sessions", response_model=List[SessionOut])
+def list_sessions(db=Depends(get_session)):
+    rows = db.exec(select(SessionRow).order_by(SessionRow.id.desc())).all()
+    return [SessionOut(id=r.id, code=r.code, client_name=r.client_name, state=r.state, published=r.published) for r in rows]
+
+@app.get("/sessions/{session_id}", response_model=SessionOut)
+def get_session_status(session_id: int, db=Depends(get_session)):
+    s = db.get(SessionRow, session_id)
+    if not s: raise HTTPException(404, "Session not found")
+    return SessionOut(id=s.id, code=s.code, client_name=s.client_name, state=s.state, published=s.published)
+
+# Greet immediately
+@app.get("/sessions/{session_id}/banner", response_model=BannerOut)
+def banner(session_id: int, db=Depends(get_session)):
+    s = db.get(SessionRow, session_id)
+    if not s: raise HTTPException(404, "Session not found")
+    return BannerOut(message=f"Hi, {s.client_name}, your wellness journey is about to begin.")
+
+# ----------------- Upload / Parse / Publish -----------------
+@app.post("/sessions/{session_id}/upload/{kind}", response_model=FileOut)
+def upload_pdf(session_id: int, kind: str, file: UploadFile = File(...), db=Depends(get_session)):
+    s = db.get(SessionRow, session_id)
+    if not s: raise HTTPException(404, "Session not found")
+    s.state = "INGESTING"
+    db.add(s)
+
+    path = save_upload(session_id, kind, file.filename, file.file)
+    h = hashlib.sha256()
+    with open(path, "rb") as f: h.update(f.read())
+    filehash = h.hexdigest()
+
+    fr = FileRow(session_id=session_id, kind=kind, filename=file.filename,
+                 filehash=filehash, size=os.path.getsize(path), status="uploaded")
+    db.add(fr); db.commit(); db.refresh(fr)
+    return FileOut(id=fr.id, kind=fr.kind, filename=fr.filename, status=fr.status, error=fr.error)
+
+@app.post("/files/{file_id}/parse", response_model=ParsedOut)
+def parse_uploaded(file_id: int, db=Depends(get_session)):
+    fr = db.get(FileRow, file_id)
+    if not fr: raise HTTPException(404, "File not found")
+    s = db.get(SessionRow, fr.session_id)
+    if not s: raise HTTPException(404, "Session not found")
+
+    s.state = "PARSING"; fr.status = "validating"; db.add(s); db.add(fr); db.commit()
+
+    pdf_path = session_dir(fr.session_id) / f"{fr.kind}.pdf"
+    if not pdf_path.exists():
+        raise HTTPException(400, "PDF not found on disk")
+
+    try:
+        version, data = parse_file(fr.kind, pdf_path)
+        fr.status = "parsed"; fr.parser_version = version
+        db.add(fr)
+        existing = db.exec(select(ParsedRow).where(
+            (ParsedRow.session_id == fr.session_id) & (ParsedRow.kind == fr.kind)
+        )).first()
+        if existing:
+            existing.data = data
+            db.add(existing)
+        else:
+            db.add(ParsedRow(session_id=fr.session_id, kind=fr.kind, data=data))
+        s.state = "READY"; db.add(s)
+        db.commit()
+        return ParsedOut(session_id=fr.session_id, kind=fr.kind, data=data)
+    except Exception as e:
+        fr.status = "error"; fr.error = str(e); db.add(fr)
+        s.state = "VALIDATING"; db.add(s)
+        db.commit()
+        raise HTTPException(500, f"Parse failed: {e}")
+
+@app.post("/sessions/{session_id}/publish")
+async def publish(session_id: int, req: PublishRequest, db=Depends(get_session)):
+    s = db.get(SessionRow, session_id)
+    if not s: raise HTTPException(404, "Session not found")
+    s.published = bool(req.publish)
+    if s.published: s.state = "PUBLISHED"
+    db.add(s); db.commit()
+    # push an event so patient screens update immediately
+    asyncio.create_task(broadcast({"type": "published", "sessionId": session_id, "ts": time.time()}))
+    return {"ok": True, "published": s.published}
+
+# Strict publish gate
+@app.get("/sessions/{session_id}/parsed/{kind}", response_model=ParsedOut)
+def get_parsed(session_id: int, kind: str, db=Depends(get_session)):
+    s = db.get(SessionRow, session_id)
+    if not s: raise HTTPException(404, "Session not found")
+    if not s.published:
+        raise HTTPException(403, "Results not published yet")
+    pr = db.exec(select(ParsedRow).where(
+        (ParsedRow.session_id == session_id) & (ParsedRow.kind == kind)
+    )).first()
+    if not pr: raise HTTPException(404, "Parsed data not found")
+    return ParsedOut(session_id=pr.session_id, kind=pr.kind, data=pr.data)
+
+# ----------------- Patient display binding -----------------
+@app.get("/display/current", response_model=DisplayOut)
+def display_current(db=Depends(get_session)):
+    d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
+    if not d or not d.current_session_id:
+        return DisplayOut(session_id=None)
+    s = db.get(SessionRow, d.current_session_id)
+    if not s:
+        return DisplayOut(session_id=None)
+    return DisplayOut(session_id=s.id, client_name=s.client_name, published=s.published)
+
+@app.post("/display/current")
+async def display_set(req: DisplaySet, db=Depends(get_session)):
+    d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
+    if not d:
+        d = DisplayRow(code="main")
+    d.current_session_id = req.session_id
+    db.add(d); db.commit()
+    # push an event so patient screens update instantly
+    asyncio.create_task(broadcast({"type": "displaySet", "sessionId": req.session_id, "ts": time.time()}))
+    return {"ok": True}

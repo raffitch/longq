@@ -1,0 +1,93 @@
+import React, { useEffect, useRef, useState } from "react";
+import { getDisplay, banner } from "./api";
+
+export default function Patient() {
+  const [msg, setMsg] = useState("Welcome to LongevityQ.");
+  const [data, setData] = useState<any | null>(null);
+  const lastSessionId = useRef<number | null>(null);
+
+  const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
+
+  async function refreshOnce() {
+    try {
+      const d = await getDisplay();
+      if (!d.session_id) {
+        lastSessionId.current = null;
+        setData(null);
+        setMsg("Welcome to LongevityQ.");
+        return;
+      }
+      const sid = d.session_id;
+      // Only refetch banner when session changes (small optimization)
+      if (lastSessionId.current !== sid) {
+        const b = await banner(sid);
+        setMsg(b.message);
+      }
+      // Try parsed (may be 403/404 until publish)
+      const r = await fetch(`${base}/sessions/${sid}/parsed/food`);
+      if (r.ok) {
+        const json = await r.json();
+        setData(json.data);
+      } else {
+        setData(null);
+      }
+      lastSessionId.current = sid;
+    } catch {
+      // keep previous UI; no throw
+    }
+  }
+
+  useEffect(() => {
+    // --- WebSocket: event-driven updates ---
+    const wsUrl = base.replace(/^http/, "ws") + "/ws/patient";
+    let ws: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+
+    function connect() {
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => { /* connected */ };
+        ws.onmessage = () => { refreshOnce(); };
+        ws.onclose = () => {
+          // reconnect with backoff (5s cap)
+          reconnectTimer = window.setTimeout(connect, 3000);
+        };
+        ws.onerror = () => {
+          try { ws?.close(); } catch {}
+        };
+      } catch {
+        reconnectTimer = window.setTimeout(connect, 3000);
+      }
+    }
+
+    connect();
+
+    // --- Slow safety poll (30s) ---
+    const t = window.setInterval(refreshOnce, 30000);
+    refreshOnce();
+
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      clearInterval(t);
+      try { ws?.close(); } catch {}
+    };
+  }, []);
+
+  if (!data) {
+    return (
+      <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",
+                   background:"#000",color:"#fff",fontSize:"28px",textAlign:"center"}}>
+        {msg}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{minHeight:"100vh",background:"#000",color:"#fff",padding:"24px"}}>
+      <h1 style={{fontSize:"22px",fontWeight:600,marginBottom:"8px"}}>Results</h1>
+      <pre style={{fontSize:"12px",background:"#111",padding:"16px",borderRadius:"8px",overflow:"auto"}}>
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </div>
+  );
+}

@@ -1,0 +1,89 @@
+import hashlib, os, time, asyncio
+from secrets import token_hex
+from typing import List, Set
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import select, Session
+from db import init_db, get_session, engine
+from models import SessionRow, FileRow, ParsedRow, DisplayRow
+from schemas import SessionCreate, SessionOut, PublishRequest, BannerOut, FileOut, ParsedOut, DisplayOut, DisplaySet
+from storage import save_upload, session_dir
+from parser_adapter import parse_file
+
+app = FastAPI(title="LongevityQ Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], allow_credentials=True,
+    allow_methods=["*"], allow_headers=["*"],
+)
+
+# ----------------- WebSocket (patient push) -----------------
+patient_clients: Set[WebSocket] = set()
+
+@app.websocket("/ws/patient")
+async def ws_patient(ws: WebSocket):
+    await ws.accept()
+    patient_clients.add(ws)
+    try:
+        while True:
+            # optional: handle pings if you want
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        patient_clients.discard(ws)
+    except Exception:
+        try:
+            await ws.close()
+        finally:
+            patient_clients.discard(ws)
+
+async def broadcast(event: dict):
+    """Send JSON event to all connected patient screens."""
+    dead = []
+    for ws in list(patient_clients):
+        try:
+            await ws.send_json(event)
+        except Exception:
+            dead.append(ws)
+    for d in dead:
+        try:
+            d.close()
+        except Exception:
+            pass
+        patient_clients.discard(d)
+
+# ----------------- Startup -----------------
+@app.on_event("startup")
+def on_startup():
+    os.makedirs("./data", exist_ok=True)
+    init_db()
+    # Ensure one display row exists
+    with Session(engine) as db:
+        d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
+        if not d:
+            db.add(DisplayRow(code="main"))
+            db.commit()
+
+def short_code() -> str:
+    return token_hex(3).upper()  # 6 hex chars
+
+# ----------------- Sessions -----------------
+@app.post("/sessions", response_model=SessionOut)
+def create_session(payload: SessionCreate, db=Depends(get_session)):
+    s = SessionRow(client_name=payload.client_name, code=short_code())
+    db.add(s); db.commit(); db.refresh(s)
+    return SessionOut(id=s.id, code=s.code, client_name=s.client_name, state=s.state, published=s.published)
+
+@app.get("/sessions", response_model=List[SessionOut])
+def list_sessions(db=Depends(get_session)):
+    rows = db.exec(select(SessionRow).order_by(SessionRow.id.desc())).all()
+    return [SessionOut(id=r.id, code=r.code, client_name=r.client_name, state=r.state, published=r.published) for r in rows]
+
+@app.get("/sessions/{session_id}", response_model=SessionOut)
+def get_session_status(session_id: int, db=Depends(get_session)):
+    s = db.get(SessionRow, session_id)
+    if not s: raise HTTPException(404, "Session not found")
+    return SessionOut(id=s.id, code=s.code, client_name=s.client_name, state=s.state, published=s.published)
+
+# Greet immediately
+@app.get("/sessions/{session_id}/banner", response_model=Bann
