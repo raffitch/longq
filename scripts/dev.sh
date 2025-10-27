@@ -96,7 +96,7 @@ PY
 ensure_port_free "$BACKEND_PORT" "Backend"
 ensure_port_free "$FRONTEND_PORT" "Frontend"
 
-echo "Starting LongevityQ dev environment..."
+echo "Starting Quantum Qi dev environment..."
 echo "  Backend → http://127.0.0.1:$BACKEND_PORT"
 echo "  Frontend → http://$FRONTEND_HOST:$FRONTEND_PORT"
 
@@ -124,15 +124,72 @@ sys.exit(1)
 PY
 }
 
-if command -v open >/dev/null 2>&1; then
-  (
-    if wait_for_frontend "$FRONTEND_HOST" "$FRONTEND_PORT"; then
-      open "http://$FRONTEND_HOST:$FRONTEND_PORT/operator" >/dev/null 2>&1 || true
-      sleep 0.3
-      open "http://$FRONTEND_HOST:$FRONTEND_PORT/patient" >/dev/null 2>&1 || true
-    fi
-  ) &
-fi
+open_mac_window() {
+  local url="$1"
+  local chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  if [[ -x "$chrome" ]]; then
+    "$chrome" --new-window "$url" >/dev/null 2>&1 &
+  else
+    /usr/bin/osascript <<OSA >/dev/null 2>&1 || open "$url" >/dev/null 2>&1 || true
+tell application "Safari"
+    activate
+    make new document with properties {URL:"$url"}
+end tell
+OSA
+  fi
+}
+
+open_windows_window() {
+  local url="$1"
+  local ps
+  ps="$(command -v powershell.exe || true)"
+  if [[ -z "$ps" ]]; then
+    cmd.exe /C start "" "$url" >/dev/null 2>&1 || true
+    return
+  fi
+  TARGET_URL="$url" "$ps" -NoProfile -ExecutionPolicy Bypass -Command - <<'POWERSHELL' >/dev/null 2>&1 || Start-Process $env:TARGET_URL
+$ErrorActionPreference = 'Stop'
+$edge = Get-Command msedge.exe -ErrorAction SilentlyContinue
+if ($edge) {
+    Start-Process -FilePath $edge.Source -ArgumentList @('--new-window', $env:TARGET_URL) | Out-Null
+} else {
+    Start-Process $env:TARGET_URL | Out-Null
+}
+POWERSHELL
+}
+
+launch_browsers() {
+  local operator_url="http://$FRONTEND_HOST:$FRONTEND_PORT/operator"
+  local patient_url="http://$FRONTEND_HOST:$FRONTEND_PORT/patient"
+  case "$OSTYPE" in
+    darwin*)
+      open_mac_window "$operator_url"
+      sleep 0.5
+      open_mac_window "$patient_url"
+      ;;
+    msys*|cygwin*)
+      open_windows_window "$operator_url"
+      sleep 0.5
+      open_windows_window "$patient_url"
+      ;;
+    *)
+      if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$operator_url" >/dev/null 2>&1 || true
+        sleep 0.5
+        xdg-open "$patient_url" >/dev/null 2>&1 || true
+      else
+        echo "⚠️  Open manually: $operator_url"
+        echo "⚠️  Open manually: $patient_url"
+      fi
+      ;;
+  esac
+}
+
+(
+  if wait_for_frontend "$FRONTEND_HOST" "$FRONTEND_PORT"; then
+    launch_browsers
+  fi
+) &
 
 terminate_children() {
   trap - INT TERM EXIT
