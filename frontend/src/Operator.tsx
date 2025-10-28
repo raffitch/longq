@@ -34,6 +34,7 @@ type ParseWarningState = {
 
 const PATIENT_HEARTBEAT_KEY = "longevityq_patient_heartbeat";
 const PATIENT_HEARTBEAT_GRACE_MS = 8000;
+const LOGO_BACKGROUND = "#0f1114";
 
 function createEmptyUploadMap(): UploadMap {
   const map = {} as UploadMap;
@@ -96,6 +97,17 @@ function formatErrorMessage(err: unknown): string {
   } catch {
     return "Unexpected error.";
   }
+}
+
+function isNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError) return true;
+  if (err && typeof err === "object" && "message" in err) {
+    const msg = (err as any).message;
+    if (typeof msg === "string" && /network|fetch|failed to fetch/i.test(msg)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function detectReportKind(filename: string): ReportKind | null {
@@ -264,9 +276,18 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [parseWarning, setParseWarning] = useState<ParseWarningState>(initialParseWarningState);
   const [pendingFoodFile, setPendingFoodFile] = useState<FileOut | null>(null);
   const [lastDroppedFiles, setLastDroppedFiles] = useState<DroppedFile[]>([]);
+  const [backendDown, setBackendDown] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const patientWindowRef = useRef<Window | null>(null);
   const replaceInputsRef = useRef<Record<ReportKind, HTMLInputElement | null>>({} as Record<ReportKind, HTMLInputElement | null>);
+  const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
+
+  const markBackendUp = () => setBackendDown(false);
+  const markBackendDown = (err?: unknown) => {
+    if (err === undefined || isNetworkError(err)) {
+      setBackendDown(true);
+    }
+  };
   const [stagedPreviewSessionId, setStagedPreviewSessionId] = useState<number | null>(null);
   const [stagedPreviewVersion, setStagedPreviewVersion] = useState(0);
   const [hasShownOnPatient, setHasShownOnPatient] = useState(false);
@@ -298,6 +319,20 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setStagedPreviewSessionId(null);
     setStagedPreviewVersion((v) => v + 1);
     setHasShownOnPatient(false);
+    void (async () => {
+      try {
+        await setDisplaySession({
+          sessionId: null,
+          stagedSessionId: null,
+          stagedFirstName: null,
+          stagedFullName: null,
+        });
+        markBackendUp();
+      } catch (err) {
+        setError(formatErrorMessage(err));
+        markBackendDown(err);
+      }
+    })();
   }
 
   useEffect(() => {
@@ -336,6 +371,45 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       window.removeEventListener("storage", handleStorage);
     };
   }, []);
+
+  useEffect(() => {
+    const wsUrl = base.replace(/^http/, "ws") + "/ws/operator";
+    let ws: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let disposed = false;
+
+    const noteState = (down: boolean) => {
+      if (!disposed) {
+        setBackendDown(down);
+      }
+    };
+
+    function connect() {
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => noteState(false);
+        ws.onmessage = () => {};
+        ws.onclose = () => {
+          noteState(true);
+          reconnectTimer = window.setTimeout(connect, 3000);
+        };
+        ws.onerror = () => {
+          noteState(true);
+          try { ws?.close(); } catch {}
+        };
+      } catch {
+        noteState(true);
+        reconnectTimer = window.setTimeout(connect, 3000);
+      }
+    }
+
+    connect();
+    return () => {
+      disposed = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      try { ws?.close(); } catch {}
+    };
+  }, [base]);
 
   function startEditName() {
     if (!session) return;
@@ -407,11 +481,23 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       const provisionalFull = formatFullName(first, last);
       setSession((prev) => (prev ? { ...prev, first_name: first, last_name: last, client_name: provisionalFull } : prev));
       const updated = await updateSession(session.id, { first_name: first, last_name: last });
+      markBackendUp();
       setSession(updated);
       setIsEditingName(false);
       setEditedFirstName("");
       setEditedLastName("");
       setStatus(`Patient name updated to ${formatFullName(updated.first_name, updated.last_name)}. Re-drop the folder if needed.`);
+      try {
+        await setDisplaySession({
+          stagedSessionId: updated.id,
+          stagedFirstName: updated.first_name ?? first,
+          stagedFullName: formatFullName(updated.first_name, updated.last_name),
+        });
+        markBackendUp();
+      } catch (err) {
+        setError(formatErrorMessage(err));
+        markBackendDown(err);
+      }
       if (lastDroppedFiles.length > 0) {
         await processDroppedFiles([...lastDroppedFiles]);
       }
@@ -423,11 +509,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               first_name: previous.firstName,
               last_name: previous.lastName,
               client_name: previous.clientName ?? prev.client_name,
-            }
+          }
           : prev
       );
       setError(formatErrorMessage(e));
       setStatus("Failed to update patient name.");
+      markBackendDown(e);
     }
   }
 
@@ -509,6 +596,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           setUploads((prev) => ({ ...prev, [kind]: uploaded }));
           setSelectedReports((prev) => ({ ...prev, [kind]: true }));
           setUploadErrors((prev) => ({ ...prev, [kind]: null }));
+          markBackendUp();
           uploadedAny = true;
           setStatus(
             kind === "food"
@@ -520,6 +608,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           setUploadErrors((prev) => ({ ...prev, [kind]: message }));
           setError(message);
           setStatus(`Upload failed for "${entry.name}".`);
+          markBackendDown(e);
         }
       }
     } finally {
@@ -571,6 +660,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setUploads((prev) => ({ ...prev, [kind]: uploaded }));
       setSelectedReports((prev) => ({ ...prev, [kind]: true }));
       setUploadErrors((prev) => ({ ...prev, [kind]: null }));
+      markBackendUp();
       setStatus(
         kind === "food"
           ? `Uploaded "${uploaded.filename}". Ready to parse.`
@@ -581,6 +671,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setUploadErrors((prev) => ({ ...prev, [kind]: message }));
       setError(message);
       setStatus(`Upload failed for "${file.name}".`);
+      markBackendDown(e);
     } finally {
       setIsUploading(false);
     }
@@ -680,12 +771,14 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setParsedOk(true);
       setStatus(notice ? `${notice} Food report parsed. Ready to publish.` : "Food report parsed. Ready to publish.");
       setPendingFoodFile(null);
+      markBackendUp();
     } catch (e: any) {
       setParsedOk(false);
       setError(formatErrorMessage(e));
       setUploadErrors((prev) => ({ ...prev, food: formatErrorMessage(e) }));
       setStatus("Parsing failed.");
       setPendingFoodFile(null);
+      markBackendDown(e);
     }
   }
 
@@ -753,32 +846,48 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setStagedPreviewSessionId(sessionId);
       setStagedPreviewVersion((v) => v + 1);
       setHasShownOnPatient(false);
+      markBackendUp();
       setStatus("Published. Staged preview refreshed below.");
     } catch (e: any) {
       setError(formatErrorMessage(e));
       setStatus("Publish failed.");
+      markBackendDown(e);
     }
   }
 
   async function showOnPatient() {
     if (!session) return;
-    await setDisplaySession(session.id);
-    localStorage.setItem(
-      "longevityq_publish",
-      JSON.stringify({ sessionId: session.id, ts: Date.now() }),
-    );
-    setStatus("Bound current session to patient screen.");
-    setHasShownOnPatient(true);
+    try {
+      await setDisplaySession({ sessionId: session.id });
+      markBackendUp();
+      localStorage.setItem(
+        "longevityq_publish",
+        JSON.stringify({ sessionId: session.id, ts: Date.now() }),
+      );
+      setStatus("Bound current session to patient screen.");
+      setHasShownOnPatient(true);
+    } catch (e: any) {
+      setError(formatErrorMessage(e));
+      setStatus("Failed to bind patient screen.");
+      markBackendDown(e);
+    }
   }
 
   async function clearPatient() {
-    await setDisplaySession(null);
-    localStorage.setItem(
-      "longevityq_publish",
-      JSON.stringify({ sessionId: 0, ts: Date.now() }),
-    );
-    setStatus("Cleared patient screen.");
-    setHasShownOnPatient(false);
+    try {
+      await setDisplaySession({ sessionId: null });
+      markBackendUp();
+      localStorage.setItem(
+        "longevityq_publish",
+        JSON.stringify({ sessionId: 0, ts: Date.now() }),
+      );
+      setStatus("Cleared patient screen.");
+      setHasShownOnPatient(false);
+    } catch (e: any) {
+      setError(formatErrorMessage(e));
+      setStatus("Failed to clear patient screen.");
+      markBackendDown(e);
+    }
   }
 
   function closeParseWarning() {
@@ -945,6 +1054,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           const full = formatFullName(first, last);
           setStatus(`Creating session for ${full}…`);
           const created = await createSession(first, last);
+          markBackendUp();
           setSession(created);
           onSessionReady(created.id);
           setStagedPreviewSessionId(created.published ? created.id : null);
@@ -954,9 +1064,21 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           setFirstNameInput(first);
           setLastNameInput(last);
           setStatus(`Session #${created.id} ready. Drop the folder for ${formatFullName(created.first_name, created.last_name)}.`);
+      try {
+        await setDisplaySession({
+          stagedSessionId: created.id,
+          stagedFirstName: created.first_name ?? first,
+          stagedFullName: formatFullName(created.first_name, created.last_name),
+        });
+        markBackendUp();
+      } catch (err) {
+        setError(formatErrorMessage(err));
+        markBackendDown(err);
+      }
         } catch (err) {
           setError(formatErrorMessage(err));
           setStatus("Session creation failed.");
+          markBackendDown(err);
         }
       }}
     >
@@ -1224,6 +1346,32 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         ? `${origin}/patient?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
         : `/patient?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
       : null;
+
+  if (backendDown) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: LOGO_BACKGROUND,
+          color: "#f8fafc",
+          fontFamily: "Inter,system-ui",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          textAlign: "center",
+          padding: 24,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 30, fontWeight: 700, marginTop: 16 }}>Operator Console Offline</div>
+          <div style={{ fontSize: 16, opacity: 0.8, marginTop: 10 }}>
+            The Quantum Qi services are no longer reachable. Close this window and restart the program once
+            the server is running again.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
