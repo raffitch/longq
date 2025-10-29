@@ -6,16 +6,26 @@ This document walks through the project layout, local setup, and day-to-day work
 
 ---
 
-## Table of contents
+# Quick start TL;DR
 
-1. [Architecture overview](#architecture-overview)
-2. [Local setup](#local-setup)
-   - [Backend (FastAPI)](#backend-fastapi)
-   - [Frontend (React + Vite)](#frontend-react--vite)
-   - [Environment variables](#environment-variables)
-3. [Operator workflow](#operator-workflow)
-4. [Codebase tour](#codebase-tour)
-5. [Development tips](#development-tips)
+The fastest way to spin up Quantum Qi locally:
+
+```bash
+./scripts/dev.sh
+```
+
+The script checks dependencies, frees the default ports, starts FastAPI + Vite, and opens both the operator (`/operator`) and patient (`/patient`) screens in new browser windows. Tweak ports/hosts by exporting these vars before running:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FRONTEND_HOST` | `127.0.0.1` | Host passed to `vite dev --host`. |
+| `FRONTEND_PORT` | `5173` | Port for the Vite dev server (strict). |
+| `BACKEND_PORT` | `8000` | Port for the FastAPI backend. |
+| `IDLE_SHUTDOWN_DELAY` | `5` | Backend idle shutdown debounce (seconds). |
+
+Prereqs: `backend/.venv` with dependencies installed and `frontend/node_modules` present. The script exits with guidance if those are missing.
+
+Prefer a manual setup or want more context? Read on.
 
 ---
 
@@ -42,7 +52,7 @@ This document walks through the project layout, local setup, and day-to-day work
 
 ---
 
-## Local setup
+## Local setup (manual)
 
 ### Prerequisites
 
@@ -98,30 +108,6 @@ Define in `frontend/.env` (or `.env.local`) as needed:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `VITE_API_BASE` | `http://localhost:8000` | URL of the FastAPI backend. |
-
-### Quick start script (`scripts/dev.sh`)
-
-Prefer a single command that launches everything? Use the helper script. It:
-
-- Ensures the chosen backend/frontend ports are free (kills lingering processes if needed).
-- Starts the backend with idle-shutdown enabled so it exits automatically when dev tabs close.
-- Boots the frontend pointing at the backend URL.
-- Opens both `/operator` and `/patient` in your default browser(s).
-
-```bash
-./scripts/dev.sh
-```
-
-Environment overrides:
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `FRONTEND_HOST` | `127.0.0.1` | Host passed to `vite dev --host`. |
-| `FRONTEND_PORT` | `5173` | Port for the Vite dev server (strict; script frees it first). |
-| `BACKEND_PORT` | `8000` | Port for uvicorn. |
-| `IDLE_SHUTDOWN_DELAY` | `5` | Seconds before the backend auto-exits after all sockets disconnect. |
-
-Both the backend virtualenv and `frontend/node_modules` must already exist; the script will bail with a helpful message if they don’t.
 
 ---
 
