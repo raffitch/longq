@@ -30,7 +30,7 @@ try:
 except ValueError:
     EXIT_IDLE_DEBOUNCE_SEC = 20.0
 
-patient_clients: Set[WebSocket] = set()
+guest_clients: Set[WebSocket] = set()
 operator_clients: Set[WebSocket] = set()
 
 _shutdown_task: Optional[asyncio.Task] = None
@@ -198,7 +198,7 @@ def _schedule_idle_check(reason: str) -> None:
     if not EXIT_WHEN_IDLE:
         return
 
-    if operator_clients or patient_clients:
+    if operator_clients or guest_clients:
         return
 
     jobs = _active_jobs_count()
@@ -241,7 +241,7 @@ async def _shutdown_after_delay(reason: str) -> None:
     global _shutdown_task
     try:
         await asyncio.sleep(EXIT_IDLE_DEBOUNCE_SEC)
-        if operator_clients or patient_clients:
+        if operator_clients or guest_clients:
             _log("Idle shutdown aborted; clients reconnected during debounce.")
             return
         jobs = _active_jobs_count()
@@ -284,11 +284,11 @@ def _on_client_disconnected(kind: str) -> None:
     _request_idle_check(f"{kind} disconnected")
 
 
-@app.websocket("/ws/patient")
-async def ws_patient(ws: WebSocket):
+@app.websocket("/ws/guest")
+async def ws_guest(ws: WebSocket):
     await ws.accept()
-    patient_clients.add(ws)
-    _on_client_connected("patient")
+    guest_clients.add(ws)
+    _on_client_connected("guest")
     try:
         while True:
             await ws.receive_text()
@@ -300,8 +300,8 @@ async def ws_patient(ws: WebSocket):
         except Exception:
             pass
     finally:
-        patient_clients.discard(ws)
-        _on_client_disconnected("patient")
+        guest_clients.discard(ws)
+        _on_client_disconnected("guest")
 
 
 @app.websocket("/ws/operator")
@@ -324,9 +324,9 @@ async def ws_operator(ws: WebSocket):
         _on_client_disconnected("operator")
 
 async def broadcast(event: dict):
-    """Send JSON event to all connected patient screens."""
+    """Send JSON event to all connected guest screens."""
     dead = []
-    for ws in list(patient_clients):
+    for ws in list(guest_clients):
         try:
             await ws.send_json(event)
         except Exception:
@@ -336,7 +336,7 @@ async def broadcast(event: dict):
             d.close()
         except Exception:
             pass
-        patient_clients.discard(d)
+        guest_clients.discard(d)
 
 # ----------------- Startup -----------------
 @app.on_event("startup")
@@ -600,7 +600,7 @@ async def publish(session_id: int, req: PublishRequest, db=Depends(get_session))
     elif not s.published:
         s.visible_reports = None
     db.add(s); db.commit()
-    # push an event so patient screens update immediately
+    # push an event so guest screens update immediately
     asyncio.create_task(broadcast({"type": "published", "sessionId": session_id, "ts": time.time()}))
     return {"ok": True, "published": s.published}
 
@@ -634,7 +634,7 @@ def get_parsed_bundle(session_id: int, db=Depends(get_session)):
     }
     return ParsedBundleOut(session_id=session_id, reports=reports)
 
-# ----------------- Patient display binding -----------------
+# ----------------- Guest display binding -----------------
 @app.get("/display/current", response_model=DisplayOut)
 def display_current(db=Depends(get_session)):
     d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
@@ -669,7 +669,7 @@ async def display_set(req: DisplaySet, db=Depends(get_session)):
     if "session_id" in fields:
         d.current_session_id = req.session_id
     db.add(d); db.commit(); db.refresh(d)
-    # push an event so patient screens update instantly
+    # push an event so guest screens update instantly
     asyncio.create_task(
         broadcast(
             {

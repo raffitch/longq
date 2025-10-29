@@ -35,8 +35,8 @@ type UploadErrorMap = Record<ReportKind, string | null>;
 type DroppedFile = { file: File; relativePath: string; name: string };
 type SelectionMap = Record<ReportKind, boolean>;
 type ParsedMap = Record<ReportKind, boolean>;
-const PATIENT_HEARTBEAT_KEY = "longevityq_patient_heartbeat";
-const PATIENT_HEARTBEAT_GRACE_MS = 8000;
+const GUEST_HEARTBEAT_KEY = "longevityq_guest_heartbeat";
+const GUEST_HEARTBEAT_GRACE_MS = 8000;
 const AUTO_OPEN_GRACE_MS = 5000;
 const PREVIEW_SCALE = 0.55;
 const PREVIEW_WIDTH = 5120;
@@ -310,8 +310,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [lastDroppedFiles, setLastDroppedFiles] = useState<DroppedFile[]>([]);
   const [backendDown, setBackendDown] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
+
+  useEffect(() => {
+    document.title = "Quantum Qi - Operator Portal";
+  }, []);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const patientWindowRef = useRef<Window | null>(null);
+  const guestWindowRef = useRef<Window | null>(null);
   const replaceInputsRef = useRef<Record<ReportKind, HTMLInputElement | null>>({} as Record<ReportKind, HTMLInputElement | null>);
   const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
   const autoOpenAttemptedRef = useRef(false);
@@ -388,19 +392,19 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
   const isParsed = (kind: ReportKind) => parsedState[kind];
 
-  const readPatientHeartbeat = () => {
+  const readGuestHeartbeat = () => {
     if (typeof window === "undefined") return null;
     try {
-      const stored = window.localStorage.getItem(PATIENT_HEARTBEAT_KEY);
+      const stored = window.localStorage.getItem(GUEST_HEARTBEAT_KEY);
       return stored ? Number.parseInt(stored, 10) : null;
     } catch {
       return null;
     }
   };
 
-  const patientHeartbeatAlive = () => {
-    const beat = readPatientHeartbeat();
-    return beat !== null && !Number.isNaN(beat) && Date.now() - beat < PATIENT_HEARTBEAT_GRACE_MS;
+  const guestHeartbeatAlive = () => {
+    const beat = readGuestHeartbeat();
+    return beat !== null && !Number.isNaN(beat) && Date.now() - beat < GUEST_HEARTBEAT_GRACE_MS;
   };
 
   const markBackendUp = (ctx?: OperationContext) => applyState(setBackendDown, false, ctx);
@@ -507,8 +511,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   }
   const [stagedPreviewSessionId, setStagedPreviewSessionId] = useState<number | null>(null);
   const [stagedPreviewVersion, setStagedPreviewVersion] = useState(0);
-  const [hasShownOnPatient, setHasShownOnPatient] = useState(false);
-  const [patientWindowOpen, setPatientWindowOpen] = useState<boolean>(() => patientHeartbeatAlive());
+  const [hasShownOnGuest, setHasShownOnGuest] = useState(false);
+  const [guestWindowOpen, setGuestWindowOpen] = useState<boolean>(() => guestHeartbeatAlive());
 
   const livePreviewContainerRef = useRef<HTMLDivElement | null>(null);
   const stagedPreviewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -516,7 +520,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const displayFullName =
     session ? formatFullName(session.first_name, session.last_name) || session.client_name || "" : "";
   const liveMonitorMessage = (() => {
-    if (hasShownOnPatient && session?.published) return "Live Reports.";
+    if (hasShownOnGuest && session?.published) return "Live Reports.";
     return displayFullName ? `Welcome ${displayFullName}.` : "Welcome.";
   })();
 
@@ -536,14 +540,14 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setFirstNameInput("");
     setLastNameInput("");
     resetUploadState();
-    setStatus("Ready for the next patient folder.");
+    setStatus("Ready for the next guest folder.");
     setError("");
     setIsEditingName(false);
     setEditedFirstName("");
     setEditedLastName("");
     setStagedPreviewSessionId(null);
     setStagedPreviewVersion((v) => v + 1);
-    setHasShownOnPatient(false);
+    setHasShownOnGuest(false);
     void (async () => {
       try {
         await setDisplaySession({
@@ -561,7 +565,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   }
 
   useEffect(() => {
-    if (patientWindowOpen) {
+    if (guestWindowOpen) {
       autoOpenAttemptedRef.current = true;
       if (autoOpenTimerRef.current) {
         window.clearTimeout(autoOpenTimerRef.current);
@@ -580,13 +584,13 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
     autoOpenTimerRef.current = window.setTimeout(() => {
       autoOpenTimerRef.current = null;
-      if (patientWindowRef.current && !patientWindowRef.current.closed) {
+      if (guestWindowRef.current && !guestWindowRef.current.closed) {
         autoOpenAttemptedRef.current = true;
         return;
       }
-      if (!patientHeartbeatAlive()) {
+      if (!guestHeartbeatAlive()) {
         autoOpenAttemptedRef.current = true;
-        openPatientWindow();
+        openGuestWindow();
       }
     }, AUTO_OPEN_GRACE_MS);
 
@@ -596,35 +600,35 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         autoOpenTimerRef.current = null;
       }
     };
-  }, [patientWindowOpen]);
+  }, [guestWindowOpen]);
 
   useEffect(() => {
     const computeWindowState = () => {
       let open = false;
-      const ref = patientWindowRef.current;
+      const ref = guestWindowRef.current;
       if (ref && ref.closed) {
-        patientWindowRef.current = null;
+        guestWindowRef.current = null;
       } else if (ref && !ref.closed) {
         open = true;
       }
       try {
-        const stored = localStorage.getItem(PATIENT_HEARTBEAT_KEY);
+        const stored = localStorage.getItem(GUEST_HEARTBEAT_KEY);
         if (stored) {
           const beat = Number.parseInt(stored, 10);
-          if (!Number.isNaN(beat) && Date.now() - beat < PATIENT_HEARTBEAT_GRACE_MS) {
+          if (!Number.isNaN(beat) && Date.now() - beat < GUEST_HEARTBEAT_GRACE_MS) {
             open = true;
           }
         }
       } catch {
         /* ignore storage read errors */
       }
-      setPatientWindowOpen(open);
+      setGuestWindowOpen(open);
     };
 
     computeWindowState();
     const monitor = window.setInterval(computeWindowState, 2000);
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === PATIENT_HEARTBEAT_KEY) {
+      if (event.key === GUEST_HEARTBEAT_KEY) {
         computeWindowState();
       }
     };
@@ -688,7 +692,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setEditedFirstName(formatClientName(currentFirst));
     setEditedLastName(formatClientName(currentLast));
     setIsEditingName(true);
-    setStatus("Editing patient name…");
+    setStatus("Editing guest name…");
     setError("");
   }
 
@@ -698,7 +702,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setEditedLastName("");
     if (session) {
       const currentName = formatFullName(session.first_name, session.last_name) || session.client_name;
-      setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next patient folder.");
+      setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next guest folder.");
     } else {
       setStatus("");
     }
@@ -709,7 +713,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     const first = formatClientName(editedFirstName);
     const last = formatClientName(editedLastName);
     if (!first) {
-      setError("Enter the patient's first name.");
+      setError("Enter the guest's first name.");
       return;
     }
     const { first: currentFirst, last: currentLast } = currentSessionNames(session);
@@ -721,7 +725,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setEditedFirstName("");
       setEditedLastName("");
       const currentName = formatFullName(currentFirst, currentLast) || session.client_name;
-      setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next patient folder.");
+      setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next guest folder.");
       return;
     }
 
@@ -732,7 +736,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     };
 
     try {
-      setStatus("Updating patient name…");
+      setStatus("Updating guest name…");
       setError("");
       const provisionalFull = formatFullName(first, last);
       setSession((prev) => (prev ? { ...prev, first_name: first, last_name: last, client_name: provisionalFull } : prev));
@@ -742,7 +746,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setIsEditingName(false);
       setEditedFirstName("");
       setEditedLastName("");
-      setStatus(`Patient name updated to ${formatFullName(updated.first_name, updated.last_name)}. Re-drop the folder if needed.`);
+      setStatus(`Guest name updated to ${formatFullName(updated.first_name, updated.last_name)}. Re-drop the folder if needed.`);
       try {
         await setDisplaySession({
           stagedSessionId: updated.id,
@@ -769,7 +773,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           : prev
       );
       setError(formatErrorMessage(e));
-      setStatus("Failed to update patient name.");
+      setStatus("Failed to update guest name.");
       markBackendDown(e);
     }
   }
@@ -781,21 +785,21 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setError("");
     setStatus(
       checked
-        ? `${label} report will be included in the patient display.`
-        : `${label} report hidden from the patient display until re-selected.`,
+      ? `${label} report will be included in the guest display.`
+        : `${label} report hidden from the guest display until re-selected.`,
     );
   }
 
   async function processDroppedFiles(dropped: DroppedFile[]) {
     const operation = beginOperation();
     if (!dropped.length) {
-      applyState(setStatus, "No files detected. Drop a folder that contains the patient PDFs.", operation);
+      applyState(setStatus, "No files detected. Drop a folder that contains the guest PDFs.", operation);
       return;
     }
     applyState(setLastDroppedFiles, dropped, operation);
 
     if (!session) {
-      applyState(setStatus, "Create a session first, then drop the patient folder.", operation);
+      applyState(setStatus, "Create a session first, then drop the guest folder.", operation);
       applyState(setError, "No active session.", operation);
       return;
     }
@@ -935,10 +939,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     }
   }
 
-  function openPatientWindow() {
-    const patientUrl = `${window.location.origin}/patient`;
-    const windowName = "longevityq_patient_screen";
-    let target = patientWindowRef.current && !patientWindowRef.current.closed ? patientWindowRef.current : null;
+  function openGuestWindow() {
+    const guestUrl = `${window.location.origin}/guest`;
+    const windowName = "longevityq_guest_screen";
+    let target = guestWindowRef.current && !guestWindowRef.current.closed ? guestWindowRef.current : null;
     if (!target) {
       try {
         const possible = window.open("", windowName);
@@ -952,40 +956,40 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     if (target) {
       try {
         if (target.location.href === "about:blank") {
-          target.location.href = patientUrl;
-        } else if (!target.location.href.includes("/patient")) {
-          target.location.href = patientUrl;
+          target.location.href = guestUrl;
+        } else if (!target.location.href.includes("/guest")) {
+          target.location.href = guestUrl;
         }
       } catch {
-        target.location.href = patientUrl;
+        target.location.href = guestUrl;
       }
       try {
         target.focus();
       } catch {
         /* focus errors can be ignored */
       }
-      patientWindowRef.current = target;
-      setPatientWindowOpen(true);
-      setStatus("Patient window opened.");
+      guestWindowRef.current = target;
+      setGuestWindowOpen(true);
+      setStatus("Guest window opened.");
       setError("");
       return;
     }
 
     const features = "noopener=yes,noreferrer=yes,width=1280,height=720,resizable=yes,scrollbars=yes";
-    const opened = window.open(patientUrl, windowName, features);
+    const opened = window.open(guestUrl, windowName, features);
     if (opened) {
-      patientWindowRef.current = opened;
+      guestWindowRef.current = opened;
       try {
         opened.focus();
       } catch {
         /* ignore focus errors */
       }
-      setPatientWindowOpen(true);
-      setStatus("Patient window opened.");
+      setGuestWindowOpen(true);
+      setStatus("Guest window opened.");
       setError("");
     } else {
-      setPatientWindowOpen(false);
-      setError("Unable to open patient screen. Allow pop-ups for this site.");
+      setGuestWindowOpen(false);
+      setError("Unable to open guest screen. Allow pop-ups for this site.");
     }
   }
 
@@ -1012,7 +1016,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         applyState(setStatus, "No reports selected for publishing.", operation);
         return false;
       }
-      applyState(setStatus, "No reports selected. Publishing will hide all reports from the patient view.", operation);
+      applyState(setStatus, "No reports selected. Publishing will hide all reports from the guest view.", operation);
       return true;
     }
 
@@ -1067,7 +1071,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       applyState(setSession, (prev) => (prev ? { ...prev, published: result.published } : prev), operation);
       applyState(setStagedPreviewSessionId, sessionId, operation);
       applyState(setStagedPreviewVersion, (v) => v + 1, operation);
-      applyState(setHasShownOnPatient, false, operation);
+      applyState(setHasShownOnGuest, false, operation);
       markBackendUp(operation);
       applyState(setStatus, "Session is live. Staged preview refreshed below.", operation);
       applyState(setHasPendingChanges, false, operation);
@@ -1082,7 +1086,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     }
   }
 
-  async function showOnPatient() {
+  async function showOnGuest() {
     if (!session) return;
     try {
       await setDisplaySession({ sessionId: session.id });
@@ -1091,16 +1095,16 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         "longevityq_publish",
         JSON.stringify({ sessionId: session.id, ts: Date.now() }),
       );
-      setStatus("Bound current session to patient screen.");
-      setHasShownOnPatient(true);
+      setStatus("Bound current session to guest screen.");
+      setHasShownOnGuest(true);
     } catch (e: any) {
       setError(formatErrorMessage(e));
-      setStatus("Failed to bind patient screen.");
+      setStatus("Failed to bind guest screen.");
       markBackendDown(e);
     }
   }
 
-  async function clearPatient() {
+  async function clearGuest() {
     try {
       await setDisplaySession({ sessionId: null });
       markBackendUp();
@@ -1108,41 +1112,41 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         "longevityq_publish",
         JSON.stringify({ sessionId: 0, ts: Date.now() }),
       );
-      setStatus("Cleared patient screen.");
-      setHasShownOnPatient(false);
+      setStatus("Cleared guest screen.");
+      setHasShownOnGuest(false);
     } catch (e: any) {
       setError(formatErrorMessage(e));
-      setStatus("Failed to clear patient screen.");
+      setStatus("Failed to clear guest screen.");
       markBackendDown(e);
     }
   }
 
-  const patientButtonLabel = !patientWindowOpen
-    ? "Open Patient Window"
-    : hasShownOnPatient
+  const guestButtonLabel = !guestWindowOpen
+    ? "Open Guest Window"
+    : hasShownOnGuest
     ? "Hide"
     : "Go Live";
 
-  const patientButtonDisabled =
-    patientWindowOpen && !hasShownOnPatient && !(session?.published ?? false);
+  const guestButtonDisabled =
+    guestWindowOpen && !hasShownOnGuest && !(session?.published ?? false);
 
-  const handlePatientButtonClick = () => {
-    if (!patientWindowOpen) {
-      openPatientWindow();
+  const handleGuestButtonClick = () => {
+    if (!guestWindowOpen) {
+      openGuestWindow();
       return;
     }
-    if (!hasShownOnPatient) {
-      void showOnPatient();
+    if (!hasShownOnGuest) {
+      void showOnGuest();
     } else {
-      void clearPatient();
+      void clearGuest();
     }
   };
 
   const renderSessionHeader = () => {
     if (!session) return null;
     const displayName = formatFullName(session.first_name, session.last_name) || session.client_name;
-    const patientButtonVariant: React.ComponentProps<typeof Button>["variant"] =
-      !patientWindowOpen || (hasShownOnPatient && patientWindowOpen)
+    const guestButtonVariant: React.ComponentProps<typeof Button>["variant"] =
+      !guestWindowOpen || (hasShownOnGuest && guestWindowOpen)
         ? "secondary"
         : "primary";
 
@@ -1197,7 +1201,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
             ) : (
               <div className="flex flex-wrap items-center gap-2.5">
                 <div className="text-[16px] font-semibold">{displayName}</div>
-                <Button type="button" variant="ghost" size="icon" onClick={startEditName} title="Edit patient name">
+                <Button type="button" variant="ghost" size="icon" onClick={startEditName} title="Edit guest name">
                   <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path
                       d="M4 13.5v2.5h2.5L15.1 7.4l-2.5-2.5L4 13.5zM16.6 5.9a1 1 0 000-1.4l-1.1-1.1a1 1 0 00-1.4 0l-1.2 1.2 2.5 2.5 1.2-1.2z"
@@ -1209,32 +1213,32 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
             )}
             <div className="flex flex-wrap gap-2">
               <Chip variant={session.published ? "success" : "muted"}>{session.published ? "Published" : "Not Published"}</Chip>
-              {hasShownOnPatient && patientWindowOpen && <Chip variant="info">Visible on Patient</Chip>}
+              {hasShownOnGuest && guestWindowOpen && <Chip variant="info">Visible on Guest</Chip>}
             </div>
           </div>
         </div>
         <div className={cn("flex min-w-[220px] flex-[0_0_220px] flex-col justify-between gap-3 p-4", statusCardClasses)}>
           <div>
-            <div className="text-[13px] font-semibold uppercase tracking-[0.3em] text-text-secondary">Patient Screen</div>
+            <div className="text-[13px] font-semibold uppercase tracking-[0.3em] text-text-secondary">Guest Screen</div>
             <div className="mt-1.5 text-[12px] text-text-secondary">
-              {hasShownOnPatient
+              {hasShownOnGuest
                 ? "Currently showing this session."
-                : patientWindowOpen
-                ? "Ready to reveal on the patient screen."
-                : "Patient window not open."}
+                : guestWindowOpen
+                ? "Ready to reveal on the guest screen."
+                : "Guest window not open."}
             </div>
           </div>
           <div className="text-[11px] text-[#9ca3c9]">
-            Status: {patientWindowOpen ? "Connected" : "Closed"}
-            {patientWindowOpen && !hasShownOnPatient ? " • standing by" : ""}
+            Status: {guestWindowOpen ? "Connected" : "Closed"}
+            {guestWindowOpen && !hasShownOnGuest ? " • standing by" : ""}
           </div>
           <Button
-            variant={patientButtonVariant}
-            onClick={patientButtonDisabled ? undefined : handlePatientButtonClick}
-            disabled={patientButtonDisabled}
+            variant={guestButtonVariant}
+            onClick={guestButtonDisabled ? undefined : handleGuestButtonClick}
+            disabled={guestButtonDisabled}
             className="w-full"
           >
-            {patientButtonLabel}
+            {guestButtonLabel}
           </Button>
         </div>
       </div>
@@ -1249,7 +1253,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         const first = formatClientName(firstNameInput);
         const last = formatClientName(lastNameInput);
         if (!first) {
-          setError("Enter the patient's first name.");
+          setError("Enter the guest's first name.");
           setStatus("");
           return;
         }
@@ -1263,12 +1267,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           onSessionReady(created.id);
           setStagedPreviewSessionId(created.published ? created.id : null);
           setStagedPreviewVersion((v) => v + 1);
-          setHasShownOnPatient(false);
+          setHasShownOnGuest(false);
           resetUploadState();
           setFirstNameInput(first);
           setLastNameInput(last);
           const createdName = formatFullName(created.first_name, created.last_name);
-          setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next patient folder.");
+          setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next guest folder.");
       try {
         await setDisplaySession({
           stagedSessionId: created.id,
@@ -1349,7 +1353,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           : "Published. Update to reflect recent changes."
         : "Ready to publish the selected reports."
       : session.published
-      ? "Publishing will hide all reports from the patient view."
+      ? "Publishing will hide all reports from the guest view."
       : "Select at least one uploaded report to enable publishing.";
 
     return (
@@ -1462,7 +1466,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                     )}
                     {!isSelected && (
                       <div className={cn(parsedFlag ? "text-[#60a5fa]" : "text-[#fbbf24]")}>
-                        {parsedFlag ? "Hidden from patient view" : "Deselected until re-selected"}
+                        {parsedFlag ? "Hidden from guest view" : "Deselected until re-selected"}
                       </div>
                     )}
                   </>
@@ -1496,7 +1500,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           <div className="flex flex-col gap-2">
             <div className="text-[14px] font-bold">Publish Session</div>
             <div className="text-[12px] leading-relaxed text-text-secondary">
-              Finalize the selected reports to update the patient view.
+              Finalize the selected reports to update the guest view.
             </div>
             <div className="text-[12px] text-text-secondary">{publishStatusText}</div>
           </div>
@@ -1510,16 +1514,16 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   };
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const liveMonitorUrl = origin ? `${origin}/patient?monitor=1` : "/patient?monitor=1";
+  const liveMonitorUrl = origin ? `${origin}/guest?monitor=1` : "/guest?monitor=1";
   const stagedPreviewUrl =
     stagedPreviewSessionId !== null
       ? origin
-        ? `${origin}/patient?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
-        : `/patient?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
+        ? `${origin}/guest?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
+        : `/guest?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
       : null;
   const hasStagedData = Boolean(stagedPreviewSessionId && stagedPreviewUrl);
   const showStagedPreviewBlock = Boolean(session && hasStagedData);
-  const stagedPreviewVisible = showStagedPreviewBlock && !hasShownOnPatient;
+  const stagedPreviewVisible = showStagedPreviewBlock && !hasShownOnGuest;
 
   useEffect(() => {
     const centerScroll = (node: HTMLDivElement | null) => {
@@ -1538,7 +1542,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       cancelLive?.();
       cancelStaged?.();
     };
-  }, [stagedPreviewVisible, showStagedPreviewBlock, hasShownOnPatient]);
+  }, [stagedPreviewVisible, showStagedPreviewBlock, hasShownOnGuest]);
 
   if (backendDown) {
     return (
@@ -1585,7 +1589,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
             <div className="w-full max-w-[520px] rounded-3xl border border-border bg-surface/90 p-10 shadow-surface-lg backdrop-blur-sm">
               <h2 className="text-center text-[22px] font-semibold text-text-primary">Create a New Session</h2>
               <p className="mt-2 text-center text-[13px] text-text-secondary">
-                Enter the patient name to begin. You can adjust details later if needed.
+                Enter the guest name to begin. You can adjust details later if needed.
               </p>
               <form
                 className="mt-6 flex flex-col gap-3"
@@ -1594,7 +1598,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   const first = formatClientName(firstNameInput);
                   const last = formatClientName(lastNameInput);
                   if (!first || !last) {
-                    setError("Enter the patient's first and last name.");
+                    setError("Enter the guest's first and last name.");
                     setStatus("");
                     return;
                   }
@@ -1608,12 +1612,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                     onSessionReady(created.id);
                     setStagedPreviewSessionId(created.published ? created.id : null);
                     setStagedPreviewVersion((v) => v + 1);
-                    setHasShownOnPatient(false);
+                    setHasShownOnGuest(false);
                     resetUploadState();
                     setFirstNameInput(first);
                     setLastNameInput(last);
                     const createdName = formatFullName(created.first_name, created.last_name);
-                    setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next patient folder.");
+                    setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next guest folder.");
                     try {
                       await setDisplaySession({
                         stagedSessionId: created.id,
@@ -1686,12 +1690,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               </span>
             </div>
             <div className="text-[11px] text-[#6b7280]">
-              Mirrors the active patient display.
+              Mirrors the active guest display.
             </div>
           </div>
-          {!patientWindowOpen && (
+          {!guestWindowOpen && (
             <div className="rounded-lg bg-[#fef2f2] px-2.5 py-2 text-[12px] text-[#b91c1c]">
-              Patient window is closed. Use the session header controls to launch it again.
+              Guest window is closed. Use the session header controls to launch it again.
             </div>
           )}
           <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto pr-2">
@@ -1709,7 +1713,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                 >
                   <div className="relative w-full" style={previewContainerStyle}>
                     <iframe
-                      title="Live Patient Monitor"
+                      title="Live Guest Monitor"
                       src={liveMonitorUrl}
                       className="absolute inset-0 border-0"
                       style={scaledFrameStyle}
@@ -1728,7 +1732,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   Staged Preview
                 </div>
                 <div className="text-[11px] text-[#6b7280]">
-                  Review the staged data before revealing it to the patient.
+                  Review the staged data before revealing it to the guest.
                 </div>
                 <div className="flex-1 overflow-auto rounded-[8px] border border-[#d1d5db]">
                   {stagedPreviewUrl && (
@@ -1739,7 +1743,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                       <div className="relative w-full" style={previewContainerStyle}>
                         <iframe
                           key={`${stagedPreviewSessionId}-${stagedPreviewVersion}`}
-                          title="Staged Patient Preview"
+                          title="Staged Guest Preview"
                           src={stagedPreviewUrl}
                           className="absolute inset-0 border-0"
                           style={scaledFrameStyle}

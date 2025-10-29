@@ -23,11 +23,11 @@ async def idle_app(monkeypatch):
     module = importlib.reload(module)
     await module.on_startup()
     module.operator_clients.clear()
-    module.patient_clients.clear()
+    module.guest_clients.clear()
     module.app.state.uvicorn_server = DummyServer()
     yield module
     module.operator_clients.clear()
-    module.patient_clients.clear()
+    module.guest_clients.clear()
     module.app.state.uvicorn_server = None
     await module.on_shutdown()
 
@@ -35,7 +35,7 @@ async def idle_app(monkeypatch):
 @pytest.mark.asyncio
 async def test_idle_shutdown_triggers_after_debounce(idle_app):
     idle_app.operator_clients.clear()
-    idle_app.patient_clients.clear()
+    idle_app.guest_clients.clear()
 
     idle_app._request_idle_check("test idle")
     await asyncio.sleep(0.1)
@@ -46,7 +46,7 @@ async def test_idle_shutdown_triggers_after_debounce(idle_app):
 @pytest.mark.asyncio
 async def test_idle_shutdown_cancelled_when_client_returns(idle_app):
     idle_app.operator_clients.clear()
-    idle_app.patient_clients.clear()
+    idle_app.guest_clients.clear()
 
     idle_app._request_idle_check("initial disconnect")
     await asyncio.sleep(0.02)
@@ -59,7 +59,7 @@ async def test_idle_shutdown_cancelled_when_client_returns(idle_app):
 @pytest.mark.asyncio
 async def test_idle_shutdown_waits_for_active_jobs(idle_app):
     idle_app.operator_clients.clear()
-    idle_app.patient_clients.clear()
+    idle_app.guest_clients.clear()
 
     idle_app._note_job_started("parse")
     idle_app._request_idle_check("all clients gone")

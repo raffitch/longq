@@ -160,34 +160,34 @@ POWERSHELL
 
 launch_browsers() {
   local operator_url="http://$FRONTEND_HOST:$FRONTEND_PORT/operator"
-  local patient_url="http://$FRONTEND_HOST:$FRONTEND_PORT/patient"
+  local guest_url="http://$FRONTEND_HOST:$FRONTEND_PORT/guest"
   case "$OSTYPE" in
     darwin*)
       open_mac_window "$operator_url"
       sleep 0.5
-      open_mac_window "$patient_url"
+      open_mac_window "$guest_url"
       ;;
     msys*|cygwin*)
       open_windows_window "$operator_url"
       sleep 0.5
-      open_windows_window "$patient_url"
+      open_windows_window "$guest_url"
       ;;
     *)
       if command -v google-chrome >/dev/null 2>&1; then
         google-chrome --app="$operator_url" --user-data-dir="$ROOT_DIR/.chrome-app-operator-linux" >/dev/null 2>&1 &
         sleep 0.5
-        google-chrome --app="$patient_url" --user-data-dir="$ROOT_DIR/.chrome-app-patient-linux" >/dev/null 2>&1 &
+        google-chrome --app="$guest_url" --user-data-dir="$ROOT_DIR/.chrome-app-guest-linux" >/dev/null 2>&1 &
       elif command -v chromium >/dev/null 2>&1; then
         chromium --app="$operator_url" --user-data-dir="$ROOT_DIR/.chrome-app-operator-linux" >/dev/null 2>&1 &
         sleep 0.5
-        chromium --app="$patient_url" --user-data-dir="$ROOT_DIR/.chrome-app-patient-linux" >/dev/null 2>&1 &
+        chromium --app="$guest_url" --user-data-dir="$ROOT_DIR/.chrome-app-guest-linux" >/dev/null 2>&1 &
       elif command -v xdg-open >/dev/null 2>&1; then
         xdg-open "$operator_url" >/dev/null 2>&1 || true
         sleep 0.5
-        xdg-open "$patient_url" >/dev/null 2>&1 || true
+        xdg-open "$guest_url" >/dev/null 2>&1 || true
       else
         echo "⚠️  Open manually: $operator_url"
-        echo "⚠️  Open manually: $patient_url"
+        echo "⚠️  Open manually: $guest_url"
       fi
       ;;
   esac
