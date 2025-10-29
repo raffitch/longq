@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Button } from "./ui/Button";
+import { Chip } from "./ui/Chip";
+import { cn } from "./ui/cn";
 import {
   createSession,
   updateSession,
@@ -19,132 +22,64 @@ const REPORT_DEFS: { kind: ReportKind; label: string; aliases: string[] }[] = [
   { kind: "toxins", label: "Toxins", aliases: ["toxins"] },
 ];
 
+const LABEL: Record<ReportKind, string> = {
+  food: "food",
+  "heavy-metals": "heavy metals",
+  hormones: "hormones",
+  nutrition: "nutrition",
+  toxins: "toxins",
+};
+
 type UploadMap = Record<ReportKind, FileOut | null>;
 type UploadErrorMap = Record<ReportKind, string | null>;
 type DroppedFile = { file: File; relativePath: string; name: string };
 type SelectionMap = Record<ReportKind, boolean>;
+type ParsedMap = Record<ReportKind, boolean>;
 const PATIENT_HEARTBEAT_KEY = "longevityq_patient_heartbeat";
 const PATIENT_HEARTBEAT_GRACE_MS = 8000;
-const LOGO_BACKGROUND = "#0f1114";
 const AUTO_OPEN_GRACE_MS = 5000;
 
-const palette = {
-  surface: "#111827",
-  surfaceMuted: "#1b2539",
-  border: "rgba(148, 163, 184, 0.25)",
-  borderStrong: "rgba(148, 163, 184, 0.45)",
-  textPrimary: "#f8fafc",
-  textSecondary: "#cbd5f5",
-  accent: "#16a34a",
-  accentBlue: "#2563eb",
-  accentInfo: "#0ea5e9",
-  neutralDark: "#1f2937",
-  warning: "#f59e0b",
-  danger: "#dc2626",
-  successSurface: "rgba(34, 197, 94, 0.14)",
-  successBorder: "rgba(34, 197, 94, 0.45)",
-  errorSurface: "rgba(248, 113, 113, 0.14)",
-  errorBorder: "rgba(248, 113, 113, 0.6)",
-  infoSurface: "rgba(56, 189, 248, 0.18)",
-};
+const darkInputClasses =
+  "rounded-lg border border-border-strong bg-neutral-dark px-2.5 py-1.5 text-text-primary shadow-[inset_0_1px_2px_rgba(15,23,42,0.45)] outline-none caret-accent-info focus:ring-2 focus:ring-accent-info/40";
+const cardShellClasses = "rounded-3lg border border-border bg-surface text-text-primary shadow-surface-lg";
+const statusCardClasses = "rounded-3lg border border-border bg-surface text-text-primary shadow-surface-md";
+const tileBaseClasses = "flex min-w-0 flex-col gap-3 rounded-4lg border p-[18px] text-text-primary transition-colors duration-200";
+type ChipVariant = React.ComponentProps<typeof Chip>["variant"];
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "info";
-
-const darkInputStyle: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: "8px",
-  border: `1px solid ${palette.borderStrong}`,
-  background: palette.neutralDark,
-  color: palette.textPrimary,
-  outline: "none",
-  boxShadow: "inset 0 1px 2px rgba(15, 23, 42, 0.45)",
-  caretColor: palette.accentInfo,
-};
-
-const baseButtonStyle: React.CSSProperties = {
-  border: "none",
-  borderRadius: 8,
-  padding: "8px 14px",
-  fontSize: 13,
-  fontWeight: 600,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  cursor: "pointer",
-  transition: "transform 0.1s ease",
-};
-
-function buttonStyles(variant: ButtonVariant, disabled = false): React.CSSProperties {
-  const variantStyle: Record<ButtonVariant, React.CSSProperties> = {
-    primary: { background: palette.accent, color: "#fff" },
-    secondary: { background: palette.neutralDark, color: "#f8fafc" },
-    info: { background: palette.accentBlue, color: "#fff" },
-    danger: { background: palette.danger, color: "#fff" },
-    ghost: {
-      background: "transparent",
-      color: palette.textPrimary,
-      border: `1px solid ${palette.border}`,
-      padding: "7px 14px",
-    },
-  };
-  return {
-    ...baseButtonStyle,
-    ...(variantStyle[variant] ?? {}),
-    opacity: disabled ? 0.55 : 1,
-    cursor: disabled ? "not-allowed" : "pointer",
-  };
-}
-
-type ChipVariant = "default" | "success" | "danger" | "info" | "warning" | "muted";
-
-function chipStyles(variant: ChipVariant): React.CSSProperties {
-  const base: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 11,
-    fontWeight: 600,
-    padding: "2px 10px",
-    borderRadius: 999,
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-  };
-
-  const variants: Record<ChipVariant, React.CSSProperties> = {
-    default: { background: "rgba(148, 163, 184, 0.18)", color: "#e2e8f0" },
-    success: { background: palette.successSurface, color: "#34d399", border: `1px solid ${palette.successBorder}` },
-    danger: { background: palette.errorSurface, color: "#fca5a5", border: `1px solid ${palette.errorBorder}` },
-    info: { background: palette.infoSurface, color: "#7dd3fc" },
-    warning: { background: "rgba(251, 191, 36, 0.18)", color: "#fbbf24" },
-    muted: { background: "rgba(209, 213, 219, 0.12)", color: "#cbd5e1" },
-  };
-
-  return { ...base, ...(variants[variant] ?? variants.default) };
-}
-
-function createEmptyUploadMap(): UploadMap {
-  const map = {} as UploadMap;
-  for (const def of REPORT_DEFS) {
-    map[def.kind] = null;
-  }
-  return map;
-}
-
-function createEmptyErrorMap(): UploadErrorMap {
-  const map = {} as UploadErrorMap;
-  for (const def of REPORT_DEFS) {
-    map[def.kind] = null;
-  }
-  return map;
-}
-
-function createSelectionMap(initial = false): SelectionMap {
-  const map = {} as SelectionMap;
+function buildMap<T>(initial: T): Record<ReportKind, T> {
+  const map = {} as Record<ReportKind, T>;
   for (const def of REPORT_DEFS) {
     map[def.kind] = initial;
   }
   return map;
+}
+
+function emptyParsed(): ParsedMap {
+  return buildMap(false);
+}
+
+function createEmptyUploadMap(): UploadMap {
+  return buildMap<FileOut | null>(null);
+}
+
+function createEmptyErrorMap(): UploadErrorMap {
+  return buildMap<string | null>(null);
+}
+
+function createSelectionMap(initial = false): SelectionMap {
+  return buildMap<boolean>(initial);
+}
+
+function currentSessionNames(s: Session): { first: string; last: string } {
+  const first = s.first_name ?? (s.client_name?.split(" ", 1)[0] ?? "");
+  let last = s.last_name ?? "";
+  if (!last && s.client_name) {
+    const parts = s.client_name.split(" ");
+    if (parts.length > 1) {
+      last = parts.slice(1).join(" ");
+    }
+  }
+  return { first, last };
 }
 
 function formatErrorMessage(err: unknown): string {
@@ -348,11 +283,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [uploads, setUploads] = useState<UploadMap>(() => createEmptyUploadMap());
   const [uploadErrors, setUploadErrors] = useState<UploadErrorMap>(() => createEmptyErrorMap());
   const [selectedReports, setSelectedReports] = useState<SelectionMap>(() => createSelectionMap(false));
-  const [parsedOk, setParsedOk] = useState<boolean>(false);
-  const [nutritionParsed, setNutritionParsed] = useState<boolean>(false);
-  const [hormonesParsed, setHormonesParsed] = useState<boolean>(false);
-  const [heavyMetalsParsed, setHeavyMetalsParsed] = useState<boolean>(false);
-  const [toxinsParsed, setToxinsParsed] = useState<boolean>(false);
+  const [parsedState, setParsedState] = useState<ParsedMap>(() => emptyParsed());
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isDragActive, setIsDragActive] = useState<boolean>(false);
@@ -370,6 +301,77 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const autoOpenAttemptedRef = useRef(false);
   const autoOpenTimerRef = useRef<number | null>(null);
 
+  type OperationContext = { seq: number; signal: AbortSignal };
+
+  const mountedRef = useRef(true);
+  const operationSeqRef = useRef(0);
+  const operationAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (operationAbortRef.current) {
+        operationAbortRef.current.abort();
+        operationAbortRef.current = null;
+      }
+    };
+  }, []);
+
+  const abortInFlight = () => {
+    if (operationAbortRef.current) {
+      operationAbortRef.current.abort();
+      operationAbortRef.current = null;
+    }
+  };
+
+  const beginOperation = (): OperationContext => {
+    abortInFlight();
+    const controller = new AbortController();
+    operationAbortRef.current = controller;
+    const nextSeq = operationSeqRef.current + 1;
+    operationSeqRef.current = nextSeq;
+    return { seq: nextSeq, signal: controller.signal };
+  };
+
+  const isOperationActive = (ctx: OperationContext) =>
+    mountedRef.current && !ctx.signal.aborted && operationSeqRef.current === ctx.seq;
+
+  const safeSetState = <Setter extends React.Dispatch<React.SetStateAction<any>>>(
+    ctx: OperationContext,
+    setter: Setter,
+    value: Parameters<Setter>[0],
+  ) => {
+    if (!isOperationActive(ctx)) return;
+    setter(value);
+  };
+
+  const applyState = <Setter extends React.Dispatch<React.SetStateAction<any>>>(
+    setter: Setter,
+    value: Parameters<Setter>[0],
+    ctx?: OperationContext,
+  ) => {
+    if (ctx) {
+      safeSetState(ctx, setter, value);
+    } else {
+      setter(value);
+    }
+  };
+
+  const setParsedFor = (kind: ReportKind, value: boolean, ctx?: OperationContext) => {
+    applyState(setParsedState, (prev) => ({ ...prev, [kind]: value }), ctx);
+  };
+
+  const resetParsed = (kind?: ReportKind, ctx?: OperationContext) => {
+    if (kind) {
+      applyState(setParsedState, (prev) => ({ ...prev, [kind]: false }), ctx);
+      return;
+    }
+    applyState(setParsedState, () => emptyParsed(), ctx);
+  };
+
+  const isParsed = (kind: ReportKind) => parsedState[kind];
+
   const readPatientHeartbeat = () => {
     if (typeof window === "undefined") return null;
     try {
@@ -385,12 +387,108 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     return beat !== null && !Number.isNaN(beat) && Date.now() - beat < PATIENT_HEARTBEAT_GRACE_MS;
   };
 
-  const markBackendUp = () => setBackendDown(false);
-  const markBackendDown = (err?: unknown) => {
+  const markBackendUp = (ctx?: OperationContext) => applyState(setBackendDown, false, ctx);
+  const markBackendDown = (err?: unknown, ctx?: OperationContext) => {
     if (err === undefined || isNetworkError(err)) {
-      setBackendDown(true);
+      applyState(setBackendDown, true, ctx);
     }
   };
+
+  const handleDragHighlight = (e: React.DragEvent<HTMLElement>) => {
+    e.preventDefault();
+    if (!isDragActive) {
+      setIsDragActive(true);
+    }
+  };
+
+  async function uploadReport(
+    kind: ReportKind,
+    file: File,
+    displayName: string,
+    ctx?: OperationContext,
+  ): Promise<FileOut | null> {
+    const operation = ctx ?? beginOperation();
+    if (!session) return null;
+    resetParsed(kind, operation);
+    applyState(setUploadErrors, (prev) => ({ ...prev, [kind]: null }), operation);
+    applyState(setStatus, `Uploading "${displayName}"…`, operation);
+    try {
+      const uploaded = await uploadPdf(session.id, kind, file);
+      if (!isOperationActive(operation)) {
+        return null;
+      }
+      applyState(setUploads, (prev) => ({ ...prev, [kind]: uploaded }), operation);
+      applyState(setSelectedReports, (prev) => ({ ...prev, [kind]: true }), operation);
+      applyState(setUploadErrors, (prev) => ({ ...prev, [kind]: null }), operation);
+      markBackendUp(operation);
+      applyState(setHasPendingChanges, true, operation);
+      if (kind === "food") {
+        applyState(setStatus, `Uploaded "${uploaded.filename}". Ready to parse.`, operation);
+      } else {
+        applyState(setStatus, `Stored "${uploaded.filename}".`, operation);
+      }
+      return uploaded;
+    } catch (e: any) {
+      if (operation.signal.aborted || !isOperationActive(operation)) {
+        return null;
+      }
+      const message = formatErrorMessage(e);
+      applyState(setUploadErrors, (prev) => ({ ...prev, [kind]: message }), operation);
+      applyState(setError, message, operation);
+      applyState(setStatus, `Upload failed for "${displayName}".`, operation);
+      markBackendDown(e, operation);
+      return null;
+    }
+  }
+
+  async function parseReport(kind: ReportKind, file: FileOut, ctx?: OperationContext): Promise<boolean> {
+    const operation = ctx ?? beginOperation();
+    resetParsed(kind, operation);
+    try {
+      applyState(setError, "", operation);
+      applyState(setUploadErrors, (prev) => ({ ...prev, [kind]: null }), operation);
+      applyState(setStatus, `Parsing ${LABEL[kind]} report…`, operation);
+      await parseFile(file.id);
+      if (!isOperationActive(operation)) {
+        return false;
+      }
+      setParsedFor(kind, true, operation);
+      if (kind === "food") {
+        applyState(setStatus, "Food report parsed. Ready to publish.", operation);
+      } else if (kind === "nutrition") {
+        applyState(setStatus, "Nutrition report parsed.", operation);
+      } else if (kind === "hormones") {
+        applyState(setStatus, "Hormones report parsed.", operation);
+      } else if (kind === "heavy-metals") {
+        applyState(setStatus, "Heavy metals report parsed.", operation);
+      } else if (kind === "toxins") {
+        applyState(setStatus, "Toxins report parsed.", operation);
+      }
+      markBackendUp(operation);
+      return true;
+    } catch (e: any) {
+      if (operation.signal.aborted || !isOperationActive(operation)) {
+        return false;
+      }
+      const message = formatErrorMessage(e);
+      applyState(setError, message, operation);
+      applyState(setUploadErrors, (prev) => ({ ...prev, [kind]: message }), operation);
+      setParsedFor(kind, false, operation);
+      if (kind === "food") {
+        applyState(setStatus, "Parsing food report failed.", operation);
+      } else if (kind === "nutrition") {
+        applyState(setStatus, "Parsing nutrition report failed.", operation);
+      } else if (kind === "hormones") {
+        applyState(setStatus, "Parsing hormones report failed.", operation);
+      } else if (kind === "heavy-metals") {
+        applyState(setStatus, "Parsing heavy metals report failed.", operation);
+      } else if (kind === "toxins") {
+        applyState(setStatus, "Parsing toxins report failed.", operation);
+      }
+      markBackendDown(e, operation);
+      return false;
+    }
+  }
   const [stagedPreviewSessionId, setStagedPreviewSessionId] = useState<number | null>(null);
   const [stagedPreviewVersion, setStagedPreviewVersion] = useState(0);
   const [hasShownOnPatient, setHasShownOnPatient] = useState(false);
@@ -400,16 +498,14 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setUploads(createEmptyUploadMap());
     setUploadErrors(createEmptyErrorMap());
     setSelectedReports(createSelectionMap(false));
-    setParsedOk(false);
-    setNutritionParsed(false);
-    setHormonesParsed(false);
-    setHeavyMetalsParsed(false);
-    setToxinsParsed(false);
+    resetParsed();
     setLastDroppedFiles([]);
     setHasPendingChanges(false);
+    setIsUploading(false);
   }
 
   function resetSession() {
+    abortInFlight();
     setSession(null);
     setFirstNameInput("");
     setLastNameInput("");
@@ -422,10 +518,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setStagedPreviewSessionId(null);
     setStagedPreviewVersion((v) => v + 1);
     setHasShownOnPatient(false);
-    setNutritionParsed(false);
-    setHormonesParsed(false);
-    setHeavyMetalsParsed(false);
-    setToxinsParsed(false);
     void (async () => {
       try {
         await setDisplaySession({
@@ -556,20 +648,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     };
   }, [base]);
 
-  const handleDragEnterArea = (e: React.DragEvent<HTMLElement>) => {
-    e.preventDefault();
-    if (!isDragActive) {
-      setIsDragActive(true);
-    }
-  };
-
-  const handleDragOverArea = (e: React.DragEvent<HTMLElement>) => {
-    e.preventDefault();
-    if (!isDragActive) {
-      setIsDragActive(true);
-    }
-  };
-
   const handleDragLeaveArea = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     const target = e.relatedTarget as Node | null;
@@ -580,14 +658,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
   function startEditName() {
     if (!session) return;
-    const currentFirst = session.first_name ?? (session.client_name?.split(" ", 1)[0] ?? "");
-    let currentLast = session.last_name ?? "";
-    if (!currentLast && session.client_name) {
-      const parts = session.client_name.split(" ");
-      if (parts.length > 1) {
-        currentLast = parts.slice(1).join(" ");
-      }
-    }
+    const { first: currentFirst, last: currentLast } = currentSessionNames(session);
     setEditedFirstName(formatClientName(currentFirst));
     setEditedLastName(formatClientName(currentLast));
     setIsEditingName(true);
@@ -601,7 +672,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setEditedLastName("");
     if (session) {
       const currentName = formatFullName(session.first_name, session.last_name) || session.client_name;
-      setStatus(`Session #${session.id} ready. Drop the folder for ${currentName}.`);
+      setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next patient folder.");
     } else {
       setStatus("");
     }
@@ -615,14 +686,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setError("Enter the patient's first name.");
       return;
     }
-    const currentFirst = session.first_name ?? (session.client_name?.split(" ", 1)[0] ?? "");
-    let currentLast = session.last_name ?? "";
-    if (!currentLast && session.client_name) {
-      const parts = session.client_name.split(" ");
-      if (parts.length > 1) {
-        currentLast = parts.slice(1).join(" ");
-      }
-    }
+    const { first: currentFirst, last: currentLast } = currentSessionNames(session);
     if (
       normalizeName(first) === normalizeName(currentFirst) &&
       normalizeName(last) === normalizeName(currentLast)
@@ -630,9 +694,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setIsEditingName(false);
       setEditedFirstName("");
       setEditedLastName("");
-      setStatus(
-        `Session #${session.id} ready. Drop the folder for ${formatFullName(currentFirst, currentLast) || session.client_name}.`
-      );
+      const currentName = formatFullName(currentFirst, currentLast) || session.client_name;
+      setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next patient folder.");
       return;
     }
 
@@ -698,19 +761,20 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   }
 
   async function processDroppedFiles(dropped: DroppedFile[]) {
+    const operation = beginOperation();
     if (!dropped.length) {
-      setStatus("No files detected. Drop a folder that contains the patient PDFs.");
+      applyState(setStatus, "No files detected. Drop a folder that contains the patient PDFs.", operation);
       return;
     }
-    setLastDroppedFiles(dropped);
+    applyState(setLastDroppedFiles, dropped, operation);
 
     if (!session) {
-      setStatus("Create a session first, then drop the patient folder.");
-      setError("No active session.");
+      applyState(setStatus, "Create a session first, then drop the patient folder.", operation);
+      applyState(setError, "No active session.", operation);
       return;
     }
 
-    setError("");
+    applyState(setError, "", operation);
     const rootName = getRootFolderName(dropped);
     if (rootName) {
       const normalizedFolder = normalizeNameLoose(rootName);
@@ -731,14 +795,14 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         const tokens = (value: string) => new Set(value.split(" ").filter(Boolean));
         const hasAll = (source: Set<string>, target: Set<string>) => [...target].every((token) => source.has(token));
         if (!hasAll(tokens(normalizedFolder), tokens(normalizedSession))) {
-          setStatus(`Folder “${rootName}” doesn’t match ${sessionReference}. Proceeding anyway.`);
+          applyState(setStatus, `Folder “${rootName}” doesn’t match ${sessionReference}. Proceeding anyway.`, operation);
         }
       }
     }
 
     const pdfs = dropped.filter(({ name }) => name.toLowerCase().endsWith(".pdf"));
     if (!pdfs.length) {
-      setStatus("No PDF files found inside the folder.");
+      applyState(setStatus, "No PDF files found inside the folder.", operation);
       return;
     }
 
@@ -755,9 +819,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       return withoutRoot.includes("/");
     };
 
-    setIsUploading(true);
+    applyState(setIsUploading, true, operation);
     try {
       for (const entry of pdfs) {
+        if (!isOperationActive(operation)) {
+          break;
+        }
         if (isNestedEntry(entry)) {
           continue;
         }
@@ -765,57 +832,20 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         if (!kind) {
           continue;
         }
-
-    if (kind === "food") {
-      setParsedOk(false);
-    } else if (kind === "nutrition") {
-      setNutritionParsed(false);
-    } else if (kind === "hormones") {
-      setHormonesParsed(false);
-    } else if (kind === "heavy-metals") {
-      setHeavyMetalsParsed(false);
-    } else if (kind === "toxins") {
-      setToxinsParsed(false);
-    }
-        setUploadErrors((prev) => ({ ...prev, [kind]: null }));
-
-        try {
-          setStatus(`Uploading "${entry.name}"…`);
-          const uploaded = await uploadPdf(session.id, kind, entry.file);
-          setUploads((prev) => ({ ...prev, [kind]: uploaded }));
-          setSelectedReports((prev) => ({ ...prev, [kind]: true }));
-          setUploadErrors((prev) => ({ ...prev, [kind]: null }));
-          markBackendUp();
-          setHasPendingChanges(true);
-        if (kind === "nutrition") {
-          setNutritionParsed(false);
-        } else if (kind === "hormones") {
-          setHormonesParsed(false);
-        } else if (kind === "heavy-metals") {
-          setHeavyMetalsParsed(false);
-        } else if (kind === "toxins") {
-          setToxinsParsed(false);
+        const uploaded = await uploadReport(kind, entry.file, entry.name, operation);
+        if (!isOperationActive(operation)) {
+          return;
         }
+        if (uploaded) {
           uploadedAny = true;
-          setStatus(
-            kind === "food"
-              ? `Uploaded "${uploaded.filename}". Ready to parse.`
-              : `Stored "${uploaded.filename}".`,
-          );
-        } catch (e: any) {
-          const message = formatErrorMessage(e);
-          setUploadErrors((prev) => ({ ...prev, [kind]: message }));
-          setError(message);
-          setStatus(`Upload failed for "${entry.name}".`);
-          markBackendDown(e);
         }
       }
     } finally {
-      setIsUploading(false);
+      applyState(setIsUploading, false, operation);
     }
 
     if (uploadedAny) {
-      setStatus((prev) => prev || "Uploads complete.");
+      applyState(setStatus, (prev) => prev || "Uploads complete.", operation);
     }
   }
 
@@ -835,44 +865,18 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   }
 
   async function uploadSingleReport(kind: ReportKind, file: File) {
+    const operation = beginOperation();
     if (!session) {
-      setStatus("Create a session before uploading reports.");
-      setError("No active session.");
+      applyState(setStatus, "Create a session before uploading reports.", operation);
+      applyState(setError, "No active session.", operation);
       return;
     }
-    setIsUploading(true);
+    applyState(setIsUploading, true, operation);
     try {
-      setError("");
-      if (kind === "food") {
-        setParsedOk(false);
-      } else if (kind === "nutrition") {
-        setNutritionParsed(false);
-      } else if (kind === "hormones") {
-        setHormonesParsed(false);
-      } else if (kind === "heavy-metals") {
-        setHeavyMetalsParsed(false);
-      }
-      setUploadErrors((prev) => ({ ...prev, [kind]: null }));
-      setStatus(`Uploading "${file.name}"…`);
-      const uploaded = await uploadPdf(session.id, kind, file);
-      setUploads((prev) => ({ ...prev, [kind]: uploaded }));
-      setSelectedReports((prev) => ({ ...prev, [kind]: true }));
-      setUploadErrors((prev) => ({ ...prev, [kind]: null }));
-      markBackendUp();
-      setHasPendingChanges(true);
-      setStatus(
-        kind === "food"
-          ? `Uploaded "${uploaded.filename}". Ready to parse.`
-          : `Stored "${uploaded.filename}".`,
-      );
-    } catch (e: any) {
-      const message = formatErrorMessage(e);
-      setUploadErrors((prev) => ({ ...prev, [kind]: message }));
-      setError(message);
-      setStatus(`Upload failed for "${file.name}".`);
-      markBackendDown(e);
+      applyState(setError, "", operation);
+      await uploadReport(kind, file, file.name, operation);
     } finally {
-      setIsUploading(false);
+      applyState(setIsUploading, false, operation);
     }
   }
 
@@ -902,15 +906,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     const input = replaceInputsRef.current[kind];
     if (input) {
       input.value = "";
-    }
-    if (kind === "nutrition") {
-      setNutritionParsed(false);
-    } else if (kind === "hormones") {
-      setHormonesParsed(false);
-    } else if (kind === "heavy-metals") {
-      setHeavyMetalsParsed(false);
-    } else if (kind === "toxins") {
-      setToxinsParsed(false);
     }
   }
 
@@ -968,131 +963,53 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     }
   }
 
-  async function parseReport(kind: ReportKind, file: FileOut, statusMessage: string): Promise<boolean> {
-    try {
-      setError("");
-      setUploadErrors((prev) => ({ ...prev, [kind]: null }));
-      setStatus(statusMessage);
-      await parseFile(file.id);
-      if (kind === "food") {
-        setParsedOk(true);
-        setStatus("Food report parsed. Ready to publish.");
-      } else if (kind === "nutrition") {
-        setNutritionParsed(true);
-        setStatus("Nutrition report parsed.");
-      } else if (kind === "hormones") {
-        setHormonesParsed(true);
-        setStatus("Hormones report parsed.");
-      } else if (kind === "heavy-metals") {
-        setHeavyMetalsParsed(true);
-        setStatus("Heavy metals report parsed.");
-      } else if (kind === "toxins") {
-        setToxinsParsed(true);
-        setStatus("Toxins report parsed.");
-      }
-      markBackendUp();
-      return true;
-    } catch (e: any) {
-      const message = formatErrorMessage(e);
-      setError(message);
-      setUploadErrors((prev) => ({ ...prev, [kind]: message }));
-      if (kind === "food") {
-        setParsedOk(false);
-        setStatus("Parsing food report failed.");
-      } else if (kind === "nutrition") {
-        setNutritionParsed(false);
-        setStatus("Parsing nutrition report failed.");
-      } else if (kind === "hormones") {
-        setHormonesParsed(false);
-        setStatus("Parsing hormones report failed.");
-      } else if (kind === "heavy-metals") {
-        setHeavyMetalsParsed(false);
-        setStatus("Parsing heavy metals report failed.");
-      } else if (kind === "toxins") {
-        setToxinsParsed(false);
-        setStatus("Parsing toxins report failed.");
-      }
-      markBackendDown(e);
-      return false;
-    }
-  }
-
-  async function parseSelectedReports(): Promise<boolean> {
+  async function parseSelectedReports(ctx?: OperationContext): Promise<boolean> {
     if (!session) return false;
+    const operation = ctx ?? beginOperation();
     if (isUploading) {
-      setStatus("Upload in progress. Please wait until uploads finish before publishing.");
+      applyState(setStatus, "Upload in progress. Please wait until uploads finish before publishing.", operation);
       return false;
     }
 
-    const foodFile = uploads["food"];
-    if (!foodFile) {
-      setError("Upload the Food report before publishing.");
-      setStatus("Food report missing. Upload the Food PDF to continue.");
-      return false;
-    }
+    const targets: Array<{ kind: ReportKind; file: FileOut }> = REPORT_DEFS.flatMap(
+      (def) => {
+        const file = uploads[def.kind];
+        return selectedReports[def.kind] && file
+          ? [{ kind: def.kind, file }]
+          : [];
+      },
+    );
 
-    if (!selectedReports["food"]) {
-      setError("Select the Food report before publishing.");
-      setStatus("Select the Food report to include it in the patient results.");
-      return false;
+    if (!targets.length) {
+      if (!session?.published) {
+        applyState(setError, "Select at least one uploaded report before publishing.", operation);
+        applyState(setStatus, "No reports selected for publishing.", operation);
+        return false;
+      }
+      applyState(setStatus, "No reports selected. Publishing will hide all reports from the patient view.", operation);
+      return true;
     }
 
     let success = true;
-    const targets: Array<{ kind: ReportKind; label: string; file: FileOut | null }> = [
-      { kind: "food", label: "food", file: foodFile },
-      { kind: "nutrition", label: "nutrition", file: uploads["nutrition"] },
-      { kind: "hormones", label: "hormones", file: uploads["hormones"] },
-      { kind: "heavy-metals", label: "heavy metals", file: uploads["heavy-metals"] },
-      { kind: "toxins", label: "toxins", file: uploads["toxins"] },
-    ];
 
     for (const target of targets) {
-      const shouldParse =
-        target.kind === "food" || (target.file && selectedReports[target.kind]);
-      if (!shouldParse || !target.file) continue;
-
-      const alreadyParsed =
-        target.kind === "food"
-          ? parsedOk
-          : target.kind === "nutrition"
-          ? nutritionParsed
-          : target.kind === "hormones"
-          ? hormonesParsed
-          : target.kind === "heavy-metals"
-          ? heavyMetalsParsed
-          : target.kind === "toxins"
-          ? toxinsParsed
-          : false;
-
-      if (alreadyParsed) {
+      if (isParsed(target.kind)) {
         continue;
       }
 
-      if (target.kind === "food") {
-        setParsedOk(false);
-      } else if (target.kind === "nutrition") {
-        setNutritionParsed(false);
-      } else if (target.kind === "hormones") {
-        setHormonesParsed(false);
-      } else if (target.kind === "heavy-metals") {
-        setHeavyMetalsParsed(false);
-      } else if (target.kind === "toxins") {
-        setToxinsParsed(false);
-      }
-
-      const ok = await parseReport(
-        target.kind,
-        target.file,
-        `Parsing ${target.label} report…`,
-      );
+      const ok = await parseReport(target.kind, target.file, operation);
       if (!ok) {
+        success = false;
+        break;
+      }
+      if (!isOperationActive(operation)) {
         success = false;
         break;
       }
     }
 
     if (success) {
-      setStatus("Reports parsed successfully.");
+      applyState(setStatus, "Reports parsed successfully.", operation);
     }
 
     return success;
@@ -1100,34 +1017,42 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
   async function onPublish() {
     if (!session) return;
+    const operation = beginOperation();
     if (session.published && !hasPendingChanges) {
-      setStatus("No changes to publish.");
+      applyState(setStatus, "No changes to publish.", operation);
       return;
     }
-    setError("");
-    const parsed = await parseSelectedReports();
-    if (!parsed) {
+    applyState(setError, "", operation);
+    const parsed = await parseSelectedReports(operation);
+    if (!parsed || !isOperationActive(operation)) {
       return;
     }
     try {
-      setStatus(session.published ? "Updating live session…" : "Publishing…");
+      applyState(setStatus, session.published ? "Updating live session…" : "Publishing…", operation);
       const sessionId = session.id;
       const result = await publish(sessionId, true, selectedReports);
+      if (!isOperationActive(operation)) {
+        return;
+      }
       localStorage.setItem(
         "longevityq_publish",
         JSON.stringify({ sessionId, ts: Date.now() }),
       );
-      setSession((prev) => (prev ? { ...prev, published: result.published } : prev));
-      setStagedPreviewSessionId(sessionId);
-      setStagedPreviewVersion((v) => v + 1);
-      setHasShownOnPatient(false);
-      markBackendUp();
-      setStatus("Session is live. Staged preview refreshed below.");
-      setHasPendingChanges(false);
+      applyState(setSession, (prev) => (prev ? { ...prev, published: result.published } : prev), operation);
+      applyState(setStagedPreviewSessionId, sessionId, operation);
+      applyState(setStagedPreviewVersion, (v) => v + 1, operation);
+      applyState(setHasShownOnPatient, false, operation);
+      markBackendUp(operation);
+      applyState(setStatus, "Session is live. Staged preview refreshed below.", operation);
+      applyState(setHasPendingChanges, false, operation);
     } catch (e: any) {
-      setError(formatErrorMessage(e));
-      setStatus("Publishing failed.");
-      markBackendDown(e);
+      if (operation.signal.aborted || !isOperationActive(operation)) {
+        return;
+      }
+      const message = formatErrorMessage(e);
+      applyState(setError, message, operation);
+      applyState(setStatus, "Publishing failed.", operation);
+      markBackendDown(e, operation);
     }
   }
 
@@ -1175,12 +1100,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const patientButtonDisabled =
     patientWindowOpen && !hasShownOnPatient && !(session?.published ?? false);
 
-  const patientButtonStyle = !patientWindowOpen
-    ? buttonStyles("info", patientButtonDisabled)
-    : hasShownOnPatient
-    ? buttonStyles("secondary", patientButtonDisabled)
-    : buttonStyles("primary", patientButtonDisabled);
-
   const handlePatientButtonClick = () => {
     if (!patientWindowOpen) {
       openPatientWindow();
@@ -1193,44 +1112,21 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     }
   };
 
-  const hasFoodUpload = Boolean(uploads["food"]);
-  const hasNutritionUpload = Boolean(uploads["nutrition"]);
-  const hasHormoneUpload = Boolean(uploads["hormones"]);
-  const hasHeavyMetalsUpload = Boolean(uploads["heavy-metals"]);
-  const hasToxinsUpload = Boolean(uploads["toxins"]);
-
   const renderSessionHeader = () => {
     if (!session) return null;
     const displayName = formatFullName(session.first_name, session.last_name) || session.client_name;
+    const patientButtonVariant: React.ComponentProps<typeof Button>["variant"] = !patientWindowOpen
+      ? "info"
+      : hasShownOnPatient
+      ? "secondary"
+      : "primary";
 
     return (
-      <div
-        style={{
-          marginTop: "12px",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "16px",
-          alignItems: "stretch",
-        }}
-      >
-        <div
-          style={{
-            flex: "1 1 0",
-            minWidth: "320px",
-            padding: "16px",
-            borderRadius: "12px",
-            background: palette.surface,
-            color: palette.textPrimary,
-            border: `1px solid ${palette.border}`,
-            boxShadow: "0 12px 32px rgba(0,0,0,0.24)",
-            display: "flex",
-            flexDirection: "column",
-            gap: "12px",
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div className="mt-3 flex flex-wrap items-stretch gap-4">
+        <div className={cn("flex min-w-[320px] flex-1 flex-col gap-3 p-4", cardShellClasses)}>
+          <div className="flex flex-col gap-3">
             {isEditingName ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   autoFocus
                   value={editedFirstName}
@@ -1245,7 +1141,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                       cancelEditName();
                     }
                   }}
-                  style={{ ...darkInputStyle, minWidth: 160 }}
+                  className={cn(darkInputClasses, "min-w-[160px]")}
                 />
                 <input
                   value={editedLastName}
@@ -1260,84 +1156,42 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                       cancelEditName();
                     }
                   }}
-                  style={{ ...darkInputStyle, minWidth: 160 }}
+                  className={cn(darkInputClasses, "min-w-[160px]")}
                 />
-                <button
-                  type="button"
-                  onClick={saveEditName}
-                  style={{ ...buttonStyles("primary"), width: 34, height: 34, padding: 0 }}
-                  title="Save name"
-                >
-                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <Button type="button" variant="primary" size="icon" onClick={saveEditName} title="Save name">
+                  <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path d="M5 10.5l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={cancelEditName}
-                  style={{ ...buttonStyles("danger"), width: 34, height: 34, padding: 0 }}
-                  title="Cancel"
-                >
-                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                </Button>
+                <Button type="button" variant="danger" size="icon" onClick={cancelEditName} title="Cancel">
+                  <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path d="M6 6l8 8M14 6l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   </svg>
-                </button>
+                </Button>
               </div>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                <div style={{ fontSize: "16px", fontWeight: 600 }}>{displayName}</div>
-                <button
-                  type="button"
-                  onClick={startEditName}
-                  style={{
-                    ...buttonStyles("ghost"),
-                    width: 32,
-                    height: 32,
-                    borderRadius: "999px",
-                    padding: 0,
-                  }}
-                  title="Edit patient name"
-                >
-                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="text-[16px] font-semibold">{displayName}</div>
+                <Button type="button" variant="ghost" size="icon" onClick={startEditName} title="Edit patient name">
+                  <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path
                       d="M4 13.5v2.5h2.5L15.1 7.4l-2.5-2.5L4 13.5zM16.6 5.9a1 1 0 000-1.4l-1.1-1.1a1 1 0 00-1.4 0l-1.2 1.2 2.5 2.5 1.2-1.2z"
                       fill="currentColor"
                     />
                   </svg>
-                </button>
+                </Button>
               </div>
             )}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              <span style={chipStyles(session.published ? "success" : "muted")}>
-                {session.published ? "Published" : "Not Published"}
-              </span>
-              {hasShownOnPatient && patientWindowOpen && (
-                <span style={chipStyles("info")}>Visible on Patient</span>
-              )}
+            <div className="flex flex-wrap gap-2">
+              <Chip variant={session.published ? "success" : "muted"}>{session.published ? "Published" : "Not Published"}</Chip>
+              {hasShownOnPatient && patientWindowOpen && <Chip variant="info">Visible on Patient</Chip>}
             </div>
           </div>
         </div>
-        <div
-          style={{
-            flex: "0 0 220px",
-            minWidth: "220px",
-            padding: "16px",
-            borderRadius: "12px",
-            background: palette.surface,
-            color: palette.textPrimary,
-            border: `1px solid ${palette.border}`,
-            boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            gap: "12px",
-          }}
-        >
+        <div className={cn("flex min-w-[220px] flex-[0_0_220px] flex-col justify-between gap-3 p-4", statusCardClasses)}>
           <div>
-            <div style={{ fontSize: "13px", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase", color: palette.textSecondary }}>
-              Patient Screen
-            </div>
-            <div style={{ fontSize: 12, color: "#cbd5f5", marginTop: "6px" }}>
+            <div className="text-[13px] font-semibold uppercase tracking-[0.3em] text-text-secondary">Patient Screen</div>
+            <div className="mt-1.5 text-[12px] text-text-secondary">
               {hasShownOnPatient
                 ? "Currently showing this session."
                 : patientWindowOpen
@@ -1345,17 +1199,18 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                 : "Patient window not open."}
             </div>
           </div>
-          <div style={{ fontSize: 11, color: "#9ca3c9" }}>
+          <div className="text-[11px] text-[#9ca3c9]">
             Status: {patientWindowOpen ? "Connected" : "Closed"}
             {patientWindowOpen && !hasShownOnPatient ? " • standing by" : ""}
           </div>
-          <button
+          <Button
+            variant={patientButtonVariant}
             onClick={patientButtonDisabled ? undefined : handlePatientButtonClick}
             disabled={patientButtonDisabled}
-            style={{ ...patientButtonStyle, width: "100%" }}
+            className="w-full"
           >
             {patientButtonLabel}
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -1363,7 +1218,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
   const renderCreateForm = () => (
     <form
-      style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}
+      className="mt-3 flex flex-wrap items-center gap-2"
       onSubmit={async (e) => {
         e.preventDefault();
         const first = formatClientName(firstNameInput);
@@ -1387,7 +1242,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           resetUploadState();
           setFirstNameInput(first);
           setLastNameInput(last);
-          setStatus(`Session #${created.id} ready. Drop the folder for ${formatFullName(created.first_name, created.last_name)}.`);
+          const createdName = formatFullName(created.first_name, created.last_name);
+          setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next patient folder.");
       try {
         await setDisplaySession({
           stagedSessionId: created.id,
@@ -1407,62 +1263,46 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       }}
     >
       <input
-        style={{ ...darkInputStyle, minWidth: 180 }}
+        className={cn(darkInputClasses, "min-w-[180px]")}
         placeholder="First name"
         value={firstNameInput}
         onChange={(e) => setFirstNameInput(e.target.value)}
       />
       <input
-        style={{ ...darkInputStyle, minWidth: 180 }}
+        className={cn(darkInputClasses, "min-w-[180px]")}
         placeholder="Last name (optional)"
         value={lastNameInput}
         onChange={(e) => setLastNameInput(e.target.value)}
       />
-      <button
-        type="submit"
-        style={buttonStyles("primary", !firstNameInput.trim())}
-        disabled={!firstNameInput.trim()}
-      >
+      <Button type="submit" variant="primary" disabled={!firstNameInput.trim()}>
         Create Session
-      </button>
+      </Button>
     </form>
   );
 
   const renderDropZone = () => (
     <div
-      onDragEnter={handleDragEnterArea}
-      onDragOver={handleDragOverArea}
+      onDragEnter={handleDragHighlight}
+      onDragOver={handleDragHighlight}
       onDragLeave={handleDragLeaveArea}
       onDrop={handleDrop}
-      style={{
-        marginTop: "16px",
-        padding: "12px 16px",
-        borderRadius: "12px",
-        background: isDragActive ? "#ebf3ff" : "#f9fafb",
-        border: isDragActive ? "3px dotted #2563eb" : "1px dotted #cbd5f5",
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        flexWrap: "wrap",
-        transition: "border 120ms ease, background 120ms ease",
-      }}
+      className={cn(
+        "mt-4 flex flex-wrap items-center gap-3 rounded-3lg border border-dotted border-dropzone-border bg-dropzone-base px-4 py-3 text-[12px] text-[#4b5563] transition-colors duration-150",
+        {
+          "rounded-[18px] border-[4px] border-dotted border-accent-blue bg-dropzone-active px-4 py-4": isDragActive,
+        },
+      )}
     >
-      <button
-        type="button"
-        onClick={onBrowse}
-        style={{ ...buttonStyles("primary"), padding: "8px 18px" }}
-      >
+      <Button type="button" variant="primary" onClick={onBrowse} className="px-[18px]">
         Upload
-      </button>
-      <div style={{ fontSize: "12px", color: "#4b5563" }}>
-        Upload files, or drag and drop files or folders anywhere on this screen.
-      </div>
+      </Button>
+      <div>Upload files, or drag and drop files or folders anywhere on this screen.</div>
       <input
         ref={fileInputRef}
         type="file"
         accept="application/pdf"
         multiple
-        style={{ display: "none" }}
+        className="hidden"
         onChange={onFileInput}
       />
     </div>
@@ -1470,53 +1310,40 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
   const renderReportTiles = () => {
     if (!session) return null;
-    const basePublishDisabled = !hasFoodUpload || !selectedReports["food"];
+    const publishableReports = REPORT_DEFS.filter((def) => selectedReports[def.kind] && uploads[def.kind]);
+    const hasSelectedReports = publishableReports.length > 0;
+    const canPublishWithoutSelection = session.published;
     const publishLocked = session.published && !hasPendingChanges;
-    const disablePublish = basePublishDisabled || isUploading || publishLocked;
+    const disablePublish = (!hasSelectedReports && !canPublishWithoutSelection) || isUploading || publishLocked;
     const publishLabel = session.published ? (hasPendingChanges ? "Update" : "Published") : "Publish";
-    const publishButtonStyle = buttonStyles(publishLocked ? "secondary" : "primary", disablePublish);
-    const publishStatusText = session.published
-      ? publishLocked
-        ? "Published and up to date."
-        : "Published. Update to reflect recent changes."
-      : "Not yet published.";
+    const publishButtonVariant = publishLocked ? "secondary" : "primary";
+    const publishStatusText = hasSelectedReports
+      ? session.published
+        ? publishLocked
+          ? "Published and up to date."
+          : "Published. Update to reflect recent changes."
+        : "Ready to publish the selected reports."
+      : session.published
+      ? "Publishing will hide all reports from the patient view."
+      : "Select at least one uploaded report to enable publishing.";
 
     return (
-      <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div className="mt-4 flex flex-col gap-4">
         <div
-          style={{
-            display: "grid",
-            gap: "14px",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            boxSizing: "border-box",
-            ...(isDragActive
-              ? {
-                  border: "4px dotted rgba(37, 99, 235, 0.45)",
-                  borderRadius: "18px",
-                  padding: "16px",
-                  background: "rgba(37, 99, 235, 0.08)",
-                }
-              : {}),
-          }}
+          className={cn(
+            "grid gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]",
+            {
+              "rounded-[18px] border-[4px] border-dotted border-accent-blue bg-[rgba(37,99,235,0.08)] p-4": isDragActive,
+            },
+          )}
         >
         {[...REPORT_DEFS.map((def) => {
           const uploaded = uploads[def.kind];
           const err = uploadErrors[def.kind];
           const isSelected = selectedReports[def.kind];
           const tileState: "pending" | "uploaded" | "error" = uploaded && !err ? "uploaded" : err ? "error" : "pending";
-          const parsedFlag =
-            def.kind === "food"
-              ? parsedOk
-              : def.kind === "nutrition"
-              ? nutritionParsed
-              : def.kind === "hormones"
-              ? hormonesParsed
-              : def.kind === "heavy-metals"
-              ? heavyMetalsParsed
-              : def.kind === "toxins"
-              ? toxinsParsed
-              : false;
-          const isParsed = Boolean(parsedFlag && isSelected);
+          const parsedFlag = isParsed(def.kind);
+          const parsedAndSelected = Boolean(parsedFlag && isSelected);
           const hasParseError = Boolean(err && uploaded);
           const needsLocatorGuidance =
             def.kind === "food" &&
@@ -1524,34 +1351,25 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
             typeof err === "string" &&
             err.toLowerCase().includes("unable to locate any food report categories");
 
-          const tileVisual =
-            hasParseError
-              ? {
-                  background: "#2a1218",
-                  border: `1px solid ${palette.errorBorder}`,
-                  boxShadow: "0 14px 34px rgba(248,113,113,0.16)",
-                }
-              : isParsed
-              ? {
-                  background: "rgba(15, 118, 110, 0.18)",
-                  border: `1px solid ${palette.successBorder}`,
-                  boxShadow: "0 14px 34px rgba(13,148,136,0.18)",
-                }
-              : tileState === "uploaded"
-              ? {
-                  background: palette.surfaceMuted,
-                  border: `1px solid ${palette.border}`,
-                  boxShadow: "0 12px 28px rgba(0,0,0,0.18)",
-                }
-              : {
-                  background: "rgba(30, 41, 59, 0.35)",
-                  border: `1px dashed ${palette.border}`,
-                  boxShadow: "none",
-                };
+          const isPublishedReport =
+            Boolean(session?.published) &&
+            Boolean(selectedReports[def.kind]) &&
+            Boolean(uploads[def.kind]) &&
+            !hasPendingChanges &&
+            !hasParseError;
+
+          const tileClass = cn(tileBaseClasses, {
+            "border-error-border bg-tile-error text-chip-danger-text shadow-error-soft": hasParseError,
+            "border-success-border bg-tile-success shadow-success-soft": parsedAndSelected && !hasParseError,
+            "border-border bg-surface-muted shadow-surface-md": tileState === "uploaded" && !parsedAndSelected && !hasParseError,
+            "border border-dashed border-border bg-tile-pending shadow-none": tileState === "pending" && !hasParseError && !parsedAndSelected,
+          });
 
           const chipVariant: ChipVariant = hasParseError
             ? "danger"
-            : isParsed
+            : isPublishedReport
+            ? "success"
+            : parsedAndSelected
             ? "success"
             : tileState === "uploaded"
             ? isSelected
@@ -1560,7 +1378,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
             : "muted";
           const chipLabel = hasParseError
             ? "Error"
-            : isParsed
+            : isPublishedReport
+            ? "Published"
+            : parsedAndSelected
             ? "Parsed"
             : tileState === "uploaded"
             ? isSelected
@@ -1569,24 +1389,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
             : "Waiting";
 
           return (
-            <div
-              key={def.kind}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-                padding: "18px",
-                borderRadius: "14px",
-                color: palette.textPrimary,
-                minWidth: 0,
-                transition: "background 0.18s ease, border 0.18s ease",
-                ...tileVisual,
-              }}
-            >
+            <div key={def.kind} className={tileClass}>
               <input
                 type="file"
                 accept="application/pdf"
-                style={{ display: "none" }}
+                className="hidden"
                 ref={(el) => {
                   replaceInputsRef.current[def.kind] = el;
                 }}
@@ -1594,81 +1401,58 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   void onReplaceInput(def.kind, e.target.files);
                 }}
               />
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
                   <input
                     type="checkbox"
                     checked={uploaded ? isSelected : false}
                     disabled={!uploaded}
                     onChange={(e) => toggleSelection(def.kind, e.target.checked)}
                     title={uploaded ? `Include ${def.label} report` : "Upload report first"}
-                    style={{
-                      width: 18,
-                      height: 18,
-                      accentColor: palette.accent,
-                      cursor: uploaded ? "pointer" : "not-allowed",
-                    }}
+                    className="h-[18px] w-[18px] accent-accent disabled:cursor-not-allowed"
                   />
-                  <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.2 }}>{def.label}</div>
+                  <div className="text-[13px] font-bold tracking-[0.02em]">{def.label}</div>
                 </div>
-                <span style={chipStyles(chipVariant)}>{chipLabel}</span>
+                <Chip variant={chipVariant}>{chipLabel}</Chip>
               </div>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div className="flex flex-1 flex-col gap-1.5 text-[11px]">
                 {uploaded ? (
                   <>
                     <div
-                      style={{
-                        fontSize: 11,
-                        color: hasParseError ? "#fecaca" : "#f8fafc",
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-word",
-                      }}
+                      className={cn("whitespace-pre-wrap break-words", {
+                        "text-[#fecaca]": hasParseError,
+                        "text-text-primary": !hasParseError,
+                      })}
                     >
                       {formatReportFilename(uploaded.filename, def.kind)}
                     </div>
                     {hasParseError && (
-                      <div style={{ fontSize: 11, color: "#fca5a5" }}>
+                      <div className="text-chip-danger-text">
                         {needsLocatorGuidance
                           ? `${err} Fix the file and parse again or deselect to continue.`
                           : err}
                       </div>
                     )}
                     {!isSelected && (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: parsedFlag ? "#60a5fa" : "#fbbf24",
-                        }}
-                      >
+                      <div className={cn(parsedFlag ? "text-[#60a5fa]" : "text-[#fbbf24]")}>
                         {parsedFlag ? "Hidden from patient view" : "Deselected until re-selected"}
                       </div>
                     )}
                   </>
                 ) : err ? (
-                  <div style={{ fontSize: 11, color: "#fecaca" }}>{err}</div>
+                  <div className="text-[#fecaca]">{err}</div>
                 ) : (
-                  <div style={{ fontSize: 11, color: "#e2e8f0" }}>Waiting for upload</div>
+                  <div className="text-chip-default-text">Waiting for upload</div>
                 )}
                 {(uploaded || err) && (
-                  <button
+                  <Button
                     type="button"
                     onClick={() => onReplace(def.kind)}
-                    style={{
-                      ...buttonStyles("ghost"),
-                      fontSize: 11,
-                      padding: "6px 10px",
-                      alignSelf: "flex-start",
-                    }}
+                    variant="ghost"
+                    className="self-start px-[10px] py-[6px] text-[11px]"
                   >
                     Replace PDF
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -1676,29 +1460,21 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         }),
         <div
           key="publish-tile"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            gap: "12px",
-            padding: "20px",
-            borderRadius: "14px",
-            color: palette.textPrimary,
-            background: palette.surface,
-            border: `1px solid ${palette.border}`,
-            boxShadow: "0 12px 28px rgba(0,0,0,0.18)",
-          }}
+          className={cn(
+            tileBaseClasses,
+            "justify-between rounded-4lg border border-border bg-surface p-5 text-text-primary shadow-surface-md",
+          )}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>Publish Session</div>
-            <div style={{ fontSize: 12, color: palette.textSecondary, lineHeight: 1.45 }}>
-              Finalize the selected reports to update the patient view. Food must be included.
+          <div className="flex flex-col gap-2">
+            <div className="text-[14px] font-bold">Publish Session</div>
+            <div className="text-[12px] leading-relaxed text-text-secondary">
+              Finalize the selected reports to update the patient view.
             </div>
-            <div style={{ fontSize: 12, color: palette.textSecondary }}>{publishStatusText}</div>
+            <div className="text-[12px] text-text-secondary">{publishStatusText}</div>
           </div>
-          <button onClick={onPublish} disabled={disablePublish} style={{ ...publishButtonStyle, width: "100%" }}>
+          <Button onClick={onPublish} disabled={disablePublish} variant={publishButtonVariant} className="w-full">
             {publishLabel}
-          </button>
+          </Button>
         </div>]}
         </div>
       </div>
@@ -1716,22 +1492,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
   if (backendDown) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: LOGO_BACKGROUND,
-          color: "#f8fafc",
-          fontFamily: "Inter,system-ui",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          textAlign: "center",
-          padding: 24,
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 30, fontWeight: 700, marginTop: 16 }}>Operator Console Offline</div>
-          <div style={{ fontSize: 16, opacity: 0.8, marginTop: 10 }}>
+      <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-center text-text-primary">
+        <div className="space-y-4">
+          <div className="text-[30px] font-bold">Operator Console Offline</div>
+          <div className="mt-2 text-[16px] opacity-80">
             The Quantum Qi services are no longer reachable. Close this window and restart the program once
             the server is running again.
           </div>
@@ -1742,31 +1506,25 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
   return (
     <div
-      onDragEnter={handleDragEnterArea}
-      onDragOver={handleDragOverArea}
+      onDragEnter={handleDragHighlight}
+      onDragOver={handleDragHighlight}
       onDragLeave={handleDragLeaveArea}
       onDrop={handleDrop}
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "24px",
-        padding: "16px",
-        alignItems: "flex-start",
-      }}
+      className="flex flex-wrap items-start gap-6 px-4 py-4"
     >
-      <div style={{ flex: "1 1 520px", maxWidth: "760px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-            <h1 style={{ fontSize: "20px", fontWeight: 700, margin: 0 }}>Operator Console</h1>
-            <div style={{ fontSize: "13px", color: "#4b5563" }}>
+      <div className="flex min-w-[320px] max-w-[760px] flex-1 flex-col">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-[20px] font-bold">Operator Console</h1>
+            <div className="text-[13px] text-[#4b5563]">
               Drag & drop the patient folder (named with first and last name) to automatically ingest reports.
               Filenames must include the patient name and the report type.
             </div>
           </div>
           {session && (
-            <button onClick={resetSession} style={buttonStyles("ghost")}>
+            <Button onClick={resetSession} variant="ghost">
               Start Over
-            </button>
+            </Button>
           )}
         </div>
 
@@ -1775,32 +1533,14 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         {session && renderDropZone()}
         {session && renderReportTiles()}
         {session && (status || error) && (
-          <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div className="mt-4 flex flex-col gap-2" aria-live="polite">
             {status && (
-              <div
-                style={{
-                  background: "rgba(37, 99, 235, 0.08)",
-                  border: "1px solid rgba(37, 99, 235, 0.18)",
-                  color: "#1d4ed8",
-                  padding: "10px 14px",
-                  borderRadius: "10px",
-                  fontSize: "12px",
-                }}
-              >
+              <div className="rounded-2lg border border-status-info-border bg-status-info-bg px-[14px] py-2.5 text-[12px] text-status-info-text">
                 {status}
               </div>
             )}
             {error && (
-              <div
-                style={{
-                  background: "rgba(220, 38, 38, 0.08)",
-                  border: "1px solid rgba(220, 38, 38, 0.24)",
-                  color: "#b91c1c",
-                  padding: "10px 14px",
-                  borderRadius: "10px",
-                  fontSize: "12px",
-                }}
-              >
+              <div className="rounded-2lg border border-status-error-border bg-status-error-bg px-[14px] py-2.5 text-[12px] text-status-error-text">
                 Error: {error}
               </div>
             )}
@@ -1808,83 +1548,33 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         )}
       </div>
 
-      <div
-        style={{
-          flex: "1 1 320px",
-          minWidth: "300px",
-          position: "sticky",
-          top: "16px",
-          alignSelf: "stretch",
-        }}
-      >
-        <div
-          style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: "12px",
-            background: "#fff",
-            padding: "16px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "16px",
-            height: "calc(100vh - 32px)",
-            minHeight: "520px",
-          }}
-        >
+      <div className="sticky top-4 flex min-w-[300px] flex-1 self-stretch">
+        <div className="flex h-[calc(100vh-32px)] min-h-[520px] flex-1 flex-col gap-4 rounded-3lg border border-[#e5e7eb] bg-white p-4">
           <div>
-            <div
-              style={{
-                fontSize: "12px",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: 0.6,
-                color: "#4b5563",
-              }}
-            >
+            <div className="text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
               Live Monitor
             </div>
-            <div style={{ fontSize: "11px", color: "#6b7280", marginTop: "4px" }}>
+            <div className="mt-1 text-[11px] text-[#6b7280]">
               Mirrors the active patient display.
             </div>
           </div>
           {!patientWindowOpen && (
-            <div
-              style={{
-                fontSize: "12px",
-                color: "#b91c1c",
-                background: "#fef2f2",
-                borderRadius: "8px",
-                padding: "8px 10px",
-              }}
-            >
+            <div className="rounded-lg bg-[#fef2f2] px-2.5 py-2 text-[12px] text-[#b91c1c]">
               Patient window is closed. Use the session header controls to launch it again.
             </div>
           )}
-          <div style={{ display: "flex", flexDirection: "column", gap: "14px", flex: 1, minHeight: 0 }}>
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5">
             <iframe
               title="Live Patient Monitor"
               src={liveMonitorUrl}
-              style={{
-                width: "100%",
-                flex: "1 1 0",
-                minHeight: 0,
-                border: "1px solid #d1d5db",
-                borderRadius: "10px",
-              }}
+              className="min-h-0 flex-1 rounded-[10px] border border-[#d1d5db]"
             />
-            <div style={{ height: "1px", background: "#e5e7eb" }} />
+            <div className="h-px bg-[#e5e7eb]" />
             <div>
-              <div
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.6,
-                  color: "#4b5563",
-                }}
-              >
+              <div className="text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
                 Staged Preview
               </div>
-              <div style={{ fontSize: "11px", color: "#6b7280", marginTop: "4px" }}>
+              <div className="mt-1 text-[11px] text-[#6b7280]">
                 {stagedPreviewSessionId
                   ? hasShownOnPatient
                     ? "Live monitor is already showing this data."
@@ -1892,50 +1582,15 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   : "Publish to activate the staged preview."}
               </div>
             </div>
-            {stagedPreviewSessionId && stagedPreviewUrl ? (
+            {stagedPreviewSessionId && stagedPreviewUrl && (
               <iframe
                 key={`${stagedPreviewSessionId}-${stagedPreviewVersion}`}
                 title="Staged Patient Preview"
                 src={stagedPreviewUrl}
-                style={{
-                  width: "100%",
-                  flex: "1 1 0",
-                  minHeight: 0,
-                  border: "1px solid #d1d5db",
-                  borderRadius: "10px",
-                }}
+                className="min-h-0 flex-1 rounded-[10px] border border-[#d1d5db]"
               />
-            ) : (
-              <div
-                style={{
-                  flex: "1 1 0",
-                  minHeight: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "16px",
-                  borderRadius: "10px",
-                  border: "1px dashed #d1d5db",
-                  fontSize: "12px",
-                  color: "#6b7280",
-                  textAlign: "center",
-                }}
-              >
-                Publish to generate a staging preview.
-              </div>
             )}
           </div>
-          {session && (
-            <div style={{ fontSize: "12px", color: "#4b5563", marginTop: "4px" }}>
-              {formatFullName(session.first_name, session.last_name) || session.client_name}
-              {session.published ? <span style={{ marginLeft: 6, color: "#16a34a" }}>• Live</span> : <span style={{ marginLeft: 6 }}>• Not Live</span>}
-              {parsedOk && <span style={{ marginLeft: 6, color: "#16a34a" }}>• Food Parsed ✓</span>}
-              {nutritionParsed && <span style={{ marginLeft: 6, color: "#16a34a" }}>• Nutrition Parsed ✓</span>}
-              {hormonesParsed && <span style={{ marginLeft: 6, color: "#16a34a" }}>• Hormones Parsed ✓</span>}
-              {heavyMetalsParsed && <span style={{ marginLeft: 6, color: "#16a34a" }}>• Heavy Metals Parsed ✓</span>}
-              {toxinsParsed && <span style={{ marginLeft: 6, color: "#16a34a" }}>• Toxins Parsed ✓</span>}
-            </div>
-          )}
         </div>
       </div>
     </div>
