@@ -99,6 +99,30 @@ Define in `frontend/.env` (or `.env.local`) as needed:
 | --- | --- | --- |
 | `VITE_API_BASE` | `http://localhost:8000` | URL of the FastAPI backend. |
 
+### Quick start script (`scripts/dev.sh`)
+
+Prefer a single command that launches everything? Use the helper script. It:
+
+- Ensures the chosen backend/frontend ports are free (kills lingering processes if needed).
+- Starts the backend with idle-shutdown enabled so it exits automatically when dev tabs close.
+- Boots the frontend pointing at the backend URL.
+- Opens both `/operator` and `/patient` in your default browser(s).
+
+```bash
+./scripts/dev.sh
+```
+
+Environment overrides:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FRONTEND_HOST` | `127.0.0.1` | Host passed to `vite dev --host`. |
+| `FRONTEND_PORT` | `5173` | Port for the Vite dev server (strict; script frees it first). |
+| `BACKEND_PORT` | `8000` | Port for uvicorn. |
+| `IDLE_SHUTDOWN_DELAY` | `5` | Seconds before the backend auto-exits after all sockets disconnect. |
+
+Both the backend virtualenv and `frontend/node_modules` must already exist; the script will bail with a helpful message if they don’t.
+
 ---
 
 ## Operator workflow
