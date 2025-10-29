@@ -49,13 +49,13 @@ class ParsedRow(SQLModel, table=True):
     data: Dict[str, Any] = Field(sa_column=Column(JSON))
     parsed_at: datetime = Field(default_factory=datetime.utcnow)
 
-# --- Fixed patient-screen binding model ---
+# --- Fixed guest-screen binding model ---
 from typing import Optional as _Opt
 from sqlmodel import Field as _Field
 
 class DisplayRow(SQLModel, table=True):
     id: _Opt[int] = _Field(default=None, primary_key=True)
-    code: str = _Field(default="main", index=True, unique=True)   # single patient display
+    code: str = _Field(default="main", index=True, unique=True)   # single guest display
     current_session_id: _Opt[int] = _Field(default=None, foreign_key="sessionrow.id")
     staged_session_id: _Opt[int] = _Field(default=None, foreign_key="sessionrow.id")
     staged_first_name: _Opt[str] = _Field(default=None)

@@ -1,6 +1,6 @@
 # Quantum Qi
 
-Quantum Qi is a two-screen experience built for clinic operators and their patients. The operator console handles session creation, multi-report ingestion, parsing, and staged publishing, while the patient screen stays in sync via WebSockets so new data lands instantly when the operator is ready to “Go Live”.
+Quantum Qi is a two-screen experience built for clinic operators and their guests. The operator console handles session creation, multi-report ingestion, parsing, and staged publishing, while the guest screen stays in sync via WebSockets so new data lands instantly when the operator is ready to “Go Live”.
 
 This document walks through the project layout, local setup, and day-to-day workflows so someone new to the codebase can get productive quickly.
 
@@ -14,7 +14,7 @@ The fastest way to spin up Quantum Qi locally:
 ./scripts/dev.sh
 ```
 
-The script checks dependencies, frees the default ports, starts FastAPI + Vite, and opens both the operator (`/operator`) and patient (`/patient`) screens in new browser windows. Tweak ports/hosts by exporting these vars before running:
+The script checks dependencies, frees the default ports, starts FastAPI + Vite, and opens both the operator (`/operator`) and guest (`/guest`) screens in new browser windows. Tweak ports/hosts by exporting these vars before running:
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -41,14 +41,14 @@ Prefer a manual setup or want more context? Read on.
         │
         ▼
 ┌──────────────┐
-│ Patient UI   │  (always listening for WebSocket pushes)
+│ Guest UI     │  (always listening for WebSocket pushes)
 └──────────────┘
 ```
 
-- **Backend** (`backend/`): FastAPI + SQLModel, handles session lifecycle, PDF storage, parsing (via adapters), and WebSocket fan-out to patients.
+- **Backend** (`backend/`): FastAPI + SQLModel, handles session lifecycle, PDF storage, parsing (via adapters), and WebSocket fan-out to guests.
 - **Frontend** (`frontend/`): Vite-powered React SPA with two routes:
   - `/operator` for staff workflows.
-  - `/patient` for the display screen.
+  - `/guest` for the display screen.
 
 ---
 
@@ -115,10 +115,10 @@ Define in `frontend/.env` (or `.env.local`) as needed:
 
 1. **Create a session**
    - Visit `http://localhost:5173/operator`.
-   - Enter patient first and last name. This fills the staged preview and patient greeting.
+   - Enter guest first and last name. This fills the staged preview and guest greeting.
 
 2. **Ingest reports**
-   - Drag & drop the patient folder or use the “Upload” button.
+   - Drag & drop the guest folder or use the “Upload” button.
    - The console supports five report types out of the box:
      - `Food`, `Heavy Metals`, `Hormones`, `Nutrition`, `Toxins`.
    - Each upload:
@@ -140,13 +140,13 @@ Define in `frontend/.env` (or `.env.local`) as needed:
 
 5. **Go live / hide**
    - The sidebar offers live monitor controls:
-     - `Open Patient Window` / `Go Live` / `Hide`.
+   - `Open Guest Window` / `Go Live` / `Hide`.
      - When staged data is published but not live, the staged card animates forward to encourage promotion.
      - Clicking `Go Live` binds the session and the live monitor message switches to “Live Reports.”
      - `Hide` rolls the staged preview forward again without losing publish history.
 
 6. **Reset**
-   - `Start Over` wipes the current session (uploads, selections, status) so you can onboard a new patient quickly.
+   - `Start Over` wipes the current session (uploads, selections, status) so you can onboard a new guest quickly.
 
 ---
 
@@ -168,7 +168,7 @@ Define in `frontend/.env` (or `.env.local`) as needed:
 | File | Purpose |
 | --- | --- |
 | [`frontend/src/Operator.tsx`](frontend/src/Operator.tsx) | Main operator workflow with staged preview + live monitor. |
-| [`frontend/src/Patient.tsx`](frontend/src/Patient.tsx) | Patient-facing screen, listens to WebSocket + REST. |
+| [`frontend/src/Guest.tsx`](frontend/src/Guest.tsx) | Guest-facing screen, listens to WebSocket + REST. |
 | [`frontend/src/api.ts`](frontend/src/api.ts) | Typed API client; sets `VITE_API_BASE`. |
 | [`frontend/src/ui/Button.tsx`](frontend/src/ui/Button.tsx) | Shared button component with variant system. |
 | [`frontend/src/ui/Chip.tsx`](frontend/src/ui/Chip.tsx) | Status pill component used across tiles. |
@@ -178,7 +178,7 @@ Define in `frontend/.env` (or `.env.local`) as needed:
 ## Development tips
 
 - **Dummy parsers**: If a specific parser module (e.g., `parse_food_pdf`) isn’t available, the adapter returns a stub payload so you can develop the UI without installing parsing dependencies.
-- **WebSocket fallbacks**: Patient screens refresh over `/ws/patient` and also poll every 30 seconds, so they recover even if the socket briefly disconnects.
+- **WebSocket fallbacks**: Guest screens refresh over `/ws/guest` and also poll every 30 seconds, so they recover even if the socket briefly disconnects.
 - **Staged preview testing**: The operator sidebar is designed for ultra-wide (Samsung G9) dashboards. The iframe containers auto-scale while keeping scroll positions centered so you can validate layout regardless of local monitor size.
 - **Resetting state**: Removing `data/` clears the SQLite DB and uploaded artifacts; useful when you need a clean slate.
 - **Hot reloading**:

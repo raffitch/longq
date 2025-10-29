@@ -43,7 +43,7 @@ class ParsedBundleOut(BaseModel):
   session_id: int
   reports: dict[str, Any]
 
-# --- Fixed patient-screen binding schemas ---
+# --- Fixed guest-screen binding schemas ---
 class DisplayOut(BaseModel):
   session_id: Optional[int] = None
   client_name: Optional[str] = None
