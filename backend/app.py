@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import select, Session
 from sqlalchemy import text
 from db import init_db, get_session, engine
-from models import SessionRow, FileRow, ParsedRow, DisplayRow
+from models import SessionRow, FileRow, ParsedRow, DisplayRow, SessionState
 from schemas import (
     SessionCreate,
     SessionUpdate,
@@ -22,6 +22,16 @@ from schemas import (
     DisplaySet,
 )
 from parser_adapter import parse_file
+from paths import ensure_app_dirs
+from session_fs import (
+    ensure_session_scaffold,
+    touch_session_lock,
+    reset_tmp_directory,
+    remove_session_lock,
+    store_upload_bytes,
+    load_upload_bytes,
+    session_tmp_path,
+)
 
 
 EXIT_WHEN_IDLE = os.getenv("EXIT_WHEN_IDLE", "false").lower() in {"1", "true", "yes", "on"}
@@ -32,6 +42,8 @@ except ValueError:
 
 guest_clients: Set[WebSocket] = set()
 operator_clients: Set[WebSocket] = set()
+operator_window_count = 0
+_operator_window_lock = Lock()
 
 _shutdown_task: Optional[asyncio.Task] = None
 _event_loop: Optional[asyncio.AbstractEventLoop] = None
@@ -39,6 +51,7 @@ _event_loop: Optional[asyncio.AbstractEventLoop] = None
 logger = logging.getLogger("longevityq.backend")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+ensure_app_dirs()
 
 REPORT_TYPES = {
     "food": {"label": "Food", "aliases": ["food"]},
@@ -76,6 +89,11 @@ app.add_middleware(
     allow_origins=["*"], allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
 
 
 def _ensure_display_table_columns() -> None:
@@ -192,13 +210,18 @@ def _cancel_shutdown_timer(reason: str) -> None:
     _run_in_loop(_cancel)
 
 
+def _get_operator_window_count() -> int:
+    with _operator_window_lock:
+        return operator_window_count
+
+
 def _schedule_idle_check(reason: str) -> None:
     global _shutdown_task
 
     if not EXIT_WHEN_IDLE:
         return
 
-    if operator_clients or guest_clients:
+    if operator_clients or guest_clients or _get_operator_window_count() > 0:
         return
 
     jobs = _active_jobs_count()
@@ -241,8 +264,8 @@ async def _shutdown_after_delay(reason: str) -> None:
     global _shutdown_task
     try:
         await asyncio.sleep(EXIT_IDLE_DEBOUNCE_SEC)
-        if operator_clients or guest_clients:
-            _log("Idle shutdown aborted; clients reconnected during debounce.")
+        if operator_clients or guest_clients or _get_operator_window_count() > 0:
+            _log("Idle shutdown aborted; clients or operator windows reconnected during debounce.")
             return
         jobs = _active_jobs_count()
         if jobs > 0:
@@ -338,6 +361,30 @@ async def broadcast(event: dict):
             pass
         guest_clients.discard(d)
 
+
+# ----------------- Operator window lifecycle -----------------
+@app.post("/operator/window-open")
+async def operator_window_open():
+    global operator_window_count
+    with _operator_window_lock:
+        operator_window_count += 1
+        current = operator_window_count
+    _log(f"Operator window opened; active windows: {current}.")
+    _cancel_shutdown_timer("operator window opened")
+    return {"ok": True, "active": current}
+
+
+@app.post("/operator/window-closed")
+async def operator_window_closed():
+    global operator_window_count
+    with _operator_window_lock:
+        operator_window_count = max(0, operator_window_count - 1)
+        current = operator_window_count
+    _log(f"Operator window closed; active windows: {current}.")
+    if current == 0:
+        _request_idle_check("operator window closed")
+    return {"ok": True, "active": current}
+
 # ----------------- Startup -----------------
 @app.on_event("startup")
 async def on_startup():
@@ -372,6 +419,11 @@ def create_session(payload: SessionCreate, db=Depends(get_session)):
     client_name = _compose_client_name(first, last)
     s = SessionRow(client_name=client_name, first_name=first, last_name=last, code=short_code())
     db.add(s); db.commit(); db.refresh(s)
+    try:
+        ensure_session_scaffold(s.id)
+    except Exception as exc:
+        logger.exception("Failed to initialize storage for session %s: %s", s.id, exc)
+        raise HTTPException(500, "Failed to initialize session storage.")
     return SessionOut(
         id=s.id,
         code=s.code,
@@ -485,6 +537,7 @@ def upload_report(session_id: int, kind: str, file: UploadFile = File(...), db=D
 
     _note_job_started("upload")
     try:
+        touch_session_lock(session_id)
         filename = Path(file.filename).name
         if not filename:
             raise HTTPException(400, "Uploaded file name is missing.")
@@ -522,6 +575,11 @@ def upload_report(session_id: int, kind: str, file: UploadFile = File(...), db=D
         db.add(fr); db.commit(); db.refresh(fr)
         if fr.id is not None:
             _store_payload(fr.id, payload)
+            try:
+                store_upload_bytes(session_id, fr.id, filename, payload)
+            except Exception as exc:
+                logger.exception("Failed to persist upload for session %s file %s: %s", session_id, fr.id, exc)
+                raise HTTPException(500, "Failed to persist uploaded file.")
         return FileOut(id=fr.id, kind=fr.kind, filename=fr.filename, status=fr.status, error=fr.error)
     finally:
         _note_job_finished("upload")
@@ -539,7 +597,10 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
     try:
         s.state = "PARSING"; fr.status = "validating"; db.add(s); db.add(fr); db.commit()
 
+        touch_session_lock(fr.session_id)
         payload = _get_payload(fr.id)
+        if not payload:
+            payload = load_upload_bytes(fr.session_id, fr.id, fr.filename)
         if not payload:
             fr.status = "error"; fr.error = "Report data not available. Please upload again."; db.add(fr)
             s.state = "VALIDATING"; db.add(s); db.commit()
@@ -554,7 +615,8 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
 
         tmp_path: Optional[Path] = None
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp_dir = session_tmp_path(fr.session_id)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=tmp_dir) as tmp:
                 tmp.write(payload)
                 tmp.flush()
                 tmp_path = Path(tmp.name)
@@ -600,6 +662,12 @@ async def publish(session_id: int, req: PublishRequest, db=Depends(get_session))
     elif not s.published:
         s.visible_reports = None
     db.add(s); db.commit()
+    if s.published:
+        try:
+            reset_tmp_directory(session_id)
+            remove_session_lock(session_id)
+        except Exception as exc:
+            logger.warning("Failed to finalize session %s storage cleanup: %s", session_id, exc)
     # push an event so guest screens update immediately
     asyncio.create_task(broadcast({"type": "published", "sessionId": session_id, "ts": time.time()}))
     return {"ok": True, "published": s.published}
@@ -680,4 +748,24 @@ async def display_set(req: DisplaySet, db=Depends(get_session)):
             }
         )
     )
+    return {"ok": True}
+
+
+@app.post("/sessions/{session_id}/close")
+def close_session(session_id: int, db=Depends(get_session)):
+    s = db.get(SessionRow, session_id)
+    if not s:
+        raise HTTPException(404, "Session not found")
+    try:
+        reset_tmp_directory(session_id)
+        remove_session_lock(session_id)
+    except Exception as exc:
+        logger.warning("Failed to clean session %s during close: %s", session_id, exc)
+    for file_id in db.exec(select(FileRow.id).where(FileRow.session_id == session_id)):
+        _discard_payload(file_id)
+    s.state = SessionState.CLOSED
+    s.published = False
+    s.visible_reports = None
+    db.add(s)
+    db.commit()
     return {"ok": True}

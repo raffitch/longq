@@ -49,6 +49,7 @@ Prefer a manual setup or want more context? Read on.
 - **Frontend** (`frontend/`): Vite-powered React SPA with two routes:
   - `/operator` for staff workflows.
   - `/guest` for the display screen.
+- **Electron** (`electron/`): Desktop shell (developer preview) that launches the backend, runs maintenance, and opens the operator UI.
 
 ---
 
@@ -100,6 +101,65 @@ npm run dev
 
 - Production build: `npm run build` (outputs to `frontend/dist/`).
 - Preview prod build locally: `npm run preview`.
+
+### Electron (developer preview)
+
+The `electron/` folder contains a minimal Electron main process that starts the FastAPI backend and opens the operator UI. During development it expects the Vite dev server on port `5173`.
+
+```bash
+# terminal 1: run the Vite dev server
+cd frontend
+npm run dev
+
+# terminal 2: run the Electron shell (requires network access the first time to fetch dependencies)
+cd electron
+npm install
+npm start
+```
+
+What the launcher does:
+
+1. Computes `app.getPath("userData")/LongQ` and sets `LONGQ_ROOT` so SQLite/uploads live in a per-user sandbox.
+2. Calls `python -m backend.maintenance --prune-locks --clean-runtime --nuke-tmp` before every run.
+3. Resets the session database by default (set `LONGQ_RESET_DB=0` to keep data between launches).
+4. Spawns the backend via `python -m backend.runner`, waits on `/healthz`, and records the pid/port in `runtime/`.
+5. Serves the production UI from `frontend/dist` via an internal static server whenever the Vite dev server is absent.
+6. Loads the operator and guest routes in separate `BrowserWindow` instances and shows an **About** and **Quit/Exit** menu.
+7. On quit it sends `SIGTERM` (or uses `tree-kill` if available) to stop the backend and shuts down the static server.
+
+> **Note:** The repo does not ship pre-installed Electron binaries. Run `npm install` inside `electron/` when you have network access.
+
+#### Packaging
+
+Packaging relies on [electron-builder](https://www.electron.build/). Ensure the production frontend build exists before invoking the packaging scripts.
+
+```bash
+# Prepare backend virtualenv (only needed once per machine)
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate            # or .venv\\Scripts\\activate on Windows
+pip install -r requirements.txt
+
+cd ..
+
+# Build the React app (only once per revision)
+cd frontend
+npm install          # first run only
+npm run build
+
+# macOS (.dmg written to electron/dist/)
+cd ../electron
+npm install          # first run only
+npm run dist:mac
+
+# Windows (.exe written to electron/dist/)
+# Run these commands from PowerShell or Git Bash on a Windows machine
+cd electron
+npm install          # first run only
+npm run dist:win
+```
+
+Both targets bundle the backend virtualenv, sources, and the pre-built frontend under the Electron app’s resources directory. The generated installers run the same maintenance and reset routines described above. On Windows you may need the Visual C++ redistributable installed before launching the packaged app.
 
 ### Environment variables
 
@@ -188,3 +248,5 @@ Define in `frontend/.env` (or `.env.local`) as needed:
 ---
 
 Happy building! If you add new report types, parsers, or UI flows, update this README so future contributors can hit the ground running. PRs that change entry points or required environment config should always refresh the relevant sections above.*** End Patch
+# Windows (.exe written to electron/dist/)
+# Run these commands from PowerShell or Git Bash on a Windows machine

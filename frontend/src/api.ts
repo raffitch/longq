@@ -99,3 +99,53 @@ export async function getDisplay(): Promise<{
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
+
+export async function notifyOperatorWindowOpen(): Promise<void> {
+  try {
+    await fetch(`${BASE}/operator/window-open`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+  } catch {
+    /* ignore connectivity errors */
+  }
+}
+
+export function notifyOperatorWindowClosed(): void {
+  const url = `${BASE}/operator/window-closed`;
+  if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+    try {
+      let body: BodyInit | null = null;
+      if (typeof Blob !== "undefined") {
+        body = new Blob(["{}"], { type: "application/json" });
+      }
+      navigator.sendBeacon(url, body);
+      return;
+    } catch {
+      /* ignore sendBeacon errors */
+    }
+  }
+  if (typeof fetch !== "undefined") {
+    try {
+      void fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        keepalive: true,
+      });
+    } catch {
+      /* ignore fetch errors */
+    }
+  }
+}
+
+export async function closeSession(sessionId: number): Promise<void> {
+  const r = await fetch(`${BASE}/sessions/${sessionId}/close`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!r.ok) {
+    throw new Error(await r.text());
+  }
+}

@@ -9,6 +9,9 @@ import {
   parseFile,
   publish,
   setDisplaySession,
+  closeSession,
+  notifyOperatorWindowOpen,
+  notifyOperatorWindowClosed,
   type Session,
   type FileOut,
   type ReportKind,
@@ -314,6 +317,40 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   useEffect(() => {
     document.title = "Quantum Qi - Operator Portal";
   }, []);
+  useEffect(() => {
+    let closeNotified = false;
+
+    const notifyClose = () => {
+      if (closeNotified) return;
+      closeNotified = true;
+      notifyOperatorWindowClosed();
+    };
+
+    notifyOperatorWindowOpen();
+
+    if (typeof window === "undefined") {
+      return () => {
+        notifyClose();
+      };
+    }
+
+    const handleBeforeUnload = () => {
+      notifyClose();
+    };
+
+    const handlePageHide = () => {
+      notifyClose();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handlePageHide);
+      notifyClose();
+    };
+  }, []);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const guestWindowRef = useRef<Window | null>(null);
   const replaceInputsRef = useRef<Record<ReportKind, HTMLInputElement | null>>({} as Record<ReportKind, HTMLInputElement | null>);
@@ -535,6 +572,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   }
 
   function resetSession() {
+    const currentSessionId = session?.id ?? null;
     abortInFlight();
     setSession(null);
     setFirstNameInput("");
@@ -549,6 +587,14 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setStagedPreviewVersion((v) => v + 1);
     setHasShownOnGuest(false);
     void (async () => {
+      if (currentSessionId) {
+        try {
+          await closeSession(currentSessionId);
+        } catch (err) {
+          setError(formatErrorMessage(err));
+          markBackendDown(err);
+        }
+      }
       try {
         await setDisplaySession({
           sessionId: null,

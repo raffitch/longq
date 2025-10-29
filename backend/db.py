@@ -2,7 +2,12 @@ import os
 from sqlmodel import SQLModel, create_engine, Session
 from sqlalchemy.pool import StaticPool
 
+from paths import backend_dir
+
 DB_URL = os.getenv("DB_URL")
+if not DB_URL and os.getenv("LONGQ_ROOT"):
+    db_path = backend_dir() / "app.db"
+    DB_URL = f"sqlite:///{db_path}"
 
 if DB_URL:
     connect_args = {"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
@@ -16,8 +21,11 @@ else:
 
 
 def init_db():
-    SQLModel.metadata.drop_all(engine)
-    SQLModel.metadata.create_all(engine)
+    if DB_URL:
+        SQLModel.metadata.create_all(engine)
+    else:
+        SQLModel.metadata.drop_all(engine)
+        SQLModel.metadata.create_all(engine)
 
 
 def get_session():
