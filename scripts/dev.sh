@@ -128,7 +128,7 @@ open_mac_window() {
   local url="$1"
   local chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
   if [[ -x "$chrome" ]]; then
-    "$chrome" --new-window "$url" >/dev/null 2>&1 &
+    "$chrome" --app="$url" --user-data-dir="$ROOT_DIR/.chrome-app-operator" --class="QuantumQiOperator" >/dev/null 2>&1 &
   else
     /usr/bin/osascript <<OSA >/dev/null 2>&1 || open "$url" >/dev/null 2>&1 || true
 tell application "Safari"
@@ -151,7 +151,7 @@ open_windows_window() {
 $ErrorActionPreference = 'Stop'
 $edge = Get-Command msedge.exe -ErrorAction SilentlyContinue
 if ($edge) {
-    Start-Process -FilePath $edge.Source -ArgumentList @('--new-window', $env:TARGET_URL) | Out-Null
+    Start-Process -FilePath $edge.Source -ArgumentList @('--app=' + $env:TARGET_URL) | Out-Null
 } else {
     Start-Process $env:TARGET_URL | Out-Null
 }
@@ -173,7 +173,15 @@ launch_browsers() {
       open_windows_window "$patient_url"
       ;;
     *)
-      if command -v xdg-open >/dev/null 2>&1; then
+      if command -v google-chrome >/dev/null 2>&1; then
+        google-chrome --app="$operator_url" --user-data-dir="$ROOT_DIR/.chrome-app-operator-linux" >/dev/null 2>&1 &
+        sleep 0.5
+        google-chrome --app="$patient_url" --user-data-dir="$ROOT_DIR/.chrome-app-patient-linux" >/dev/null 2>&1 &
+      elif command -v chromium >/dev/null 2>&1; then
+        chromium --app="$operator_url" --user-data-dir="$ROOT_DIR/.chrome-app-operator-linux" >/dev/null 2>&1 &
+        sleep 0.5
+        chromium --app="$patient_url" --user-data-dir="$ROOT_DIR/.chrome-app-patient-linux" >/dev/null 2>&1 &
+      elif command -v xdg-open >/dev/null 2>&1; then
         xdg-open "$operator_url" >/dev/null 2>&1 || true
         sleep 0.5
         xdg-open "$patient_url" >/dev/null 2>&1 || true
