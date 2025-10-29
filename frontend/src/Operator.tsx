@@ -38,12 +38,28 @@ type ParsedMap = Record<ReportKind, boolean>;
 const PATIENT_HEARTBEAT_KEY = "longevityq_patient_heartbeat";
 const PATIENT_HEARTBEAT_GRACE_MS = 8000;
 const AUTO_OPEN_GRACE_MS = 5000;
+const PREVIEW_SCALE = 0.55;
+const PREVIEW_WIDTH = 5120;
+const PREVIEW_HEIGHT = 1440;
+const PREVIEW_ASPECT = (PREVIEW_HEIGHT / PREVIEW_WIDTH) * 100;
+const scaledFrameStyle: React.CSSProperties = {
+  transform: `scale(${PREVIEW_SCALE})`,
+  transformOrigin: "top left",
+  width: `${100 / PREVIEW_SCALE}%`,
+  height: `${100 / PREVIEW_SCALE}%`,
+};
+
+const previewContainerStyle: React.CSSProperties = {
+  paddingBottom: `${PREVIEW_ASPECT}%`,
+  minHeight: `${PREVIEW_HEIGHT * PREVIEW_SCALE}px`,
+};
 
 const darkInputClasses =
   "rounded-lg border border-border-strong bg-neutral-dark px-2.5 py-1.5 text-text-primary shadow-[inset_0_1px_2px_rgba(15,23,42,0.45)] outline-none caret-accent-info focus:ring-2 focus:ring-accent-info/40";
 const cardShellClasses = "rounded-3lg border border-border bg-surface text-text-primary shadow-surface-lg";
 const statusCardClasses = "rounded-3lg border border-border bg-surface text-text-primary shadow-surface-md";
-const tileBaseClasses = "flex min-w-0 flex-col gap-3 rounded-4lg border p-[18px] text-text-primary transition-colors duration-200";
+const tileBaseClasses =
+  "flex h-full min-w-0 flex-col gap-3 rounded-4lg border p-[18px] text-text-primary transition-colors duration-200";
 type ChipVariant = React.ComponentProps<typeof Chip>["variant"];
 
 function buildMap<T>(initial: T): Record<ReportKind, T> {
@@ -493,6 +509,16 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [stagedPreviewVersion, setStagedPreviewVersion] = useState(0);
   const [hasShownOnPatient, setHasShownOnPatient] = useState(false);
   const [patientWindowOpen, setPatientWindowOpen] = useState<boolean>(() => patientHeartbeatAlive());
+
+  const livePreviewContainerRef = useRef<HTMLDivElement | null>(null);
+  const stagedPreviewContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const displayFullName =
+    session ? formatFullName(session.first_name, session.last_name) || session.client_name || "" : "";
+  const liveMonitorMessage = (() => {
+    if (hasShownOnPatient && session?.published) return "Live Reports.";
+    return displayFullName ? `Welcome ${displayFullName}.` : "Welcome.";
+  })();
 
   function resetUploadState() {
     setUploads(createEmptyUploadMap());
@@ -1401,8 +1427,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   void onReplaceInput(def.kind, e.target.files);
                 }}
               />
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
                   <input
                     type="checkbox"
                     checked={uploaded ? isSelected : false}
@@ -1411,9 +1437,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                     title={uploaded ? `Include ${def.label} report` : "Upload report first"}
                     className="h-[18px] w-[18px] accent-accent disabled:cursor-not-allowed"
                   />
-                  <div className="text-[13px] font-bold tracking-[0.02em]">{def.label}</div>
+                  <div className="min-w-0 text-[13px] font-bold leading-tight tracking-[0.02em]">{def.label}</div>
                 </div>
-                <Chip variant={chipVariant}>{chipLabel}</Chip>
+                <Chip variant={chipVariant} className="mt-[2px] shrink-0">
+                  {chipLabel}
+                </Chip>
               </div>
               <div className="flex flex-1 flex-col gap-1.5 text-[11px]">
                 {uploaded ? (
@@ -1448,8 +1476,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   <Button
                     type="button"
                     onClick={() => onReplace(def.kind)}
-                    variant="ghost"
-                    className="self-start px-[10px] py-[6px] text-[11px]"
+                    variant="soft"
+                    size="sm"
+                    className="self-start rounded-full px-3 py-1.5 text-[11px]"
                   >
                     Replace PDF
                   </Button>
@@ -1462,7 +1491,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           key="publish-tile"
           className={cn(
             tileBaseClasses,
-            "justify-between rounded-4lg border border-border bg-surface p-5 text-text-primary shadow-surface-md",
+            "justify-between rounded-4lg border border-transparent bg-surface p-5 text-text-primary shadow-surface-md",
           )}
         >
           <div className="flex flex-col gap-2">
@@ -1489,6 +1518,28 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         ? `${origin}/patient?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
         : `/patient?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
       : null;
+  const hasStagedData = Boolean(stagedPreviewSessionId && stagedPreviewUrl);
+  const showStagedPreviewBlock = Boolean(session && hasStagedData);
+  const stagedPreviewVisible = showStagedPreviewBlock && !hasShownOnPatient;
+
+  useEffect(() => {
+    const centerScroll = (node: HTMLDivElement | null) => {
+      if (!node) return;
+      const id = requestAnimationFrame(() => {
+        const horizontal = Math.max(0, (node.scrollWidth - node.clientWidth) / 2);
+        const vertical = Math.max(0, (node.scrollHeight - node.clientHeight) / 2);
+        node.scrollLeft = horizontal;
+        node.scrollTop = vertical;
+      });
+      return () => cancelAnimationFrame(id);
+    };
+    const cancelLive = !stagedPreviewVisible ? centerScroll(livePreviewContainerRef.current) : undefined;
+    const cancelStaged = stagedPreviewVisible ? centerScroll(stagedPreviewContainerRef.current) : undefined;
+    return () => {
+      cancelLive?.();
+      cancelStaged?.();
+    };
+  }, [stagedPreviewVisible, showStagedPreviewBlock, hasShownOnPatient]);
 
   if (backendDown) {
     return (
@@ -1512,26 +1563,99 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       onDrop={handleDrop}
       className="flex flex-wrap items-start gap-6 px-4 py-4"
     >
-      <div className="flex min-w-[320px] max-w-[760px] flex-1 flex-col">
+      <div className={cn("flex min-w-[320px] max-w-[760px] flex-1 flex-col", session ? "" : "min-h-[calc(100vh-64px)]")}> 
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <h1 className="text-[20px] font-bold">Operator Console</h1>
-            <div className="text-[13px] text-[#4b5563]">
-              Drag & drop the patient folder (named with first and last name) to automatically ingest reports.
-              Filenames must include the patient name and the report type.
-            </div>
+            <h1 className="text-[20px] font-bold">Quantum Qi Operator Console</h1>
           </div>
           {session && (
-            <Button onClick={resetSession} variant="ghost">
+            <Button onClick={resetSession} variant="danger" size="sm" className="px-3">
               Start Over
             </Button>
           )}
         </div>
 
-        {session ? renderSessionHeader() : renderCreateForm()}
+        {session ? (
+          <>
+            {renderSessionHeader()}
+            {renderDropZone()}
+            {renderReportTiles()}
+          </>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-8">
+            <div className="w-full max-w-[520px] rounded-3xl border border-border bg-surface/90 p-10 shadow-surface-lg backdrop-blur-sm">
+              <h2 className="text-center text-[22px] font-semibold text-text-primary">Create a New Session</h2>
+              <p className="mt-2 text-center text-[13px] text-text-secondary">
+                Enter the patient name to begin. You can adjust details later if needed.
+              </p>
+              <form
+                className="mt-6 flex flex-col gap-3"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const first = formatClientName(firstNameInput);
+                  const last = formatClientName(lastNameInput);
+                  if (!first || !last) {
+                    setError("Enter the patient's first and last name.");
+                    setStatus("");
+                    return;
+                  }
+                  try {
+                    setError("");
+                    const full = formatFullName(first, last);
+                    setStatus(`Creating session for ${full}…`);
+                    const created = await createSession(first, last);
+                    markBackendUp();
+                    setSession(created);
+                    onSessionReady(created.id);
+                    setStagedPreviewSessionId(created.published ? created.id : null);
+                    setStagedPreviewVersion((v) => v + 1);
+                    setHasShownOnPatient(false);
+                    resetUploadState();
+                    setFirstNameInput(first);
+                    setLastNameInput(last);
+                    const createdName = formatFullName(created.first_name, created.last_name);
+                    setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next patient folder.");
+                    try {
+                      await setDisplaySession({
+                        stagedSessionId: created.id,
+                        stagedFirstName: created.first_name ?? first,
+                        stagedFullName: formatFullName(created.first_name, created.last_name),
+                      });
+                      markBackendUp();
+                    } catch (err) {
+                      setError(formatErrorMessage(err));
+                      markBackendDown(err);
+                    }
+                  } catch (err) {
+                    setError(formatErrorMessage(err));
+                    setStatus("Session creation failed.");
+                    markBackendDown(err);
+                  }
+                }}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    className={cn(darkInputClasses, "flex-1 text-[14px]" )}
+                    placeholder="First name"
+                    value={firstNameInput}
+                    onChange={(e) => setFirstNameInput(e.target.value)}
+                    autoFocus
+                  />
+                  <input
+                    className={cn(darkInputClasses, "flex-1 text-[14px]")}
+                    placeholder="Last name"
+                    value={lastNameInput}
+                    onChange={(e) => setLastNameInput(e.target.value)}
+                  />
+                </div>
+                <Button type="submit" variant="primary" disabled={!firstNameInput.trim() || !lastNameInput.trim()} className="mt-2">
+                  Create Session
+                </Button>
+              </form>
+            </div>
+          </div>
+        )}
 
-        {session && renderDropZone()}
-        {session && renderReportTiles()}
         {session && (status || error) && (
           <div className="mt-4 flex flex-col gap-2" aria-live="polite">
             {status && (
@@ -1550,11 +1674,19 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
       <div className="sticky top-4 flex min-w-[300px] flex-1 self-stretch">
         <div className="flex h-[calc(100vh-32px)] min-h-[520px] flex-1 flex-col gap-4 rounded-3lg border border-[#e5e7eb] bg-white p-4">
-          <div>
-            <div className="text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
-              Live Monitor
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
+              <span className="flex h-2.5 w-2.5 items-center justify-center">
+                <span className="h-2.5 w-2.5 rounded-full bg-accent" />
+              </span>
+              <span>Live Monitor</span>
+              <span className="text-[#d1d5e0]">|</span>
+              <span className="font-medium normal-case text-[11px] text-[#6b7280]">
+                Message Displayed:&nbsp;
+                <span className="text-[#111827]">{liveMonitorMessage}</span>
+              </span>
             </div>
-            <div className="mt-1 text-[11px] text-[#6b7280]">
+            <div className="text-[11px] text-[#6b7280]">
               Mirrors the active patient display.
             </div>
           </div>
@@ -1563,32 +1695,61 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               Patient window is closed. Use the session header controls to launch it again.
             </div>
           )}
-          <div className="flex min-h-0 flex-1 flex-col gap-3.5">
-            <iframe
-              title="Live Patient Monitor"
-              src={liveMonitorUrl}
-              className="min-h-0 flex-1 rounded-[10px] border border-[#d1d5db]"
-            />
-            <div className="h-px bg-[#e5e7eb]" />
-            <div>
-              <div className="text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
-                Staged Preview
-              </div>
-              <div className="mt-1 text-[11px] text-[#6b7280]">
-                {stagedPreviewSessionId
-                  ? hasShownOnPatient
-                    ? "Live monitor is already showing this data."
-                    : "Review the staged data before revealing it to the patient."
-                  : "Publish to activate the staged preview."}
-              </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto pr-2">
+            <div
+              className={cn(
+                "rounded-[10px] border border-[#d1d5db] bg-white shadow-inner transition-all duration-500",
+                stagedPreviewVisible ? "p-3" : "flex-1 p-0",
+              )}
+            >
+              {!stagedPreviewVisible ? (
+                <div
+                  ref={livePreviewContainerRef}
+                  className="relative h-full w-full overflow-hidden transition-opacity duration-500"
+                  style={{ overflowX: "auto", overflowY: "hidden" }}
+                >
+                  <div className="relative w-full" style={previewContainerStyle}>
+                    <iframe
+                      title="Live Patient Monitor"
+                      src={liveMonitorUrl}
+                      className="absolute inset-0 border-0"
+                      style={scaledFrameStyle}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[11px] text-[#6b7280]">
+                  Live monitor is standing by. Go Live to reveal the staged data.
+                </div>
+              )}
             </div>
-            {stagedPreviewSessionId && stagedPreviewUrl && (
-              <iframe
-                key={`${stagedPreviewSessionId}-${stagedPreviewVersion}`}
-                title="Staged Patient Preview"
-                src={stagedPreviewUrl}
-                className="min-h-0 flex-1 rounded-[10px] border border-[#d1d5db]"
-              />
+            {showStagedPreviewBlock && stagedPreviewVisible && (
+              <div className="flex flex-1 flex-col gap-3 rounded-[10px] border border-[#d1d5db] bg-white p-3 shadow-inner transition-all duration-500">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
+                  Staged Preview
+                </div>
+                <div className="text-[11px] text-[#6b7280]">
+                  Review the staged data before revealing it to the patient.
+                </div>
+                <div className="flex-1 overflow-auto rounded-[8px] border border-[#d1d5db]">
+                  {stagedPreviewUrl && (
+                    <div
+                      ref={stagedPreviewContainerRef}
+                      className="relative h-full w-full overflow-auto"
+                    >
+                      <div className="relative w-full" style={previewContainerStyle}>
+                        <iframe
+                          key={`${stagedPreviewSessionId}-${stagedPreviewVersion}`}
+                          title="Staged Patient Preview"
+                          src={stagedPreviewUrl}
+                          className="absolute inset-0 border-0"
+                          style={scaledFrameStyle}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
