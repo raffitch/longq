@@ -19,9 +19,15 @@ class SessionRow(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     code: str = Field(index=True)
     client_name: str = Field(index=True)
+    first_name: Optional[str] = Field(default=None, index=True)
+    last_name: Optional[str] = Field(default=None, index=True)
+    folder_name: Optional[str] = Field(default=None, index=True)
     state: SessionState = Field(default=SessionState.CREATED)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     published: bool = Field(default=False)
+    visible_reports: Optional[Dict[str, bool]] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
 
 class FileRow(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -51,3 +57,6 @@ class DisplayRow(SQLModel, table=True):
     id: _Opt[int] = _Field(default=None, primary_key=True)
     code: str = _Field(default="main", index=True, unique=True)   # single patient display
     current_session_id: _Opt[int] = _Field(default=None, foreign_key="sessionrow.id")
+    staged_session_id: _Opt[int] = _Field(default=None, foreign_key="sessionrow.id")
+    staged_first_name: _Opt[str] = _Field(default=None)
+    staged_full_name: _Opt[str] = _Field(default=None)

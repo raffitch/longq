@@ -11,7 +11,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={
           <div style={{padding:20}}>
-            <h1>LongevityQ</h1>
+            <h1>Quantum Qi</h1>
             <p>Open the console and patient views:</p>
             <ul>
               <li><Link to="/operator">Operator console</Link></li>

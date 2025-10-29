@@ -1141,11 +1141,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const renderSessionHeader = () => {
     if (!session) return null;
     const displayName = formatFullName(session.first_name, session.last_name) || session.client_name;
-    const patientButtonVariant: React.ComponentProps<typeof Button>["variant"] = !patientWindowOpen
-      ? "info"
-      : hasShownOnPatient
-      ? "secondary"
-      : "primary";
+    const patientButtonVariant: React.ComponentProps<typeof Button>["variant"] =
+      !patientWindowOpen || (hasShownOnPatient && patientWindowOpen)
+        ? "secondary"
+        : "primary";
 
     return (
       <div className="mt-3 flex flex-wrap items-stretch gap-4">

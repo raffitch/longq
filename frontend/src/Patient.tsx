@@ -1,74 +1,252 @@
-import React, { useEffect, useRef, useState } from "react";
-import { getDisplay } from "./api";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { getDisplay, getParsedBundle, getSession } from "./api";
 
-type FoodData = {
-  pages: {
-    page: number;
-    section: string;
-    categories: { name: string; items: { name: string; score?: number }[] }[];
-  }[];
-};
-
-function Circle({ label, score }: { label: string; score?: number }) {
-  const size = 90;
-  const ring = typeof score === "number" ? Math.max(2, Math.min(10, Math.round((score / 100) * 10))) : 4;
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: "9999px",
-      border: `${ring}px solid #35e3b1`,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      margin: 6, padding: 10, textAlign: "center",
-      background: "radial-gradient(60% 60% at 50% 40%, rgba(53,227,177,0.15), rgba(0,0,0,0))",
-      color: "#e8fdf6", fontSize: 11, lineHeight: 1.2, boxShadow: "0 0 18px rgba(53,227,177,0.25) inset"
-    }}>
-      <div style={{overflow: "hidden", textOverflow: "ellipsis"}}>{label}</div>
-    </div>
-  );
-}
+import PatientDashboard from "./patient/PatientDashboard";
+import {
+  aggregateInsights,
+  transformFoodData,
+  transformHeavyMetals,
+  transformHormones,
+  transformNutritionData,
+  transformToxins,
+} from "./patient/dataTransform";
+import type {
+  RawFoodData,
+  RawHeavyMetalsData,
+  RawHormonesData,
+  RawNutritionData,
+  RawToxinsData,
+} from "./patient/types";
 
 export default function Patient() {
-  const [clientName, setClientName] = useState<string | null>(null);
-  const [data, setData] = useState<FoodData | null>(null);
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const [clientFullName, setClientFullName] = useState<string | null>(null);
+  const [data, setData] = useState<RawFoodData | null>(null);
+  const [nutrition, setNutrition] = useState<RawNutritionData | null>(null);
+  const [hormones, setHormones] = useState<RawHormonesData | null>(null);
+  const [heavyMetals, setHeavyMetals] = useState<RawHeavyMetalsData | null>(null);
+  const [toxins, setToxins] = useState<RawToxinsData | null>(null);
   const lastSessionId = useRef<number | null>(null);
   const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
+  const [searchParams] = useSearchParams();
+  const previewParam = searchParams.get("session");
+  const isMonitor = searchParams.has("monitor");
+  const parsedPreviewId = previewParam ? Number.parseInt(previewParam, 10) : NaN;
+  const previewSessionId = Number.isFinite(parsedPreviewId) ? parsedPreviewId : null;
+  const isPreview = previewSessionId !== null;
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [serverDown, setServerDown] = useState(false);
+
+  const aggregated = useMemo(() => {
+    const foodMap = transformFoodData(data);
+    const nutritionTransformed = transformNutritionData(nutrition);
+    const heavyMetalsTransformed = transformHeavyMetals(heavyMetals);
+    const hormonesTransformed = transformHormones(hormones);
+    const toxinsTransformed = transformToxins(toxins);
+    const hasAnyData =
+      foodMap.size > 0 ||
+      nutritionTransformed.nutrients.length > 0 ||
+      heavyMetalsTransformed.length > 0 ||
+      hormonesTransformed.length > 0 ||
+      toxinsTransformed.length > 0;
+    if (!hasAnyData) {
+      return null;
+    }
+    return aggregateInsights(
+      foodMap,
+      nutritionTransformed,
+      heavyMetalsTransformed,
+      hormonesTransformed,
+      toxinsTransformed,
+    );
+  }, [data, nutrition, heavyMetals, hormones, toxins]);
+
+  const formatPreviewMessage = (err: unknown): string => {
+    const raw =
+      err instanceof Error ? err.message : typeof err === "string" ? err : "";
+    if (!raw) return "Preview unavailable.";
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object") {
+          if (typeof parsed.detail === "string") return parsed.detail;
+          const values = Object.values(parsed)
+            .filter((value) => typeof value === "string")
+            .join(" • ");
+          if (values) return values;
+        }
+      } catch {
+        /* ignore JSON parse errors */
+      }
+    }
+    return trimmed || "Preview unavailable.";
+  };
+
+  const isNetworkError = (err: unknown): boolean => {
+    if (err instanceof TypeError) return true;
+    if (err && typeof err === "object" && "message" in err) {
+      const msg = (err as any).message;
+      if (typeof msg === "string" && /network|fetch/i.test(msg)) {
+        return true;
+      }
+    }
+    return false;
+  };
 
   async function refreshOnce() {
+    if (isPreview) return;
     try {
       const d = await getDisplay();
+      setServerDown(false);
       if (!d.session_id) {
         lastSessionId.current = null;
-        setClientName(null);
+        const stagedFirst =
+          (d.staged_first_name ??
+            d.first_name ??
+            (d.client_name ? d.client_name.split(" ", 1)[0] : null))?.trim() || null;
+        const stagedFull =
+          (d.staged_full_name ??
+            d.client_name ??
+            (d.first_name || d.last_name
+              ? [d.first_name, d.last_name].filter(Boolean).join(" ")
+              : null))?.trim() || null;
+        setFirstName(stagedFirst);
+        setClientFullName(stagedFull ?? stagedFirst);
         setData(null);
+        setNutrition(null);
+        setHormones(null);
+        setHeavyMetals(null);
+        setToxins(null);
         return;
       }
-      setClientName(d.client_name ?? null);
+      const stagedFirst =
+        (d.staged_first_name ?? d.first_name ?? (d.client_name ? d.client_name.split(" ", 1)[0] : null))?.trim() || null;
+      const stagedFull =
+        (d.staged_full_name ??
+          d.client_name ??
+          (d.first_name || d.last_name ? [d.first_name, d.last_name].filter(Boolean).join(" ") : null))?.trim() || null;
+      setFirstName(stagedFirst ?? null);
+      setClientFullName(stagedFull ?? stagedFirst ?? null);
 
       const sid = d.session_id;
-      const r = await fetch(`${base}/sessions/${sid}/parsed/food`);
-      if (r.ok) {
-        const json = await r.json();
-        setData(json.data as FoodData);
+      if (sid) {
+        try {
+          const bundle = await getParsedBundle(sid);
+          const reports = bundle.reports ?? {};
+          setData((reports["food"] ?? null) as RawFoodData | null);
+          setNutrition((reports["nutrition"] ?? null) as RawNutritionData | null);
+          setHormones((reports["hormones"] ?? null) as RawHormonesData | null);
+          setHeavyMetals((reports["heavy-metals"] ?? null) as RawHeavyMetalsData | null);
+          setToxins((reports["toxins"] ?? null) as RawToxinsData | null);
+        } catch (err) {
+          if (isNetworkError(err)) {
+            setServerDown(true);
+          }
+          setData(null);
+          setNutrition(null);
+          setHormones(null);
+          setHeavyMetals(null);
+          setToxins(null);
+        }
       } else {
         setData(null);
+        setNutrition(null);
+        setHormones(null);
+        setHeavyMetals(null);
+        setToxins(null);
       }
-      lastSessionId.current = sid;
-    } catch {
-      /* ignore transient errors */
+      lastSessionId.current = sid ?? null;
+    } catch (err) {
+      if (isNetworkError(err)) {
+        setServerDown(true);
+      }
+      lastSessionId.current = null;
+      setFirstName(null);
+      setClientFullName(null);
+      setData(null);
+      setNutrition(null);
+      setHormones(null);
+      setHeavyMetals(null);
+      setToxins(null);
     }
   }
 
   useEffect(() => {
+    if (isPreview) {
+      setData(null);
+      setNutrition(null);
+      setHormones(null);
+      setHeavyMetals(null);
+      setToxins(null);
+    } else {
+      setPreviewError(null);
+    }
+  }, [isPreview]);
+
+  useEffect(() => {
+    if (isPreview || isMonitor) {
+      return;
+    }
+    const key = "longevityq_patient_heartbeat";
+    const write = () => {
+      try {
+        localStorage.setItem(key, `${Date.now()}`);
+      } catch {
+        /* ignore storage errors */
+      }
+    };
+    const clear = () => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* ignore storage errors */
+      }
+    };
+    write();
+    const heartbeat = window.setInterval(write, 4000);
+    const handleBeforeUnload = () => {
+      clear();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      clearInterval(heartbeat);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      clear();
+    };
+  }, [isPreview, isMonitor]);
+
+  useEffect(() => {
+    if (isPreview) {
+      return;
+    }
     const wsUrl = base.replace(/^http/, "ws") + "/ws/patient";
     let ws: WebSocket | null = null;
     let reconnectTimer: number | null = null;
+    let disposed = false;
+
+    const noteServerState = (down: boolean) => {
+      if (!disposed) {
+        setServerDown(down);
+      }
+    };
 
     function connect() {
       try {
         ws = new WebSocket(wsUrl);
+        ws.onopen = () => { noteServerState(false); };
         ws.onmessage = () => { refreshOnce(); };
-        ws.onclose = () => { reconnectTimer = window.setTimeout(connect, 3000); };
-        ws.onerror = () => { try { ws?.close(); } catch {} };
+        ws.onclose = () => {
+          noteServerState(true);
+          reconnectTimer = window.setTimeout(connect, 3000);
+        };
+        ws.onerror = () => {
+          noteServerState(true);
+          try { ws?.close(); } catch {}
+        };
       } catch {
+        noteServerState(true);
         reconnectTimer = window.setTimeout(connect, 3000);
       }
     }
@@ -78,60 +256,128 @@ export default function Patient() {
     refreshOnce();
 
     return () => {
+      disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       clearInterval(t);
       try { ws?.close(); } catch {}
     };
-  }, []);
+  }, [base, isPreview]);
 
-  // Welcome screen (no "waiting" text, no status bar)
-  if (!data) {
+  useEffect(() => {
+    if (!isPreview || previewSessionId === null) {
+      return;
+    }
+    let cancelled = false;
+    const activePreviewId = previewSessionId;
+
+    async function loadPreview() {
+      try {
+        setPreviewError(null);
+        const sessionInfo = await getSession(activePreviewId);
+        if (cancelled) return;
+        setServerDown(false);
+        const displayFirst =
+          sessionInfo.first_name ??
+          (sessionInfo.client_name ? sessionInfo.client_name.split(" ", 1)[0] : null);
+        setFirstName(displayFirst ?? null);
+        setClientFullName(sessionInfo.client_name ?? null);
+
+        if (!sessionInfo.published) {
+          setData(null);
+          setPreviewError("Publish to generate a preview.");
+          setNutrition(null);
+          setHormones(null);
+          setHeavyMetals(null);
+          setToxins(null);
+          return;
+        }
+
+        try {
+          const bundle = await getParsedBundle(activePreviewId);
+          if (cancelled) return;
+          const reports = bundle.reports ?? {};
+          setData((reports["food"] ?? null) as RawFoodData | null);
+          setNutrition((reports["nutrition"] ?? null) as RawNutritionData | null);
+          setHormones((reports["hormones"] ?? null) as RawHormonesData | null);
+          setHeavyMetals((reports["heavy-metals"] ?? null) as RawHeavyMetalsData | null);
+          setToxins((reports["toxins"] ?? null) as RawToxinsData | null);
+          setPreviewError(null);
+        } catch (err) {
+          if (cancelled) return;
+          if (isNetworkError(err)) {
+            setServerDown(true);
+          }
+          setPreviewError(formatPreviewMessage(err));
+          setData(null);
+          setNutrition(null);
+          setHormones(null);
+          setHeavyMetals(null);
+          setToxins(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        if (isNetworkError(err)) {
+          setServerDown(true);
+        }
+        setPreviewError(formatPreviewMessage(err));
+        setData(null);
+        setNutrition(null);
+        setHormones(null);
+        setHeavyMetals(null);
+        setToxins(null);
+      }
+    }
+
+    loadPreview();
+    const timer = window.setInterval(loadPreview, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [isPreview, previewSessionId]);
+
+  if (serverDown) {
     return (
-      <div style={{minHeight:"100vh", background:"#0b0d10", color:"#e8fdf6", fontFamily:"Inter,system-ui",
-                   display:"flex", alignItems:"center", justifyContent:"center", textAlign:"center", padding:24}}>
-        <div>
-          <div style={{fontSize:32, fontWeight:800, letterSpacing:0.2}}>LongevityQ</div>
-          <div style={{opacity:.9, marginTop:8, fontSize:22}}>
-            {clientName ? <>Hi, {clientName}.</> : "Welcome."}
-          </div>
-          <div style={{opacity:.7, marginTop:4, fontSize:16}}>
-            Your wellness journey is about to begin.
-          </div>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f1114] px-6 text-center text-slate-100">
+        <div className="max-w-md space-y-4">
+          <h1 className="text-3xl font-bold">Connection Lost</h1>
+          <p className="text-lg text-slate-300">
+            This session has been terminated. Close this window and restart the program once the console is back online.
+          </p>
         </div>
       </div>
     );
   }
 
-  // Results (no banner above results)
-  return (
-    <div style={{minHeight:"100vh", background:"#0b0d10", color:"#fff", fontFamily:"Inter,system-ui"}}>
-      <div style={{maxWidth:1100, margin:"0 auto", padding:"28px 24px 60px"}}>
-        <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
-          <h1 style={{fontSize:26, fontWeight:700, margin:0}}>Food Report</h1>
-          {clientName && <div style={{opacity:.85, fontSize:14}}>Client: {clientName}</div>}
+  if (!aggregated) {
+    if (isPreview) {
+      const message = previewError ?? "Waiting for live data…";
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f1114] px-6 text-center text-slate-100">
+          <div className="max-w-lg space-y-4">
+            <span className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-300">Staged Preview</span>
+            {clientFullName && <h1 className="text-3xl font-semibold text-text-primary">{clientFullName}</h1>}
+            <p className="text-lg text-slate-300">{message}</p>
+          </div>
         </div>
-
-        {data.pages.map((pg, idx) => (
-          <section key={idx} style={{marginTop:18, background:"#11151b", borderRadius:14, padding:"16px 16px 8px",
-                                      boxShadow:"0 10px 40px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.03)"}}>
-            <div style={{display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:10}}>
-              <div style={{fontWeight:600}}>{pg.section || `Page ${pg.page}`}</div>
-              <div style={{opacity:.6, fontSize:12}}>Page {pg.page}</div>
-            </div>
-
-            {pg.categories.map((c, j) => (
-              <div key={j} style={{margin:"10px 0 18px"}}>
-                <div style={{fontWeight:600, marginBottom:10}}>{c.name}</div>
-                <div style={{display:"flex", flexWrap:"wrap"}}>
-                  {c.items.map((it, k) => (
-                    <Circle key={k} label={it.name} score={it.score} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </section>
-        ))}
+      );
+    }
+    const displayName = clientFullName ?? firstName;
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f1114] px-6 text-center text-slate-100">
+        <div className="space-y-4">
+          <img src="/quantum-qi-logo.png" alt="Quantum Qi logo" className="mx-auto w-52 max-w-[70vw]" />
+          <h1 className="text-4xl font-extrabold tracking-wide text-text-primary">Quantum Qi</h1>
+          <p className="text-2xl text-slate-200">
+            {displayName ? `Welcome ${displayName}.` : "Welcome."}
+          </p>
+          <p className="text-lg text-slate-300">Your wellness journey is about to begin.</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  const displayFullName = clientFullName ?? firstName ?? null;
+
+  return <PatientDashboard clientFullName={displayFullName} reportDate={null} aggregated={aggregated} isPreview={isPreview} />;
 }

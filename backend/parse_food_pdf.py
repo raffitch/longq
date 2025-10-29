@@ -129,8 +129,11 @@ def build_row_boxes(rows, page_w: float):
 
 def find_footer_page_y(lines, page_height: float) -> float:
     for ln in reversed(lines):
-        txt = " ".join(s["t"] for s in ln).strip()
-        if txt.lower().startswith("page"):
+        txt = " ".join(s["t"] for s in ln).strip().lower()
+        if "page" in txt:
+            for sp in ln:
+                if "page" in sp["t"].lower():
+                    return sp["y0"]
             return min(s["y0"] for s in ln)
     return page_height
 
@@ -274,107 +277,128 @@ def decide_order_mode(items_xy, row_groups):
 
 def parse_pdf(input_path: str, start_page: int = 1, end_page: int = 999, order_mode: str = "auto") -> Dict[str, Any]:
     doc = fitz.open(input_path)
-    out_pages = []
-    allowed_set = set(CATEGORY_NAMES)
+    try:
+        out_pages = []
+        allowed_set = set(CATEGORY_NAMES)
+        required_headers = {"Dairy", "Eggs"}
+        found_required = set()
 
-    for pno in range(start_page, min(end_page, len(doc)) + 1):
-        page = doc[pno-1]
-        spans = page_spans(page)
-        lines = cluster_lines(spans, y_tol=Y_LINE_TOL)
+        for pno in range(start_page, min(end_page, len(doc)) + 1):
+            page = doc[pno-1]
+            spans = page_spans(page)
+            lines = cluster_lines(spans, y_tol=Y_LINE_TOL)
 
-        headers = detect_headers(lines)
-        if not headers: continue
-
-        header_rows = group_headers_into_rows(headers)
-        cat_boxes = build_row_boxes(header_rows, page.rect.width)
-
-        valid_headers = []
-        for row in header_rows:
-            for h in row:
-                if header_has_items(lines, h, page.rect.width, row, headers):
-                    valid_headers.append(h)
-        if not valid_headers: continue
-
-        header_rows = group_headers_into_rows(valid_headers)
-        cat_boxes = build_row_boxes(header_rows, page.rect.width)
-
-        totals = find_total_lines(lines)
-        cat_boxes = clamp_y1_with_totals(cat_boxes, totals)
-
-        headers_by_y = sorted(valid_headers, key=lambda h: h["y0"])
-        for i, h in enumerate(headers_by_y):
-            name = h["name"]; y0, y1, x0, x1 = cat_boxes[name]
-            next_y0 = headers_by_y[i+1]["y0"] if (i+1) < len(headers_by_y) else math.inf
-            if next_y0 != math.inf: y1 = min(y1, next_y0)
-            if math.isinf(y1): y1 = find_footer_page_y(lines, page.rect.height)
-            cat_boxes[name] = (y0, y1, x0, x1)
-
-        header_y_map = {h["name"]: (h["y0"], h["y1"]) for h in valid_headers}
-        section = "Toxins" if any(h["name"] in ("HeavyMetals","Lectins") for h in valid_headers) else "Foods"
-        page_obj = {"page": pno, "section": section, "categories": []}
-
-        for h in headers_by_y:
-            cname = h["name"]
-            y0, y1, x0, x1 = cat_boxes[cname]
-            hy0, hy1 = header_y_map.get(cname, (None, None))
-
-            scores = find_scores_in_box(lines, x0, x1, y0, y1)
-            if not scores:
-                page_obj["categories"].append({"name": cname, "items": []})
-                continue
-            row_groups = cluster_score_rows(scores, tol=ROW_CLUSTER_TOL)
-            row_centers = [sum(s["y"] for s in g)/len(g) for g in row_groups]
-            bands = build_row_bands(row_centers, y0, y1)
-            bands = [(max(bt, y0), min(bb, y1 - 1.0)) for (bt, bb) in bands]
-            if bands and hy1 is not None:
-                bt, bb = bands[0]; bands[0] = (max(bt, hy1 + 1.0), bb)
-
-            tmp = []
-            for g, (band_top, band_bot) in zip(row_groups, bands):
-                g = sorted(g, key=lambda s: s["x"])
-                xs = [sc["x"] for sc in g]
-                for i, sc in enumerate(g):
-                    win_l = max(x0, xs[i] + WINDOW_LEFT_PAD)
-                    win_r = min(x1, (xs[i+1] - WINDOW_RIGHT_PAD) if i+1 < len(xs) else x1)
-                    label = collect_label_window(lines, band_top, band_bot, win_l, win_r, expected_set=allowed_set)
-                    if not label and i+1 < len(xs):
-                        pad = 4.0
-                        label = collect_label_window(lines, band_top, band_bot, win_l, min(x1, xs[i+1] - WINDOW_RIGHT_PAD + pad), expected_set=allowed_set)
-                    try:
-                        score_val = int(sc["t"])
-                    except ValueError:
-                        continue
-                    tmp.append({"name": label, "score": score_val, "severity": severity(score_val),
-                                "_x": sc["x"], "_ry": sum(s["y"] for s in g)/len(g)})
-
-            if not tmp:
-                page_obj["categories"].append({"name": cname, "items": []})
+            headers = detect_headers(lines)
+            if not headers:
                 continue
 
-            # Decide per-category ordering
-            mode = order_mode
-            if order_mode == "auto":
-                items_xy = [(it["_x"], it["_ry"]) for it in tmp]
-                mode = decide_order_mode(items_xy, row_groups)
+            for h in headers:
+                if h["name"] in required_headers:
+                    found_required.add(h["name"])
 
-            if mode == "row":
-                ordered = sorted(tmp, key=lambda r: (r["_ry"], r["_x"]))
-            else:
-                xs_all = [it["_x"] for it in tmp]
-                centers = kmeans1d_median(xs_all, k=4, iters=25)
-                def col_index(x): return min(range(len(centers)), key=lambda i: abs(x - centers[i]))
-                uniq_rows = sorted({ round(v, 2) for v in (it["_ry"] for it in tmp) })
-                def row_index(ry): return min(range(len(uniq_rows)), key=lambda i: abs(ry - uniq_rows[i]))
-                for it in tmp:
-                    it["_col"] = col_index(it["_x"]); it["_row"] = row_index(it["_ry"])
-                ordered = sorted(tmp, key=lambda r: (r["_col"], r["_row"]))
+            header_rows = group_headers_into_rows(headers)
+            cat_boxes = build_row_boxes(header_rows, page.rect.width)
 
-            items = [{"name": it["name"], "score": it["score"], "severity": it["severity"]} for it in ordered]
-            page_obj["categories"].append({"name": cname, "items": items})
+            valid_headers = []
+            for row in header_rows:
+                for h in row:
+                    if header_has_items(lines, h, page.rect.width, row, headers):
+                        valid_headers.append(h)
+            if not valid_headers: continue
 
-        out_pages.append(page_obj)
+            for h in valid_headers:
+                if h["name"] in required_headers:
+                    found_required.add(h["name"])
 
-    return {"pages": out_pages}
+            header_rows = group_headers_into_rows(valid_headers)
+            cat_boxes = build_row_boxes(header_rows, page.rect.width)
+
+            totals = find_total_lines(lines)
+            cat_boxes = clamp_y1_with_totals(cat_boxes, totals)
+
+            headers_by_y = sorted(valid_headers, key=lambda h: h["y0"])
+            for i, h in enumerate(headers_by_y):
+                name = h["name"]; y0, y1, x0, x1 = cat_boxes[name]
+                next_y0 = headers_by_y[i+1]["y0"] if (i+1) < len(headers_by_y) else math.inf
+                if next_y0 != math.inf: y1 = min(y1, next_y0)
+                if math.isinf(y1): y1 = find_footer_page_y(lines, page.rect.height)
+                cat_boxes[name] = (y0, y1, x0, x1)
+
+            header_y_map = {h["name"]: (h["y0"], h["y1"]) for h in valid_headers}
+            section = "Toxins" if any(h["name"] in ("HeavyMetals","Lectins") for h in valid_headers) else "Foods"
+            page_obj = {"page": pno, "section": section, "categories": []}
+
+            for h in headers_by_y:
+                cname = h["name"]
+                y0, y1, x0, x1 = cat_boxes[cname]
+                hy0, hy1 = header_y_map.get(cname, (None, None))
+
+                scores = find_scores_in_box(lines, x0, x1, y0, y1)
+                if not scores:
+                    page_obj["categories"].append({"name": cname, "items": []})
+                    continue
+                row_groups = cluster_score_rows(scores, tol=ROW_CLUSTER_TOL)
+                row_centers = [sum(s["y"] for s in g)/len(g) for g in row_groups]
+                bands = build_row_bands(row_centers, y0, y1)
+                bands = [(max(bt, y0), min(bb, y1 - 1.0)) for (bt, bb) in bands]
+                if bands and hy1 is not None:
+                    bt, bb = bands[0]; bands[0] = (max(bt, hy1 + 1.0), bb)
+
+                tmp = []
+                for g, (band_top, band_bot) in zip(row_groups, bands):
+                    g = sorted(g, key=lambda s: s["x"])
+                    xs = [sc["x"] for sc in g]
+                    for i, sc in enumerate(g):
+                        win_l = max(x0, xs[i] + WINDOW_LEFT_PAD)
+                        win_r = min(x1, (xs[i+1] - WINDOW_RIGHT_PAD) if i+1 < len(xs) else x1)
+                        label = collect_label_window(lines, band_top, band_bot, win_l, win_r, expected_set=allowed_set)
+                        if not label and i+1 < len(xs):
+                            pad = 4.0
+                            label = collect_label_window(lines, band_top, band_bot, win_l, min(x1, xs[i+1] - WINDOW_RIGHT_PAD + pad), expected_set=allowed_set)
+                        try:
+                            score_val = int(sc["t"])
+                        except ValueError:
+                            continue
+                        tmp.append({"name": label, "score": score_val, "severity": severity(score_val),
+                                    "_x": sc["x"], "_ry": sum(s["y"] for s in g)/len(g)})
+
+                if not tmp:
+                    page_obj["categories"].append({"name": cname, "items": []})
+                    continue
+
+                # Decide per-category ordering
+                mode = order_mode
+                if order_mode == "auto":
+                    items_xy = [(it["_x"], it["_ry"]) for it in tmp]
+                    mode = decide_order_mode(items_xy, row_groups)
+
+                if mode == "row":
+                    ordered = sorted(tmp, key=lambda r: (r["_ry"], r["_x"]))
+                else:
+                    xs_all = [it["_x"] for it in tmp]
+                    centers = kmeans1d_median(xs_all, k=4, iters=25)
+                    def col_index(x): return min(range(len(centers)), key=lambda i: abs(x - centers[i]))
+                    uniq_rows = sorted({ round(v, 2) for v in (it["_ry"] for it in tmp) })
+                    def row_index(ry): return min(range(len(uniq_rows)), key=lambda i: abs(ry - uniq_rows[i]))
+                    for it in tmp:
+                        it["_col"] = col_index(it["_x"]); it["_row"] = row_index(it["_ry"])
+                    ordered = sorted(tmp, key=lambda r: (r["_col"], r["_row"]))
+
+                items = [{"name": it["name"], "score": it["score"], "severity": it["severity"]} for it in ordered]
+                page_obj["categories"].append({"name": cname, "items": items})
+
+            out_pages.append(page_obj)
+
+        if not out_pages:
+            raise ValueError("Unable to locate any food report categories in the supplied PDF.")
+
+        missing = required_headers - found_required
+        if missing:
+            raise ValueError(f"Food PDF validation failed: missing expected categories {', '.join(sorted(missing))}.")
+
+        return {"pages": out_pages}
+    finally:
+        doc.close()
 
 def main():
     ap = argparse.ArgumentParser(description="Parse PDF → JSON (v6g: per-category AUTO ordering).")

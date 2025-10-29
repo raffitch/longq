@@ -1,67 +1,79 @@
-# LongevityQ
+# Quantum Qi
 
-LongevityQ is a two-screen demo that lets an operator upload a lab report PDF and immediately project the parsed results to a patient-facing display. The backend stores the uploaded file, parses it into structured data, and pushes live updates over WebSockets so that the patient screen updates as soon as the operator publishes the session.
+Quantum Qi is a two-screen experience built for clinic operators and their patients. The operator console handles session creation, multi-report ingestion, parsing, and staged publishing, while the patient screen stays in sync via WebSockets so new data lands instantly when the operator is ready to “Go Live”.
 
-## Repository layout
+This document walks through the project layout, local setup, and day-to-day workflows so someone new to the codebase can get productive quickly.
 
-| Path | Description |
-| --- | --- |
-| `backend/` | FastAPI service, SQLite persistence, PDF parser integration, and patient WebSocket broadcaster. |
-| `frontend/` | React + Vite single-page app containing separate operator and patient views. |
-| `data/` | Runtime storage for the SQLite database and uploaded PDF assets (created automatically). |
+---
 
-## Backend
+## Table of contents
 
-The backend is a FastAPI application configured in [`backend/app.py`](backend/app.py). Core features:
+1. [Architecture overview](#architecture-overview)
+2. [Local setup](#local-setup)
+   - [Backend (FastAPI)](#backend-fastapi)
+   - [Frontend (React + Vite)](#frontend-react--vite)
+   - [Environment variables](#environment-variables)
+3. [Operator workflow](#operator-workflow)
+4. [Codebase tour](#codebase-tour)
+5. [Development tips](#development-tips)
 
-* Session lifecycle: create sessions, upload PDF assets, run parsing, and publish results to patients. [`backend/app.py`](backend/app.py)
-* SQLite persistence via SQLModel models defined in [`backend/models.py`](backend/models.py) with simple creation helpers in [`backend/db.py`](backend/db.py).
-* File management helpers in [`backend/storage.py`](backend/storage.py) that write uploads into `./data/sessions/<id>/<kind>.pdf`.
-* Parser integration through [`backend/parser_adapter.py`](backend/parser_adapter.py), which delegates to [`backend/parse_food_pdf.py`](backend/parse_food_pdf.py) when available and falls back to a stub response otherwise.
-* Patient update channel: a `/ws/patient` WebSocket broadcasts `published` and `displaySet` events so patient screens refresh instantly when the operator publishes new data. [`backend/app.py`](backend/app.py)
+---
 
-### API overview
+## Architecture overview
 
-| Endpoint | Method | Purpose |
-| --- | --- | --- |
-| `/sessions` | `POST` | Create a new operator session for a client name; returns the short code and session id. |
-| `/sessions` | `GET` | List existing sessions (most recent first). |
-| `/sessions/{id}` | `GET` | Fetch current state of a session (created, ingesting, parsing, published, etc.). |
-| `/sessions/{id}/banner` | `GET` | Greeting banner text for the patient waiting screen. |
-| `/sessions/{id}/upload/{kind}` | `POST` | Upload a PDF for a given session (currently only `kind="food"`). Stores the file and records metadata. |
-| `/files/{fileId}/parse` | `POST` | Invoke the configured parser on the previously uploaded PDF. On success, structured data is saved in `ParsedRow`. |
-| `/sessions/{id}/publish` | `POST` | Mark the session as published and notify patient clients via WebSocket. |
-| `/sessions/{id}/parsed/{kind}` | `GET` | Fetch parsed results (gated so only published sessions can be read). |
-| `/display/current` | `GET` | Return which session should appear on patient screens and the associated client name. |
-| `/display/current` | `POST` | Bind or clear a session for the patient screen; triggers a WebSocket push so connected browsers reload. |
+```
+┌──────────────┐        REST / WS        ┌──────────────┐
+│ Operator UI  │ ─────────────────────►  │  FastAPI     │
+│ (React)      │ ◄─────────────────────  │  backend     │
+└──────────────┘        WebSockets       └──────────────┘
+        │                                       │
+        │                               SQLite + file store
+        │
+        ▼
+┌──────────────┐
+│ Patient UI   │  (always listening for WebSocket pushes)
+└──────────────┘
+```
 
-All JSON schemas are declared in [`backend/schemas.py`](backend/schemas.py).
+- **Backend** (`backend/`): FastAPI + SQLModel, handles session lifecycle, PDF storage, parsing (via adapters), and WebSocket fan-out to patients.
+- **Frontend** (`frontend/`): Vite-powered React SPA with two routes:
+  - `/operator` for staff workflows.
+  - `/patient` for the display screen.
 
-### Running the backend
+---
+
+## Local setup
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+ and npm
+
+### Backend (FastAPI)
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Optional: set .env values (see below)
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-By default the service uses `sqlite:///./data/app.db`. Override with `DB_URL` if you want a different database backend. Uploaded PDFs are buffered in memory and written to temporary files only while parsing, so nothing persists under `data/` once the process exits.
+Key paths:
+- SQLite database lives under `data/` (`sqlite:///./data/app.db` by default).
+- Uploaded PDFs are stored in `data/sessions/<session_id>/<report_kind>.pdf`.
 
-### Exit when idle
+Useful environment overrides (place in `backend/.env` or export before running):
 
-To make the backend shut down automatically when no operator or patient WebSocket clients are connected, set `EXIT_WHEN_IDLE=true`. The shutdown is debounced by `EXIT_IDLE_DEBOUNCE_SEC` seconds (defaults to 20). When the timer expires and there are no active ingest/parse jobs, uvicorn is asked to exit gracefully (or the process receives `SIGINT` as a fallback). The development script (`scripts/dev.sh`) enables this behaviour with a 5-second debounce so closing the dev tabs returns control to the shell quickly. A convenience runner at [`backend/runner.py`](backend/runner.py) is available if you prefer to start uvicorn programmatically and capture the server instance in `app.state`.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DB_URL` | `sqlite:///./data/app.db` | Change persistence location (Postgres/SQLite/etc.). |
+| `EXIT_WHEN_IDLE` | unset | If `"true"`, server shuts down when no sockets/jobs are active. |
+| `EXIT_IDLE_DEBOUNCE_SEC` | `20` | Seconds to wait before idle shutdown fires. |
 
-## Frontend
-
-The frontend lives under `frontend/` and is bootstrapped with Vite + React. The operator and patient experiences are separate routes defined in [`frontend/src/App.tsx`](frontend/src/App.tsx).
-
-* [`frontend/src/Operator.tsx`](frontend/src/Operator.tsx) lets staff create a session, drag & drop a PDF, trigger parsing, publish the results, and assign the active session to the patient display.
-* [`frontend/src/Patient.tsx`](frontend/src/Patient.tsx) polls `/display/current`, listens to `/ws/patient` for instant refresh notifications, and renders the parsed food data as category clusters of circular badges.
-* [`frontend/src/api.ts`](frontend/src/api.ts) centralizes REST calls and reads `VITE_API_BASE` to locate the backend (default `http://localhost:8000`).
-
-### Running the frontend
+### Frontend (React + Vite)
 
 ```bash
 cd frontend
@@ -69,22 +81,100 @@ npm install
 npm run dev
 ```
 
-Point the frontend at the backend by defining `VITE_API_BASE` when you run Vite (e.g., `VITE_API_BASE=http://localhost:8000 npm run dev`). The development server serves the app at `http://localhost:5173` by default.
+- Vite serves the app at `http://localhost:5173` by default.
+- Point the frontend at the backend by setting `VITE_API_BASE`:
 
-## Typical operator-to-patient flow
+  ```bash
+  VITE_API_BASE=http://localhost:8000 npm run dev
+  ```
 
-1. The operator visits `/operator`, enters the client’s name, and creates a session. [`frontend/src/Operator.tsx`](frontend/src/Operator.tsx)
-2. Drag and drop (or manually choose) the client’s PDF report. The backend stores it, updates the session state, and the operator can request parsing. [`backend/storage.py`](backend/storage.py) [`backend/app.py`](backend/app.py)
-3. After parsing succeeds, the operator reviews the “Parsed ✓” status and publishes the session. Publishing both flags the session and pushes a WebSocket notification so patient tabs reload. [`backend/app.py`](backend/app.py)
-4. The patient display (served at `/patient`) shows a welcome screen until a session is bound and published, then fetches `/sessions/{id}/parsed/food` and renders the structured results. [`frontend/src/Patient.tsx`](frontend/src/Patient.tsx)
-5. At any point, the operator can reassign or clear the patient screen via `/display/current`. [`frontend/src/api.ts`](frontend/src/api.ts)
+- Production build: `npm run build` (outputs to `frontend/dist/`).
+- Preview prod build locally: `npm run preview`.
 
-## Testing and development tips
+### Environment variables
 
-* The parser adapter automatically falls back to a dummy structure if `parse_food_pdf.parse_pdf` cannot be imported, which is useful for frontend development without PDF parsing dependencies. [`backend/parser_adapter.py`](backend/parser_adapter.py)
-* You can open the patient screen in another tab or browser window using the “Open Patient Screen” link on the operator console. [`frontend/src/Operator.tsx`](frontend/src/Operator.tsx)
-* WebSocket push is complemented by a 30-second polling interval to keep patient screens fresh even if the socket reconnects. [`frontend/src/Patient.tsx`](frontend/src/Patient.tsx)
+Define in `frontend/.env` (or `.env.local`) as needed:
 
-## License
+| Variable | Default | Description |
+| --- | --- | --- |
+| `VITE_API_BASE` | `http://localhost:8000` | URL of the FastAPI backend. |
 
-This repository does not currently declare a license. Add one before distributing or deploying the project.
+---
+
+## Operator workflow
+
+1. **Create a session**
+   - Visit `http://localhost:5173/operator`.
+   - Enter patient first and last name. This fills the staged preview and patient greeting.
+
+2. **Ingest reports**
+   - Drag & drop the patient folder or use the “Upload” button.
+   - The console supports five report types out of the box:
+     - `Food`, `Heavy Metals`, `Hormones`, `Nutrition`, `Toxins`.
+   - Each upload:
+     - Stores the PDF.
+     - Auto-selects the report tile.
+     - Clears prior parsing state so you can re-run ingest on replacements.
+
+3. **Parse**
+   - Parsing is automatically triggered before publishing, but you can manually parse any report from its tile.
+   - Status banners keep track of which tiles have succeeded/failed (with per-report error messaging).
+
+4. **Stage & publish**
+   - The “Publish Session” card shows when you’re ready to push staged data.
+   - Publishing:
+     - Parses any outstanding selected reports.
+     - Saves the publish state.
+     - Refreshes the staged preview iframe in the sidebar.
+     - Adds a brief glow to the staged preview card so the operator knows it’s ready to “Go Live”.
+
+5. **Go live / hide**
+   - The sidebar offers live monitor controls:
+     - `Open Patient Window` / `Go Live` / `Hide`.
+     - When staged data is published but not live, the staged card animates forward to encourage promotion.
+     - Clicking `Go Live` binds the session and the live monitor message switches to “Live Reports.”
+     - `Hide` rolls the staged preview forward again without losing publish history.
+
+6. **Reset**
+   - `Start Over` wipes the current session (uploads, selections, status) so you can onboard a new patient quickly.
+
+---
+
+## Codebase tour
+
+### Backend highlights
+
+| File | Purpose |
+| --- | --- |
+| [`backend/app.py`](backend/app.py) | FastAPI entry point, routes, WebSocket handling, idle shutdown support. |
+| [`backend/models.py`](backend/models.py) | SQLModel-backed tables: `SessionRow`, `FileRow`, `ParsedRow`, `DisplayRow`. |
+| [`backend/schemas.py`](backend/schemas.py) | Pydantic request/response schemas shared with the frontend. |
+| [`backend/parser_adapter.py`](backend/parser_adapter.py) | Dynamically loads report parsers (e.g. food, hormones). |
+| [`backend/storage.py`](backend/storage.py) | File-system persistence helpers for uploads and temp artifacts. |
+| [`backend/runner.py`](backend/runner.py) | Programmatic uvicorn bootstrap (used by scripts/tests). |
+
+### Frontend highlights
+
+| File | Purpose |
+| --- | --- |
+| [`frontend/src/Operator.tsx`](frontend/src/Operator.tsx) | Main operator workflow with staged preview + live monitor. |
+| [`frontend/src/Patient.tsx`](frontend/src/Patient.tsx) | Patient-facing screen, listens to WebSocket + REST. |
+| [`frontend/src/api.ts`](frontend/src/api.ts) | Typed API client; sets `VITE_API_BASE`. |
+| [`frontend/src/ui/Button.tsx`](frontend/src/ui/Button.tsx) | Shared button component with variant system. |
+| [`frontend/src/ui/Chip.tsx`](frontend/src/ui/Chip.tsx) | Status pill component used across tiles. |
+
+---
+
+## Development tips
+
+- **Dummy parsers**: If a specific parser module (e.g., `parse_food_pdf`) isn’t available, the adapter returns a stub payload so you can develop the UI without installing parsing dependencies.
+- **WebSocket fallbacks**: Patient screens refresh over `/ws/patient` and also poll every 30 seconds, so they recover even if the socket briefly disconnects.
+- **Staged preview testing**: The operator sidebar is designed for ultra-wide (Samsung G9) dashboards. The iframe containers auto-scale while keeping scroll positions centered so you can validate layout regardless of local monitor size.
+- **Resetting state**: Removing `data/` clears the SQLite DB and uploaded artifacts; useful when you need a clean slate.
+- **Hot reloading**:
+  - FastAPI uses `--reload`, so restarting isn’t necessary on code changes.
+  - Vite auto-refreshes changes in `/frontend`.
+
+---
+
+Happy building! If you add new report types, parsers, or UI flows, update this README so future contributors can hit the ground running. PRs that change entry points or required environment config should always refresh the relevant sections above.*** End Patch
