@@ -1,0 +1,23 @@
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Virtual environments
+backend/.venv/
+
+# Node dependencies
+frontend/node_modules/
+
+# Build artifacts
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+# Local app windows
+.chrome-app-operator/
+
+# Runtime data
+data/
+
+# macOS
+.DS_Store
