@@ -17,7 +17,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 from paths import ensure_app_dirs, runtime_dir
 from session_fs import (

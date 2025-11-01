@@ -3,6 +3,8 @@ from pathlib import Path
 from secrets import token_hex
 from typing import List, Set, Optional, Dict
 from threading import Lock
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import select, Session
@@ -82,7 +84,26 @@ def _discard_payload(file_id: int) -> None:
     with _upload_payloads_lock:
         _upload_payloads.pop(file_id, None)
 
-app = FastAPI(title="Quantum Qi Backend")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    global _event_loop
+    _event_loop = asyncio.get_running_loop()
+    init_db()
+    _ensure_session_table_columns()
+    _ensure_display_table_columns()
+    with Session(engine) as db:
+        d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
+        if not d:
+            db.add(DisplayRow(code="main"))
+            db.commit()
+    try:
+        yield
+    finally:
+        _cancel_shutdown_timer("Application shutdown requested.")
+        _event_loop = None
+
+
+app = FastAPI(title="Quantum Qi Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -384,27 +405,6 @@ async def operator_window_closed():
     if current == 0:
         _request_idle_check("operator window closed")
     return {"ok": True, "active": current}
-
-# ----------------- Startup -----------------
-@app.on_event("startup")
-async def on_startup():
-    global _event_loop
-    _event_loop = asyncio.get_running_loop()
-    init_db()
-    _ensure_session_table_columns()
-    _ensure_display_table_columns()
-    # Ensure one display row exists
-    with Session(engine) as db:
-        d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
-        if not d:
-            db.add(DisplayRow(code="main"))
-            db.commit()
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    _cancel_shutdown_timer("Application shutdown requested.")
-    global _event_loop
-    _event_loop = None
 
 def short_code() -> str:
     return token_hex(3).upper()  # 6 hex chars
