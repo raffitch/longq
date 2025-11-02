@@ -1,6 +1,6 @@
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
-export type ReportKind = "food" | "heavy-metals" | "hormones" | "nutrition" | "toxins";
+export type ReportKind = "food" | "heavy-metals" | "hormones" | "nutrition" | "toxins" | "peek";
 export type Sex = "male" | "female";
 export type Session = { id:number; code:string; client_name:string; first_name:string|null; last_name:string|null; folder_name:string|null; state:string; published:boolean; sex: Sex };
 export type FileOut = { id:number; kind:string; filename:string; status:string; error?:string };

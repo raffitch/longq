@@ -61,6 +61,7 @@ REPORT_TYPES = {
     "hormones": {"label": "Hormones", "aliases": ["hormones"]},
     "nutrition": {"label": "Nutrition", "aliases": ["nutrition"]},
     "toxins": {"label": "Toxins", "aliases": ["toxins"]},
+    "peek": {"label": "PEEK Report", "aliases": ["peek", "peek report", "energy", "energy map"]},
 }
 
 _active_jobs = 0
@@ -185,8 +186,13 @@ def _validate_uploaded_filename(session: SessionRow, kind: str, filename: str) -
     if not info:
         raise HTTPException(400, f"Unsupported report kind: {kind}")
 
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "Only PDF files are accepted.")
+    suffix = Path(filename).suffix.lower()
+    if kind == "peek":
+        if suffix not in {".docx", ".doc"}:
+            raise HTTPException(400, "PEEK reports must be Word documents (.docx or .doc).")
+    else:
+        if suffix != ".pdf":
+            raise HTTPException(400, "Only PDF files are accepted.")
 
     normalized_name = _normalize_text(filename.replace("-", " ").replace("_", " "))
     normalized_client = _normalize_text(_canonicalize_client_name(session.client_name))
@@ -607,7 +613,7 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
     if not fr: raise HTTPException(404, "File not found")
     s = db.get(SessionRow, fr.session_id)
     if not s: raise HTTPException(404, "Session not found")
-    if fr.kind not in {"food", "nutrition", "hormones", "heavy-metals", "toxins"}:
+    if fr.kind not in {"food", "nutrition", "hormones", "heavy-metals", "toxins", "peek"}:
         raise HTTPException(400, f"Parsing not supported for report type '{fr.kind}'.")
 
     _note_job_started("parse")
@@ -621,7 +627,7 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
         if not payload:
             fr.status = "error"; fr.error = "Report data not available. Please upload again."; db.add(fr)
             s.state = "VALIDATING"; db.add(s); db.commit()
-            raise HTTPException(400, "Report data not available. Please upload the PDF again.")
+            raise HTTPException(400, "Report data not available. Please upload the file again.")
 
         suffix = ".pdf"
         if fr.filename:

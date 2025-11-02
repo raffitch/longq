@@ -31,6 +31,12 @@ except Exception as e:
     parse_toxins_pdf = None
     _toxins_import_error = e
 
+try:
+    from parse_peek_report import parse_report as parse_peek_report
+except Exception as e:
+    parse_peek_report = None
+    _peek_import_error = e
+
 def _fallback(pdf_path: str) -> dict:
     return {"meta": {"note": "Fallback parser in use", "file": pdf_path}, "pages": []}
 
@@ -74,5 +80,13 @@ def parse_file(kind: str, pdf_path: Path) -> Tuple[str, Any]:
         if not isinstance(data, dict) or "items" not in data:
             raise RuntimeError("Toxins parser returned unexpected shape; expected dict with 'items'.")
         return ("toxins-v1", data)
+
+    if kind == "peek":
+        if parse_peek_report is None:
+            raise ValueError("PEEK parser not available; ensure parse_peek_report is importable (python-docx installed?).")
+        data = parse_peek_report(Path(pdf_path))  # type: ignore[arg-type]
+        if not isinstance(data, dict):
+            raise RuntimeError("PEEK parser returned unexpected shape; expected dict with 'organs' and 'chakras'.")
+        return ("peek-v1", data)
 
     raise ValueError(f"Unsupported kind: {kind}")

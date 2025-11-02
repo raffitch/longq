@@ -62,3 +62,8 @@ export type RawToxinsData = {
   item_count?: number;
   items: RawToxinItem[];
 };
+
+export type RawPeekData = {
+  organs?: Record<string, number>;
+  chakras?: Record<string, number>;
+};

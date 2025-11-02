@@ -8,10 +8,11 @@ type Sex = "male" | "female";
 
 interface CardEnergyMapProps {
   status: EnergyStatus;
-  activeNodes?: number[];
   organSectionTitle?: string;
   sex?: Sex;
   showOnlyMale?: boolean;
+  organValues?: Record<string, number | null | undefined>;
+  chakraValues?: Record<string, number | null | undefined>;
 }
 
 type LayerCategory = "structure" | "organ" | "system" | "reproductive";
@@ -28,6 +29,7 @@ interface LayerMetric extends LayerDefinition {
   value: number;
   opacity: number;
   priorityLabel: string;
+  hasValue: boolean;
 }
 
 const VIEWBOX = {
@@ -70,16 +72,26 @@ const CHAKRA_POINTS = [
   { id: "Chakra_01_Root", name: "Root", cx: 170.49, cy: 329.82 },
 ];
 
+const CHAKRA_BASE_COLORS: Record<string, string> = {
+  Chakra_01_Root: "#F87171", // red
+  Chakra_02_Sacral: "#FB923C", // orange
+  Chakra_03_SolarPlexus: "#FBBF24", // yellow
+  Chakra_04_Heart: "#34D399", // green
+  Chakra_05_Throat: "#60A5FA", // blue
+  Chakra_06_ThirdEye: "#6366F1", // indigo
+  Chakra_07_Crown: "#A78BFA", // violet
+};
+
 const STRUCTURE_COLOR = "#06B6D4";
 
-export interface PeakPriorityTier {
+export interface PeekPriorityTier {
   label: string;
   color: string;
   min: number;
   range: string;
 }
 
-export const PEAK_PRIORITY_TIERS: PeakPriorityTier[] = [
+export const PEAK_PRIORITY_TIERS: PeekPriorityTier[] = [
   { label: "Very High", color: "#EF4444", min: 91, range: "91 – 100" },
   { label: "High", color: "#F97316", min: 76, range: "76 – 90" },
   { label: "Neutral", color: "#9CA3AF", min: 26, range: "26 – 75" },
@@ -88,6 +100,13 @@ export const PEAK_PRIORITY_TIERS: PeakPriorityTier[] = [
 ];
 
 const clampOpacity = (value: number) => Math.max(MIN_OPACITY, Math.min(1, value));
+
+const clampToPercent = (input: number | null | undefined): number | null => {
+  if (input === null || input === undefined) return null;
+  const numeric = typeof input === "number" ? input : Number(input);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+};
 
 const ORGAN_SORT_ORDER = [
   "brain",
@@ -134,22 +153,13 @@ const getPriorityForValue = (value: number) => {
   return match ?? PEAK_PRIORITY_TIERS[PEAK_PRIORITY_TIERS.length - 1];
 };
 
-const getLayerValue = (index: number, highlighted: boolean) => {
-  const base = 48 + (index % 5) * 7;
-  return Math.max(10, Math.min(100, base + (highlighted ? 28 : 0)));
-};
-
-const getChakraValue = (index: number, highlighted: boolean) => {
-  const base = 40 + (index % 4) * 10;
-  return Math.max(10, Math.min(100, base + (highlighted ? 32 : 0)));
-};
-
 export default function CardEnergyMap({
   status: _status,
-  activeNodes = [],
   organSectionTitle,
   sex,
   showOnlyMale = false,
+  organValues,
+  chakraValues,
 }: CardEnergyMapProps) {
   const anthroposSlidersRef = useRef<HTMLDivElement>(null);
   const padmasanaSlidersRef = useRef<HTMLDivElement>(null);
@@ -159,7 +169,32 @@ export default function CardEnergyMap({
   const resolvedShowOnlyMale = Boolean(showOnlyMale);
   const effectiveShowOnlyMale = resolvedSex === "female" ? false : resolvedShowOnlyMale;
   const resolvedSectionTitle = organSectionTitle ?? "Organs";
-  const activeChakraSet = useMemo(() => new Set(activeNodes), [activeNodes]);
+
+  const organValueMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (organValues) {
+      for (const [key, raw] of Object.entries(organValues)) {
+        const normalized = clampToPercent(raw);
+        if (normalized !== null) {
+          map.set(key, normalized);
+        }
+      }
+    }
+    return map;
+  }, [organValues]);
+
+  const chakraValueMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (chakraValues) {
+      for (const [key, raw] of Object.entries(chakraValues)) {
+        const normalized = clampToPercent(raw);
+        if (normalized !== null) {
+          map.set(key, normalized);
+        }
+      }
+    }
+    return map;
+  }, [chakraValues]);
 
   useEffect(() => {
     if (typeof ResizeObserver === "undefined") {
@@ -202,8 +237,7 @@ export default function CardEnergyMap({
   }, []);
 
   const layerMetrics = useMemo<LayerMetric[]>(() => {
-    const chakraCount = CHAKRA_POINTS.length || 1;
-    return LAYER_DEFINITIONS.map((definition, index) => {
+    return LAYER_DEFINITIONS.map((definition) => {
       if (!shouldIncludeLayer(definition, resolvedSex, effectiveShowOnlyMale)) {
         return null;
       }
@@ -216,25 +250,25 @@ export default function CardEnergyMap({
         return null;
       }
 
-      const highlighted = activeChakraSet.has(index % chakraCount);
-      const value = getLayerValue(index, highlighted);
-      const opacity =
-        definition.category === "structure"
-          ? 1
-          : clampOpacity(value / 100);
-      const priority = getPriorityForValue(value);
-      const rawColor = definition.category === "structure" ? STRUCTURE_COLOR : priority.color;
+      const isStructure = definition.category === "structure";
+      const providedValue = isStructure ? 100 : organValueMap.get(definition.id);
+      const hasValue = isStructure || organValueMap.has(definition.id);
+      const clampedValue = isStructure ? 100 : providedValue ?? 0;
+      const normalizedValue = Math.max(0, Math.min(100, clampedValue));
+      const priority = isStructure ? null : getPriorityForValue(normalizedValue);
+      const metricColor = isStructure ? STRUCTURE_COLOR : hasValue ? priority!.color : "#9CA3AF";
+      const opacity = isStructure ? 1 : clampOpacity(normalizedValue / 100);
 
       const elementProps: Record<string, unknown> = {
         key: definition.id,
         opacity,
       };
 
-      if (definition.category === "structure") {
-        elementProps.stroke = rawColor;
+      if (isStructure) {
+        elementProps.stroke = STRUCTURE_COLOR;
         elementProps.fill = "none";
       } else {
-        elementProps.fill = rawColor;
+        elementProps.fill = metricColor;
       }
 
       const styledElement = React.cloneElement(baseElement, elementProps);
@@ -242,17 +276,21 @@ export default function CardEnergyMap({
       return {
         ...definition,
         element: styledElement,
-        color: rawColor,
-        value,
+        color: metricColor,
+        value: normalizedValue,
         opacity,
-        priorityLabel: priority.label,
+        priorityLabel: isStructure ? "" : hasValue ? priority!.label : "Not Provided",
+        hasValue,
       } as LayerMetric;
     }).filter((metric): metric is LayerMetric => metric !== null);
-  }, [activeChakraSet, resolvedSex, effectiveShowOnlyMale]);
+  }, [effectiveShowOnlyMale, organValueMap, resolvedSex]);
 
   const anthroposSliderMetrics = useMemo(() => {
     const metrics = layerMetrics.filter((metric) => metric.category !== "structure");
     metrics.sort((a, b) => {
+      if (a.hasValue !== b.hasValue) {
+        return a.hasValue ? -1 : 1;
+      }
       const orderA = ORGAN_ORDER_INDEX.get(a.id) ?? Number.MAX_SAFE_INTEGER;
       const orderB = ORGAN_ORDER_INDEX.get(b.id) ?? Number.MAX_SAFE_INTEGER;
       if (orderA !== orderB) {
@@ -265,28 +303,37 @@ export default function CardEnergyMap({
 
   const padmasanaSliderMetrics = useMemo(
     () =>
-      CHAKRA_POINTS.map((chakra, index) => {
-        const isActive = activeChakraSet.has(index);
-        const value = getChakraValue(index, isActive);
+      CHAKRA_POINTS.map((chakra) => {
+        const value = chakraValueMap.get(chakra.id) ?? 0;
+        const hasValue = chakraValueMap.has(chakra.id);
         const priority = getPriorityForValue(value);
+        const baseColor = CHAKRA_BASE_COLORS[chakra.id] ?? priority.color;
         return {
           ...chakra,
           value,
-          color: priority.color,
-          priorityLabel: priority.label,
-          isActive,
+          color: hasValue ? priority.color : "#9CA3AF",
+          priorityLabel: hasValue ? priority.label : "Not Provided",
+          hasValue,
+          baseColor,
         };
       }),
-    [activeChakraSet],
+    [chakraValueMap],
   );
 
+  const silhouetteScale = 16 / 15;
   const anthroposSilouhetteStyle: React.CSSProperties | undefined =
     anthroposSlidersHeight != null
-      ? { height: anthroposSlidersHeight, minHeight: anthroposSlidersHeight }
+      ? {
+          height: anthroposSlidersHeight * silhouetteScale + 8,
+          minHeight: anthroposSlidersHeight * silhouetteScale + 8,
+        }
       : undefined;
   const padmasanaSilouhetteStyle: React.CSSProperties | undefined =
     padmasanaSlidersHeight != null
-      ? { height: padmasanaSlidersHeight, minHeight: padmasanaSlidersHeight }
+      ? {
+          height: (padmasanaSlidersHeight * silhouetteScale + 8) * (16 / 15) - 3,
+          minHeight: (padmasanaSlidersHeight * silhouetteScale + 8) * (16 / 15) - 3,
+        }
       : undefined;
 
   return (
@@ -324,21 +371,30 @@ export default function CardEnergyMap({
               <div className="flex flex-col gap-2.5">
                 {anthroposSliderMetrics.map((metric) => (
                   <div key={`anthropos-slider-${metric.id}`} className="anthropos-slider flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-sm text-text-secondary">
-                      <span className="font-medium uppercase tracking-wide">{metric.name}</span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium uppercase tracking-wide" style={{ color: metric.color }}>
+                        {metric.name}
+                      </span>
                       <div className="flex items-baseline gap-2 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">{metric.priorityLabel}</span>
-                        <span className="text-sm font-semibold text-text-primary">{metric.value}</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: metric.color }}>
+                          {metric.priorityLabel}
+                        </span>
+                        <span className="text-sm font-semibold" style={{ color: metric.color }}>
+                          {metric.hasValue ? metric.value : "—"}
+                        </span>
                       </div>
                     </div>
                     <div
                       role="img"
-                      aria-label={`${metric.name}: ${metric.value} (${metric.priorityLabel})`}
+                      aria-label={`${metric.name}: ${metric.hasValue ? metric.value : "not provided"} (${metric.priorityLabel})`}
                       className="anthropos-slider-track relative h-2 w-full overflow-hidden rounded-full bg-white/10"
                     >
                       <div
                         className="anthropos-slider-fill absolute inset-y-0 left-0 rounded-full"
-                        style={{ width: `${metric.value}%`, backgroundColor: metric.color }}
+                        style={{
+                          width: `${metric.hasValue ? metric.value : 0}%`,
+                          backgroundColor: metric.hasValue ? metric.color : "#ffffff33",
+                        }}
                       />
                     </div>
                   </div>
@@ -358,29 +414,62 @@ export default function CardEnergyMap({
                 viewBox={VIEWBOX.chakra}
                 xmlns="http://www.w3.org/2000/svg"
                 preserveAspectRatio="xMidYMid meet"
-                className="h-auto w-full max-w-[320px] sm:max-w-[360px] md:h-full md:w-auto md:max-h-full"
+                className="h-auto w-full max-w-[320px] overflow-visible sm:max-w-[360px] md:h-full md:w-auto md:max-h-full"
                 role="img"
                 aria-label="Padmasana silouhette"
               >
+                <defs>
+                  <filter id="chakra-glow-blur" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="6" />
+                  </filter>
+                </defs>
                 {React.cloneElement(PADMASANA_OUTLINE, {
                   key: "padmasana-outline",
                   stroke: STRUCTURE_COLOR,
                   fill: "none",
                   opacity: 1,
                 })}
-                {padmasanaSliderMetrics.map((chakra) => (
-                  <g key={chakra.id} id={chakra.id}>
-                    <title>{`${chakra.name}: ${chakra.value} (${chakra.priorityLabel})`}</title>
-                    <circle
-                      cx={chakra.cx}
-                      cy={chakra.cy}
-                      r={CHAKRA_RADIUS}
-                      fill={chakra.color}
-                      opacity={Math.max(0.35, chakra.value / 100)}
-                      aria-label={`${chakra.name} activation`}
-                    />
-                  </g>
-                ))}
+                {padmasanaSliderMetrics.map((chakra) => {
+                  const baseColor = chakra.baseColor ?? chakra.color;
+                  const outlineColor = chakra.color;
+                  const glowRadius = CHAKRA_RADIUS * 2.1;
+                  const normalized = chakra.hasValue ? chakra.value / 100 : 0;
+                  const intensity = chakra.hasValue ? Math.max(0.35, normalized) : 0.2;
+                  const glowOpacity = chakra.hasValue ? 0.18 + intensity * 0.32 : 0.12;
+                  const fillOpacity = chakra.hasValue ? 0.85 : 0.35;
+                  const strokeOpacity = chakra.hasValue ? 0.82 : 0.4;
+                  return (
+                    <g key={chakra.id} id={chakra.id}>
+                      <title>{`${chakra.name}: ${chakra.hasValue ? chakra.value : "not provided"} (${chakra.priorityLabel})`}</title>
+                      <circle
+                        cx={chakra.cx}
+                        cy={chakra.cy}
+                        r={glowRadius}
+                        fill={outlineColor}
+                        opacity={glowOpacity}
+                        filter="url(#chakra-glow-blur)"
+                        aria-hidden="true"
+                      />
+                      <circle
+                        cx={chakra.cx}
+                        cy={chakra.cy}
+                        r={CHAKRA_RADIUS}
+                        fill={baseColor}
+                        opacity={fillOpacity}
+                        aria-label={`${chakra.name} activation`}
+                      />
+                      <circle
+                        cx={chakra.cx}
+                        cy={chakra.cy}
+                        r={CHAKRA_RADIUS + 3}
+                        fill="none"
+                        stroke={outlineColor}
+                        strokeWidth={4}
+                        opacity={strokeOpacity}
+                      />
+                    </g>
+                  );
+                })}
               </svg>
             </div>
           </div>
@@ -398,21 +487,30 @@ export default function CardEnergyMap({
               <div className="flex flex-col gap-2">
                 {padmasanaSliderMetrics.map((chakra) => (
                   <div key={`padmasana-slider-${chakra.id}`} className="padmasana-slider flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-sm text-text-secondary">
-                      <span className="font-medium uppercase tracking-wide">{chakra.name}</span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium uppercase tracking-wide" style={{ color: chakra.color }}>
+                        {chakra.name}
+                      </span>
                       <div className="flex items-baseline gap-2 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">{chakra.priorityLabel}</span>
-                        <span className="text-sm font-semibold text-text-primary">{chakra.value}</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: chakra.color }}>
+                          {chakra.priorityLabel}
+                        </span>
+                        <span className="text-sm font-semibold" style={{ color: chakra.color }}>
+                          {chakra.hasValue ? chakra.value : "—"}
+                        </span>
                       </div>
                     </div>
                     <div
                       role="img"
-                      aria-label={`${chakra.name}: ${chakra.value} (${chakra.priorityLabel})`}
+                      aria-label={`${chakra.name}: ${chakra.hasValue ? chakra.value : "not provided"} (${chakra.priorityLabel})`}
                       className="padmasana-slider-track relative h-2 w-full overflow-hidden rounded-full bg-white/10"
                     >
                       <div
                         className="padmasana-slider-fill absolute inset-y-0 left-0 rounded-full"
-                        style={{ width: `${chakra.value}%`, backgroundColor: chakra.color }}
+                        style={{
+                          width: `${chakra.hasValue ? chakra.value : 0}%`,
+                          backgroundColor: chakra.hasValue ? chakra.color : "#ffffff33",
+                        }}
                       />
                     </div>
                   </div>

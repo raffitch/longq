@@ -16,6 +16,7 @@ import type {
   RawHeavyMetalsData,
   RawHormonesData,
   RawNutritionData,
+  RawPeekData,
   RawToxinsData,
 } from "./guest/types";
 
@@ -27,6 +28,7 @@ export default function Guest() {
   const [hormones, setHormones] = useState<RawHormonesData | null>(null);
   const [heavyMetals, setHeavyMetals] = useState<RawHeavyMetalsData | null>(null);
   const [toxins, setToxins] = useState<RawToxinsData | null>(null);
+  const [energyMap, setEnergyMap] = useState<RawPeekData | null>(null);
   const [sex, setSex] = useState<Sex>("male");
   const lastSessionId = useRef<number | null>(null);
   const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
@@ -54,7 +56,8 @@ export default function Guest() {
       nutritionTransformed.nutrients.length > 0 ||
       heavyMetalsTransformed.length > 0 ||
       hormonesTransformed.length > 0 ||
-      toxinsTransformed.length > 0;
+      toxinsTransformed.length > 0 ||
+      Boolean(energyMap && (Object.keys(energyMap.organs ?? {}).length || Object.keys(energyMap.chakras ?? {}).length));
     if (!hasAnyData) {
       return null;
     }
@@ -64,8 +67,9 @@ export default function Guest() {
       heavyMetalsTransformed,
       hormonesTransformed,
       toxinsTransformed,
+      energyMap,
     );
-  }, [data, nutrition, heavyMetals, hormones, toxins]);
+  }, [data, nutrition, heavyMetals, hormones, toxins, energyMap]);
 
   const formatPreviewMessage = (err: unknown): string => {
     const raw =
@@ -125,6 +129,7 @@ export default function Guest() {
         setHormones(null);
         setHeavyMetals(null);
         setToxins(null);
+        setEnergyMap(null);
         return;
       }
       const stagedFirst =
@@ -147,6 +152,7 @@ export default function Guest() {
           setHormones((reports["hormones"] ?? null) as RawHormonesData | null);
           setHeavyMetals((reports["heavy-metals"] ?? null) as RawHeavyMetalsData | null);
           setToxins((reports["toxins"] ?? null) as RawToxinsData | null);
+          setEnergyMap((reports["peek"] ?? null) as RawPeekData | null);
         } catch (err) {
           if (isNetworkError(err)) {
             setServerDown(true);
@@ -156,6 +162,7 @@ export default function Guest() {
           setHormones(null);
           setHeavyMetals(null);
           setToxins(null);
+          setEnergyMap(null);
         }
       } else {
         setData(null);
@@ -163,6 +170,7 @@ export default function Guest() {
         setHormones(null);
         setHeavyMetals(null);
         setToxins(null);
+        setEnergyMap(null);
         setSex(d.staged_sex ?? "male");
       }
       lastSessionId.current = sid ?? null;
@@ -178,6 +186,7 @@ export default function Guest() {
       setHormones(null);
       setHeavyMetals(null);
       setToxins(null);
+      setEnergyMap(null);
       setSex("male");
     }
   }
@@ -189,6 +198,7 @@ export default function Guest() {
       setHormones(null);
       setHeavyMetals(null);
       setToxins(null);
+      setEnergyMap(null);
     } else {
       setPreviewError(null);
     }

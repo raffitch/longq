@@ -12,6 +12,7 @@ import type {
   RawHeavyMetalsData,
   RawHormonesData,
   RawNutritionData,
+  RawPeekData,
   RawToxinsData,
 } from "./types";
 
@@ -204,6 +205,10 @@ export interface AggregatedInsights {
   scoreStatus: string;
   topHighItems: Array<{ category: string; item: FoodItem }>;
   nextSteps: string[];
+  energyMap: {
+    organs: Record<string, number>;
+    chakras: Record<string, number>;
+  } | null;
 }
 
 export function aggregateInsights(
@@ -212,6 +217,7 @@ export function aggregateInsights(
   heavyMetals: MetalItem[],
   hormones: HormoneItem[],
   toxins: ToxinItem[],
+  energyMapRaw: RawPeekData | null,
 ): AggregatedInsights {
   const counts: PriorityCounts = { lowCount: 0, mediumCount: 0, moderateCount: 0, highCount: 0 };
 
@@ -234,6 +240,38 @@ export function aggregateInsights(
   heavyMetals.forEach((item) => incrementCounts(counts, item.severity));
   hormones.forEach((item) => incrementCounts(counts, item.severity === "high" ? "high" : "moderate"));
   toxins.forEach((item) => incrementCounts(counts, item.severity));
+  const classifyEnergySeverity = (score: number | undefined | null): FoodSeverity => {
+    const value = Number.isFinite(score) ? Math.max(0, Math.min(100, Number(score))) : 0;
+    if (value >= 91) return "high";
+    if (value >= 76) return "moderate";
+    if (value >= 26) return "medium";
+    return "low";
+  };
+
+  const sanitizedOrgans: Record<string, number> = {};
+  const sanitizedChakras: Record<string, number> = {};
+
+  if (energyMapRaw?.organs) {
+    for (const [key, value] of Object.entries(energyMapRaw.organs)) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
+        sanitizedOrgans[key] = clamped;
+        incrementCounts(counts, classifyEnergySeverity(clamped));
+      }
+    }
+  }
+
+  if (energyMapRaw?.chakras) {
+    for (const [key, value] of Object.entries(energyMapRaw.chakras)) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
+        sanitizedChakras[key] = clamped;
+        incrementCounts(counts, classifyEnergySeverity(clamped));
+      }
+    }
+  }
   nutrition.nutrients.forEach((item) => incrementCounts(counts, classifySeverity(item.score)));
 
   const allScores: number[] = [];
@@ -241,6 +279,8 @@ export function aggregateInsights(
   heavyMetals.forEach((item) => allScores.push(Math.abs(item.score)));
   hormones.forEach((item) => allScores.push(Math.abs(item.score)));
   toxins.forEach((item) => allScores.push(Math.abs(item.score)));
+  Object.values(sanitizedOrgans).forEach((value) => allScores.push(Math.abs(value)));
+  Object.values(sanitizedChakras).forEach((value) => allScores.push(Math.abs(value)));
 
   const overallScore =
     allScores.length > 0 ? allScores.reduce((sum, value) => sum + value, 0) / allScores.length : 0;
@@ -272,6 +312,13 @@ export function aggregateInsights(
 
   const nextSteps = buildNextSteps(topHighItems, counts);
 
+  const energyMap = Object.keys(sanitizedOrgans).length || Object.keys(sanitizedChakras).length
+    ? {
+        organs: sanitizedOrgans,
+        chakras: sanitizedChakras,
+      }
+    : null;
+
   return {
     categories,
     nutrition,
@@ -283,6 +330,7 @@ export function aggregateInsights(
     scoreStatus,
     topHighItems,
     nextSteps,
+    energyMap,
   };
 }
 

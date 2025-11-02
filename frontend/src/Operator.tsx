@@ -24,6 +24,7 @@ const REPORT_DEFS: { kind: ReportKind; label: string; aliases: string[] }[] = [
   { kind: "hormones", label: "Hormones", aliases: ["hormones"] },
   { kind: "nutrition", label: "Nutrition", aliases: ["nutrition"] },
   { kind: "toxins", label: "Toxins", aliases: ["toxins"] },
+  { kind: "peek", label: "PEEK Report", aliases: ["peek", "peek report", "energy", "energy-map", "energy map"] },
 ];
 
 const LABEL: Record<ReportKind, string> = {
@@ -32,6 +33,7 @@ const LABEL: Record<ReportKind, string> = {
   hormones: "hormones",
   nutrition: "nutrition",
   toxins: "toxins",
+  peek: "peek",
 };
 
 type UploadMap = Record<ReportKind, FileOut | null>;
@@ -869,7 +871,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   async function processDroppedFiles(dropped: DroppedFile[]) {
     const operation = beginOperation();
     if (!dropped.length) {
-      applyState(setStatus, "No files detected. Drop a folder that contains the guest PDFs.", operation);
+      applyState(setStatus, "No files detected. Drop a folder that contains the guest reports.", operation);
       return;
     }
     applyState(setLastDroppedFiles, dropped, operation);
@@ -906,9 +908,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       }
     }
 
-    const pdfs = dropped.filter(({ name }) => name.toLowerCase().endsWith(".pdf"));
-    if (!pdfs.length) {
-      applyState(setStatus, "No PDF files found inside the folder.", operation);
+    const supportedFiles = dropped.filter(({ name }) => {
+      const lower = name.toLowerCase();
+      return lower.endsWith(".pdf") || lower.endsWith(".docx") || lower.endsWith(".doc");
+    });
+    if (!supportedFiles.length) {
+      applyState(setStatus, "No supported report files (.pdf, .docx) found inside the folder.", operation);
       return;
     }
 
@@ -927,7 +932,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
     applyState(setIsUploading, true, operation);
     try {
-      for (const entry of pdfs) {
+      for (const entry of supportedFiles) {
         if (!isOperationActive(operation)) {
           break;
         }
@@ -1449,20 +1454,22 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       onDragLeave={handleDragLeaveArea}
       onDrop={handleDrop}
       className={cn(
-        "mt-4 flex flex-wrap items-center gap-3 rounded-3lg border border-dotted border-dropzone-border bg-dropzone-base px-4 py-3 text-[12px] text-[#4b5563] transition-colors duration-150",
+        "flex flex-wrap items-center justify-between gap-3 rounded-3lg border border-border bg-surface px-4 py-3 text-[12px] text-[#4b5563] shadow-surface-md transition-colors duration-150",
         {
-          "rounded-[18px] border-[4px] border-dotted border-accent-blue bg-dropzone-active px-4 py-4": isDragActive,
+          "border-[3px] border-accent-blue bg-dropzone-active": isDragActive,
         },
       )}
     >
       <Button type="button" variant="primary" onClick={onBrowse} className="px-[18px]">
         Upload
       </Button>
-      <div>Upload files, or drag and drop files or folders anywhere on this screen.</div>
+      <div className="flex min-w-0 flex-1 items-center justify-end text-right">
+        <div className="text-[12px] text-text-primary">Upload reports or drag files anywhere on this screen.</div>
+      </div>
       <input
         ref={fileInputRef}
         type="file"
-        accept="application/pdf"
+        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         multiple
         className="hidden"
         onChange={onFileInput}
@@ -1470,7 +1477,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     </div>
   );
 
-  const renderReportTiles = () => {
+  const renderUploadAndPublishRow = () => {
     if (!session) return null;
     const publishableReports = REPORT_DEFS.filter((def) => selectedReports[def.kind] && uploads[def.kind]);
     const hasSelectedReports = publishableReports.length > 0;
@@ -1478,17 +1485,165 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     const publishLocked = session.published && !hasPendingChanges;
     const disablePublish = (!hasSelectedReports && !canPublishWithoutSelection) || isUploading || publishLocked;
     const publishLabel = session.published ? (hasPendingChanges ? "Update" : "Published") : "Publish";
-    const publishButtonVariant = publishLocked ? "secondary" : "primary";
+    const publishButtonVariant: React.ComponentProps<typeof Button>["variant"] = publishLocked ? "secondary" : "primary";
     const publishStatusText = hasSelectedReports
       ? session.published
         ? publishLocked
           ? "Published and up to date."
-          : "Published. Update to reflect recent changes."
+          : "Update to reflect recent changes."
         : "Ready to publish the selected reports."
       : session.published
       ? "Publishing will hide all reports from the guest view."
-      : "Select at least one uploaded report to enable publishing.";
+      : "Upload at least one report to publish.";
 
+    return (
+      <div className="mt-4 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)]">
+        {renderDropZone()}
+        <div className="rounded-3lg border border-border bg-surface shadow-surface-md">
+          <div className="flex flex-wrap items-center gap-4 px-4 py-3 text-[12px] text-[#4b5563]">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="text-[13px] font-semibold text-text-primary">Publish Session</div>
+              <div className="text-[11px] text-text-secondary">{publishStatusText}</div>
+            </div>
+            <Button
+              onClick={onPublish}
+              disabled={disablePublish}
+              variant={publishButtonVariant}
+              className="ml-auto px-[18px]"
+            >
+              {publishLabel}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderReportTiles = () => {
+    if (!session) return null;
+
+    const tiles = REPORT_DEFS.map((def) => {
+      const uploaded = uploads[def.kind];
+      const err = uploadErrors[def.kind];
+      const isSelected = selectedReports[def.kind];
+      const tileState: "pending" | "uploaded" | "error" = uploaded && !err ? "uploaded" : err ? "error" : "pending";
+      const parsedFlag = isParsed(def.kind);
+      const parsedAndSelected = Boolean(parsedFlag && isSelected);
+      const hasParseError = Boolean(err && uploaded);
+      const needsLocatorGuidance =
+        def.kind === "food" &&
+        hasParseError &&
+        typeof err === "string" &&
+        err.toLowerCase().includes("unable to locate any food report categories");
+
+      const isPublishedReport =
+        Boolean(session?.published) &&
+        Boolean(selectedReports[def.kind]) &&
+        Boolean(uploads[def.kind]) &&
+        !hasPendingChanges &&
+        !hasParseError;
+
+      const tileClass = cn(tileBaseClasses, {
+        "border-error-border bg-tile-error text-chip-danger-text shadow-error-soft": hasParseError,
+        "border-success-border bg-tile-success shadow-success-soft": parsedAndSelected && !hasParseError,
+        "border-border bg-surface-muted shadow-surface-md": tileState === "uploaded" && !parsedAndSelected && !hasParseError,
+        "border border-dashed border-border bg-tile-pending shadow-none": tileState === "pending" && !hasParseError && !parsedAndSelected,
+      });
+
+      const chipVariant: ChipVariant = hasParseError
+        ? "danger"
+        : isPublishedReport
+        ? "success"
+        : parsedAndSelected
+        ? "success"
+        : tileState === "uploaded"
+        ? isSelected
+          ? "info"
+          : "muted"
+        : "muted";
+      const chipLabel = hasParseError
+        ? "Error"
+        : isPublishedReport
+        ? "Published"
+        : parsedAndSelected
+        ? "Parsed"
+        : tileState === "uploaded"
+        ? isSelected
+          ? "Ready"
+          : "Uploaded"
+        : "Waiting";
+
+      return (
+        <div key={def.kind} className={tileClass}>
+          <input
+            type="file"
+            accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            ref={(el) => {
+              replaceInputsRef.current[def.kind] = el;
+            }}
+            onChange={(e) => {
+              void onReplaceInput(def.kind, e.target.files);
+            }}
+          />
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-2">
+              <input
+                type="checkbox"
+                checked={uploaded ? isSelected : false}
+                disabled={!uploaded}
+                onChange={(e) => toggleSelection(def.kind, e.target.checked)}
+                title={uploaded ? `Include ${def.label} report` : "Upload report first"}
+                className="h-[18px] w-[18px] accent-accent disabled:cursor-not-allowed"
+              />
+              <div className="min-w-0 text-[13px] font-bold leading-tight tracking-[0.02em]">{def.label}</div>
+            </div>
+            <Chip variant={chipVariant} className="mt-[2px] shrink-0">
+              {chipLabel}
+            </Chip>
+          </div>
+          <div className="flex flex-1 flex-col gap-1.5 text-[11px]">
+            {uploaded ? (
+              <>
+                <div
+                  className={cn("whitespace-pre-wrap break-words", {
+                    "text-[#fecaca]": hasParseError,
+                    "text-text-primary": !hasParseError,
+                  })}
+                >
+                  {formatReportFilename(uploaded.filename, def.kind)}
+                </div>
+                {hasParseError && (
+                  <div className="text-chip-danger-text">
+                    {needsLocatorGuidance ? `${err} Fix the file and parse again or deselect to continue.` : err}
+                  </div>
+                )}
+                {!isSelected && (
+                  <div className={cn(parsedFlag ? "text-[#60a5fa]" : "text-[#fbbf24]")}>
+                    {parsedFlag ? "Hidden from guest view" : "Deselected until re-selected"}
+                  </div>
+                )}
+              </>
+            ) : err ? (
+              <div className="text-[#fecaca]">{err}</div>
+            ) : (
+              <div className="text-chip-default-text">Waiting for upload</div>
+            )}
+            {(uploaded || err) && (
+              <Button
+                type="button"
+                onClick={() => onReplace(def.kind)}
+                variant="soft"
+                size="sm"
+                className="self-start rounded-full px-3 py-1.5 text-[11px]"
+              >
+                Replace File
+              </Button>
+            )}
+          </div>
+        </div>
+      );
+    });
     return (
       <div className="mt-4 flex flex-col gap-4">
         <div
@@ -1499,148 +1654,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
             },
           )}
         >
-        {[...REPORT_DEFS.map((def) => {
-          const uploaded = uploads[def.kind];
-          const err = uploadErrors[def.kind];
-          const isSelected = selectedReports[def.kind];
-          const tileState: "pending" | "uploaded" | "error" = uploaded && !err ? "uploaded" : err ? "error" : "pending";
-          const parsedFlag = isParsed(def.kind);
-          const parsedAndSelected = Boolean(parsedFlag && isSelected);
-          const hasParseError = Boolean(err && uploaded);
-          const needsLocatorGuidance =
-            def.kind === "food" &&
-            hasParseError &&
-            typeof err === "string" &&
-            err.toLowerCase().includes("unable to locate any food report categories");
-
-          const isPublishedReport =
-            Boolean(session?.published) &&
-            Boolean(selectedReports[def.kind]) &&
-            Boolean(uploads[def.kind]) &&
-            !hasPendingChanges &&
-            !hasParseError;
-
-          const tileClass = cn(tileBaseClasses, {
-            "border-error-border bg-tile-error text-chip-danger-text shadow-error-soft": hasParseError,
-            "border-success-border bg-tile-success shadow-success-soft": parsedAndSelected && !hasParseError,
-            "border-border bg-surface-muted shadow-surface-md": tileState === "uploaded" && !parsedAndSelected && !hasParseError,
-            "border border-dashed border-border bg-tile-pending shadow-none": tileState === "pending" && !hasParseError && !parsedAndSelected,
-          });
-
-          const chipVariant: ChipVariant = hasParseError
-            ? "danger"
-            : isPublishedReport
-            ? "success"
-            : parsedAndSelected
-            ? "success"
-            : tileState === "uploaded"
-            ? isSelected
-              ? "info"
-              : "muted"
-            : "muted";
-          const chipLabel = hasParseError
-            ? "Error"
-            : isPublishedReport
-            ? "Published"
-            : parsedAndSelected
-            ? "Parsed"
-            : tileState === "uploaded"
-            ? isSelected
-              ? "Ready"
-              : "Uploaded"
-            : "Waiting";
-
-          return (
-            <div key={def.kind} className={tileClass}>
-              <input
-                type="file"
-                accept="application/pdf"
-                className="hidden"
-                ref={(el) => {
-                  replaceInputsRef.current[def.kind] = el;
-                }}
-                onChange={(e) => {
-                  void onReplaceInput(def.kind, e.target.files);
-                }}
-              />
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={uploaded ? isSelected : false}
-                    disabled={!uploaded}
-                    onChange={(e) => toggleSelection(def.kind, e.target.checked)}
-                    title={uploaded ? `Include ${def.label} report` : "Upload report first"}
-                    className="h-[18px] w-[18px] accent-accent disabled:cursor-not-allowed"
-                  />
-                  <div className="min-w-0 text-[13px] font-bold leading-tight tracking-[0.02em]">{def.label}</div>
-                </div>
-                <Chip variant={chipVariant} className="mt-[2px] shrink-0">
-                  {chipLabel}
-                </Chip>
-              </div>
-              <div className="flex flex-1 flex-col gap-1.5 text-[11px]">
-                {uploaded ? (
-                  <>
-                    <div
-                      className={cn("whitespace-pre-wrap break-words", {
-                        "text-[#fecaca]": hasParseError,
-                        "text-text-primary": !hasParseError,
-                      })}
-                    >
-                      {formatReportFilename(uploaded.filename, def.kind)}
-                    </div>
-                    {hasParseError && (
-                      <div className="text-chip-danger-text">
-                        {needsLocatorGuidance
-                          ? `${err} Fix the file and parse again or deselect to continue.`
-                          : err}
-                      </div>
-                    )}
-                    {!isSelected && (
-                      <div className={cn(parsedFlag ? "text-[#60a5fa]" : "text-[#fbbf24]")}>
-                        {parsedFlag ? "Hidden from guest view" : "Deselected until re-selected"}
-                      </div>
-                    )}
-                  </>
-                ) : err ? (
-                  <div className="text-[#fecaca]">{err}</div>
-                ) : (
-                  <div className="text-chip-default-text">Waiting for upload</div>
-                )}
-                {(uploaded || err) && (
-                  <Button
-                    type="button"
-                    onClick={() => onReplace(def.kind)}
-                    variant="soft"
-                    size="sm"
-                    className="self-start rounded-full px-3 py-1.5 text-[11px]"
-                  >
-                    Replace PDF
-                  </Button>
-                )}
-              </div>
-            </div>
-          );
-        }),
-        <div
-          key="publish-tile"
-          className={cn(
-            tileBaseClasses,
-            "justify-between rounded-4lg border border-transparent bg-surface p-5 text-text-primary shadow-surface-md",
-          )}
-        >
-          <div className="flex flex-col gap-2">
-            <div className="text-[14px] font-bold">Publish Session</div>
-            <div className="text-[12px] leading-relaxed text-text-secondary">
-              Finalize the selected reports to update the guest view.
-            </div>
-            <div className="text-[12px] text-text-secondary">{publishStatusText}</div>
-          </div>
-          <Button onClick={onPublish} disabled={disablePublish} variant={publishButtonVariant} className="w-full">
-            {publishLabel}
-          </Button>
-        </div>]}
+          {tiles}
         </div>
       </div>
     );
@@ -1714,7 +1728,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         {session ? (
           <>
             {renderSessionHeader()}
-            {renderDropZone()}
+            {renderUploadAndPublishRow()}
             {renderReportTiles()}
           </>
         ) : (

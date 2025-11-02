@@ -86,6 +86,7 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
     hormones,
     toxins,
     priorityCounts,
+    energyMap,
   } = aggregated;
 
   const showNutrition = nutrition.nutrients.length > 0;
@@ -124,30 +125,27 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
 
           </div>
         </header>
-
-        <div className="h-px w-full bg-white/20" aria-hidden="true" />
-
-        <div className="h-px w-full bg-white/20" aria-hidden="true" />
-
-        <section aria-labelledby="peek-report-legend" className="flex flex-col gap-4">
-          <div className="flex flex-wrap gap-4 rounded-2xl bg-bg-card p-6 md:gap-6 lg:gap-8">
-            {PEAK_PRIORITY_TIERS.map((tier) => (
-              <div key={tier.label} className="flex items-center gap-3">
-                <span className="h-7 w-7 rounded-full" style={{ background: tier.color }} aria-hidden="true" />
-                <span className="text-xl md:text-2xl lg:text-[28px]">{tier.label}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <div className="h-px w-full bg-white/20" aria-hidden="true" />
-
         <section aria-labelledby="key-highlights">
           <div className="flex flex-col gap-6">
             <h2 id="key-highlights" className="text-4xl font-bold md:text-5xl lg:text-6xl">
               PEEK Report
             </h2>
-            <CardEnergyMap status={computeEnergyStatus(priorityCounts)} sex={sex} />
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-wrap gap-4 rounded-2xl bg-white/5 p-6 md:gap-6 lg:gap-8">
+                {PEAK_PRIORITY_TIERS.map((tier) => (
+                  <div key={tier.label} className="flex items-center gap-3">
+                    <span className="h-7 w-7 rounded-full" style={{ background: tier.color }} aria-hidden="true" />
+                    <span className="text-xl md:text-2xl lg:text-[28px]">{tier.label}</span>
+                  </div>
+                ))}
+              </div>
+              <CardEnergyMap
+                status={computeEnergyStatus(priorityCounts)}
+                sex={sex}
+                organValues={energyMap?.organs}
+                chakraValues={energyMap?.chakras}
+              />
+            </div>
           </div>
         </section>
         <div className="h-px w-full bg-white/20" aria-hidden="true" />
