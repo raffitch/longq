@@ -1,14 +1,11 @@
 import React from "react";
 import {
-  CardDonut,
   CardEnergyMap,
-  CardKPI,
-  CardNote,
   FoodCategoryCard,
   HeavyMetalsCard,
   HormonesCard,
   NutritionInsightCard,
-  OverallScoreCard,
+  PEAK_PRIORITY_TIERS,
   ToxinsInsightsCard,
   type FoodItem,
 } from "./components";
@@ -77,35 +74,7 @@ const formatDate = (input?: string | null): string => {
   return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(parsed);
 };
 
-const buildHighlightNote = (topHighItems: AggregatedInsights["topHighItems"]): string => {
-  if (!topHighItems.length) return "No high-priority reactions detected in this session.";
-  const [first, ...rest] = topHighItems;
-  const additional = rest.length ? `, ${rest.map((entry) => entry.item.name).join(", ")}` : "";
-  return `Elevated reactions observed in ${first.category.toLowerCase()} items such as ${first.item.name}${additional}.`;
-};
-
-const buildDonutBadge = (counts: PriorityCounts): { badge: "Very Low" | "Low" | "Medium" | "High" | "Stable"; note: string } => {
-  if (counts.highCount > 4) {
-    return { badge: "Very Low", note: "High priority alerts suggest focusing on immediate dietary realignment." };
-  }
-  if (counts.highCount > 0) {
-    return { badge: "Low", note: "Several high-priority reactions present; consider short-term avoidance protocols." };
-  }
-  if (counts.moderateCount > 3) {
-    return { badge: "Medium", note: "Moderate concerns noted. Support detox pathways and monitor responses." };
-  }
-  return { badge: "Stable", note: "Current responses remain within optimal range. Maintain supportive habits." };
-};
-
 const computeEnergyStatus = (counts: PriorityCounts) => (counts.highCount > 2 ? "Imbalanced" : "Stable");
-
-const computeKpiStatus = (counts: PriorityCounts) => (counts.highCount > 0 ? "Imbalanced" : "Stable");
-
-const noteSeverityFromCounts = (counts: PriorityCounts): "High" | "Medium" | "Low" | "Very Low" => {
-  if (counts.highCount > 0) return "High";
-  if (counts.moderateCount > 0) return "Medium";
-  return "Low";
-};
 
 const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportDate, aggregated, isPreview }) => {
   const {
@@ -115,14 +84,8 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
     hormones,
     toxins,
     priorityCounts,
-    overallScore,
-    scoreStatus,
-    topHighItems,
-    nextSteps,
   } = aggregated;
 
-  const highlightNote = buildHighlightNote(topHighItems);
-  const donutHighlight = buildDonutBadge(priorityCounts);
   const showNutrition = nutrition.nutrients.length > 0;
   const showHeavyMetals = heavyMetals.length > 0;
   const showHormones = hormones.length > 0;
@@ -157,35 +120,21 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
               <span className="text-2xl text-text-primary md:text-4xl">{formatDate(reportDate)}</span>
             </div>
 
-            <div className="flex flex-col">
-              <span className="text-xl md:text-2xl">Status</span>
-              <span className="text-2xl text-text-primary md:text-4xl">
-                {isPreview ? "Preview Mode" : scoreStatus}
-              </span>
-            </div>
           </div>
         </header>
 
         <div className="h-px w-full bg-white/20" aria-hidden="true" />
 
-        <section aria-labelledby="priority-scale">
-          <div className="flex flex-col gap-6">
-            <h2 id="priority-scale" className="text-4xl font-bold md:text-5xl lg:text-6xl">
-              Priority Scale
-            </h2>
-            <div className="flex flex-wrap gap-4 rounded-2xl bg-bg-card p-6 md:gap-6 lg:gap-8">
-              {[
-                { label: "High Priority", color: "#E63946" },
-                { label: "Moderate Priority", color: "#FF8A00" },
-                { label: "Medium Priority", color: "#FFC300" },
-                { label: "Low Priority", color: "#43AA8B" },
-              ].map((entry) => (
-                <div key={entry.label} className="flex items-center gap-3">
-                  <span className="h-7 w-7 rounded-full" style={{ background: entry.color }} aria-hidden="true" />
-                  <span className="text-xl md:text-2xl lg:text-[28px]">{entry.label}</span>
-                </div>
-              ))}
-            </div>
+        <div className="h-px w-full bg-white/20" aria-hidden="true" />
+
+        <section aria-labelledby="peek-report-legend" className="flex flex-col gap-4">
+          <div className="flex flex-wrap gap-4 rounded-2xl bg-bg-card p-6 md:gap-6 lg:gap-8">
+            {PEAK_PRIORITY_TIERS.map((tier) => (
+              <div key={tier.label} className="flex items-center gap-3">
+                <span className="h-7 w-7 rounded-full" style={{ background: tier.color }} aria-hidden="true" />
+                <span className="text-xl md:text-2xl lg:text-[28px]">{tier.label}</span>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -194,28 +143,25 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
         <section aria-labelledby="key-highlights">
           <div className="flex flex-col gap-6">
             <h2 id="key-highlights" className="text-4xl font-bold md:text-5xl lg:text-6xl">
-              Key Highlights
+              PEEK Report
             </h2>
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-              <div className="lg:col-span-5">
-                <CardEnergyMap status={computeEnergyStatus(priorityCounts)} />
-              </div>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:col-span-7">
-                <CardKPI title="Bio-Age Signal" value={Math.round(overallScore)} status={computeKpiStatus(priorityCounts)} />
-                <CardNote title="Digestive Energy" note={highlightNote} severity={noteSeverityFromCounts(priorityCounts)} />
-                <div className="md:col-span-2">
-                  <CardDonut
-                    title="Priority Watch"
-                    value={Math.round(overallScore)}
-                    note={donutHighlight.note}
-                    badge={donutHighlight.badge}
-                  />
-                </div>
-              </div>
-            </div>
+            <CardEnergyMap status={computeEnergyStatus(priorityCounts)} showOnlyMale />
           </div>
         </section>
+        <div className="h-px w-full bg-white/20" aria-hidden="true" />
+        <div className="flex flex-wrap gap-4 rounded-2xl bg-bg-card p-6 md:gap-6 lg:gap-8">
+          {[
+            { label: "High Priority", color: "#E63946" },
+            { label: "Moderate Priority", color: "#FF8A00" },
+            { label: "Medium Priority", color: "#FFC300" },
+            { label: "Low Priority", color: "#43AA8B" },
+          ].map((entry) => (
+            <div key={entry.label} className="flex items-center gap-3">
+              <span className="h-7 w-7 rounded-full" style={{ background: entry.color }} aria-hidden="true" />
+              <span className="text-xl md:text-2xl lg:text-[28px]">{entry.label}</span>
+            </div>
+          ))}
+        </div>
 
         {sections.length > 0 && (
           <>
@@ -280,23 +226,6 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
             </section>
           </>
         )}
-
-        <div className="h-px w-full bg-white/20" aria-hidden="true" />
-
-        <section aria-labelledby="overall-summary" className="flex flex-col gap-6">
-          <h2 id="overall-summary" className="text-4xl font-bold md:text-5xl lg:text-6xl">
-            Overall Summary
-          </h2>
-          <OverallScoreCard
-            overallScore={overallScore}
-            scoreStatus={scoreStatus}
-            lowCount={priorityCounts.lowCount}
-            mediumCount={priorityCounts.mediumCount}
-            moderateCount={priorityCounts.moderateCount}
-            highCount={priorityCounts.highCount}
-            nextSteps={nextSteps}
-          />
-        </section>
 
         <p className="mt-12 px-4 text-lg font-light leading-relaxed text-text-secondary md:px-10 md:text-xl">
           Note: These results provide a snapshot of current wellness indicators. Review with your practitioner before making significant lifestyle changes.

@@ -9,7 +9,9 @@ export { default as NutritionInsightCard } from "./NutritionInsightCard";
 export { default as OverallScoreCard } from "./OverallScoreCard";
 export { default as ToxinsInsightsCard } from "./ToxinsInsightsCard";
 
-export type { EnergyStatus } from "./CardEnergyMap";
+export { PEAK_PRIORITY_TIERS } from "./CardEnergyMap";
+
+export type { EnergyStatus, PeekPriorityTier } from "./CardEnergyMap";
 export type { KPIStatus } from "./CardKPI";
 export type { NoteSeverity } from "./CardNote";
 export type { FoodItem, FoodSeverity } from "./FoodCategoryCard";

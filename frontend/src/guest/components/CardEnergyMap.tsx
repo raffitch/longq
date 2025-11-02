@@ -1,124 +1,428 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { BASE_LAYER_ELEMENTS } from "./energyMap/layers";
+import { PADMASANA_OUTLINE, PADMASANA_VIEWBOX } from "./energyMap/padmasana";
 
-export type EnergyStatus = 'Stable' | 'Imbalanced';
+export type EnergyStatus = "Stable" | "Imbalanced";
+
+type Sex = "male" | "female";
 
 interface CardEnergyMapProps {
   status: EnergyStatus;
   activeNodes?: number[];
-  tooltipCopy?: string;
+  organSectionTitle?: string;
+  sex?: Sex;
+  showOnlyMale?: boolean;
 }
 
-interface ChakraMarker {
-  x: number;
-  y: number;
+type LayerCategory = "structure" | "organ" | "system" | "reproductive";
+
+interface LayerDefinition {
+  id: string;
   name: string;
-  color: string;
+  category: LayerCategory;
 }
 
-const VIEWBOX_WIDTH = 293;
-const VIEWBOX_HEIGHT = 706;
-const NODE_RADIUS = 12;
+interface LayerMetric extends LayerDefinition {
+  element: React.ReactElement;
+  color: string;
+  value: number;
+  opacity: number;
+  priorityLabel: string;
+}
 
-const CHAKRA_MARKERS: ChakraMarker[] = [
-  { x: 147, y: 14, name: 'Crown', color: '#C084FC' },
-  { x: 147, y: 63, name: 'Third Eye', color: '#8B5CF6' },
-  { x: 147, y: 129, name: 'Throat', color: '#38BDF8' },
-  { x: 147, y: 197, name: 'Heart', color: '#34D399' },
-  { x: 147, y: 286, name: 'Solar Plexus', color: '#FACC15' },
-  { x: 147, y: 324, name: 'Sacral', color: '#FB923C' },
-  { x: 147, y: 377, name: 'Root', color: '#F97316' }
+const VIEWBOX = {
+  body: "0 0 293 706",
+  chakra: PADMASANA_VIEWBOX,
+} as const;
+
+const BAR_HEIGHT = 8;
+const BAR_GAP = 6;
+const MIN_OPACITY = 0.2;
+const CHAKRA_RADIUS = 8.8;
+
+const LAYER_DEFINITIONS: LayerDefinition[] = [
+  { id: "male_silhouette", name: "Body Outline", category: "structure" },
+  { id: "stomach", name: "Stomach", category: "organ" },
+  { id: "gallbladder", name: "Gallbladder", category: "organ" },
+  { id: "female_silhouette", name: "Body Outline 2", category: "structure" },
+  { id: "large_intestine", name: "Large Intestine", category: "organ" },
+  { id: "heart", name: "Heart", category: "organ" },
+  { id: "bladder", name: "Bladder", category: "organ" },
+  { id: "kidneys", name: "Kidneys", category: "organ" },
+  { id: "liver", name: "Liver", category: "organ" },
+  { id: "brain", name: "Brain", category: "organ" },
+  { id: "reproductive_female", name: "Reproductive (Female)", category: "reproductive" },
+  { id: "reproductive_male", name: "Reproductive (Male)", category: "reproductive" },
+  { id: "thyroid", name: "Thyroid", category: "organ" },
+  { id: "lungs", name: "Lungs", category: "organ" },
+  { id: "spleen", name: "Spleen", category: "organ" },
+  { id: "small_intestine", name: "Small Intestine", category: "organ" },
+  { id: "lymphatic", name: "Lymphatic System", category: "system" },
 ];
 
-export default function CardEnergyMap({ status, activeNodes = [0, 1, 2, 3, 4, 5, 6], tooltipCopy }: CardEnergyMapProps) {
-  const [hoveredNode, setHoveredNode] = useState<number | null>(null);
+const CHAKRA_POINTS = [
+  { id: "Chakra_01_Crown", name: "Crown", cx: 170.49, cy: 8.8 },
+  { id: "Chakra_02_ThirdEye", name: "Third Eye", cx: 170.49, cy: 62.88 },
+  { id: "Chakra_03_Throat", name: "Throat", cx: 170.49, cy: 115.53 },
+  { id: "Chakra_04_Heart", name: "Heart", cx: 170.49, cy: 172.72 },
+  { id: "Chakra_05_SolarPlexus", name: "Solar Plexus", cx: 170.49, cy: 224.12 },
+  { id: "Chakra_06_Sacral", name: "Sacral", cx: 170.49, cy: 278.29 },
+  { id: "Chakra_07_Root", name: "Root", cx: 170.49, cy: 329.82 },
+];
 
-  const statusColor = status === 'Stable' ? 'border-accent-teal' : 'border-priority-high';
-  const statusBg = status === 'Stable' ? 'bg-accent-teal/5' : 'bg-priority-high/5';
-  const statusShadow = status === 'Stable' ? 'shadow-teal-glow' : '';
+const STRUCTURE_COLOR = "#06B6D4";
 
-  const tooltipTarget = hoveredNode !== null ? CHAKRA_MARKERS[hoveredNode] : null;
-  const resolvedTooltip = hoveredNode !== null ? CHAKRA_MARKERS[hoveredNode].name : tooltipCopy;
+export interface PeakPriorityTier {
+  label: string;
+  color: string;
+  min: number;
+  range: string;
+}
 
-  const tooltipStyle = tooltipTarget
-    ? {
-        left: `${(tooltipTarget.x / VIEWBOX_WIDTH) * 100}%`,
-        top: `${(tooltipTarget.y / VIEWBOX_HEIGHT) * 100}%`,
+export const PEAK_PRIORITY_TIERS: PeakPriorityTier[] = [
+  { label: "Very High", color: "#EF4444", min: 91, range: "91 – 100" },
+  { label: "High", color: "#F97316", min: 76, range: "76 – 90" },
+  { label: "Neutral", color: "#9CA3AF", min: 26, range: "26 – 75" },
+  { label: "Low", color: "#22C55E", min: 11, range: "11 – 25" },
+  { label: "Very Low", color: "#0EA5E9", min: 0, range: "0 – 10" },
+];
+
+const clampOpacity = (value: number) => Math.max(MIN_OPACITY, Math.min(1, value));
+
+const ORGAN_SORT_ORDER = [
+  "brain",
+  "thyroid",
+  "lungs",
+  "heart",
+  "lymphatic",
+  "liver",
+  "spleen",
+  "stomach",
+  "gallbladder",
+  "kidneys",
+  "small_intestine",
+  "large_intestine",
+  "bladder",
+  "reproductive_male",
+  "reproductive_female",
+] as const;
+
+const ORGAN_ORDER_INDEX = new Map<string, number>(ORGAN_SORT_ORDER.map((id, index) => [id, index]));
+
+const DEFAULT_SEX: Sex = "male";
+
+const MALE_EXCLUSIVE_LAYER_IDS = new Set(["male_silhouette", "reproductive_male"]);
+const FEMALE_EXCLUSIVE_LAYER_IDS = new Set(["female_silhouette", "reproductive_female"]);
+
+const shouldIncludeLayer = (definition: LayerDefinition, sex: Sex, showOnlyMale: boolean) => {
+  if (showOnlyMale && FEMALE_EXCLUSIVE_LAYER_IDS.has(definition.id)) {
+    return false;
+  }
+  if (sex === "male" && FEMALE_EXCLUSIVE_LAYER_IDS.has(definition.id)) {
+    return false;
+  }
+
+  if (sex === "female" && MALE_EXCLUSIVE_LAYER_IDS.has(definition.id)) {
+    return false;
+  }
+
+  return true;
+};
+
+const getPriorityForValue = (value: number) => {
+  const match = PEAK_PRIORITY_TIERS.find((entry) => value >= entry.min);
+  return match ?? PEAK_PRIORITY_TIERS[PEAK_PRIORITY_TIERS.length - 1];
+};
+
+const getLayerValue = (index: number, highlighted: boolean) => {
+  const base = 48 + (index % 5) * 7;
+  return Math.max(10, Math.min(100, base + (highlighted ? 28 : 0)));
+};
+
+const getChakraValue = (index: number, highlighted: boolean) => {
+  const base = 40 + (index % 4) * 10;
+  return Math.max(10, Math.min(100, base + (highlighted ? 32 : 0)));
+};
+
+export default function CardEnergyMap({
+  status: _status,
+  activeNodes = [],
+  organSectionTitle,
+  sex,
+  showOnlyMale = false,
+}: CardEnergyMapProps) {
+  const organCardRef = useRef<HTMLDivElement>(null);
+  const chakraCardRef = useRef<HTMLDivElement>(null);
+  const [organCardHeight, setOrganCardHeight] = useState<number | null>(null);
+  const [chakraCardHeight, setChakraCardHeight] = useState<number | null>(null);
+  const resolvedSex = sex ?? DEFAULT_SEX;
+  const effectiveShowOnlyMale = resolvedSex === "female" ? false : showOnlyMale;
+  const resolvedSectionTitle = organSectionTitle ?? "Organs";
+  const activeChakraSet = useMemo(() => new Set(activeNodes), [activeNodes]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") {
+      setOrganCardHeight(null);
+      return;
+    }
+    const element = organCardRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setOrganCardHeight(entry.contentRect.height);
       }
-    : undefined;
+    });
+    observer.observe(element);
+    setOrganCardHeight(element.getBoundingClientRect().height);
+    return () => observer.disconnect();
+  }, []);
 
-  const resetHover = () => setHoveredNode(null);
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") {
+      setChakraCardHeight(null);
+      return;
+    }
+    const element = chakraCardRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setChakraCardHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(element);
+    setChakraCardHeight(element.getBoundingClientRect().height);
+    return () => observer.disconnect();
+  }, []);
+
+  const layerMetrics = useMemo<LayerMetric[]>(() => {
+    const chakraCount = CHAKRA_POINTS.length || 1;
+    return LAYER_DEFINITIONS.map((definition, index) => {
+      if (!shouldIncludeLayer(definition, resolvedSex, effectiveShowOnlyMale)) {
+        return null;
+      }
+
+      const baseElement = BASE_LAYER_ELEMENTS[definition.id];
+      if (!baseElement) {
+        if (import.meta.env?.DEV) {
+          console.warn(`Missing base layer element for id "${definition.id}".`);
+        }
+        return null;
+      }
+
+      const highlighted = activeChakraSet.has(index % chakraCount);
+      const value = getLayerValue(index, highlighted);
+      const opacity =
+        definition.category === "structure"
+          ? 1
+          : clampOpacity(value / 100);
+      const priority = getPriorityForValue(value);
+      const rawColor = definition.category === "structure" ? STRUCTURE_COLOR : priority.color;
+
+      const elementProps: Record<string, unknown> = {
+        key: definition.id,
+        opacity,
+      };
+
+      if (definition.category === "structure") {
+        elementProps.stroke = rawColor;
+        elementProps.fill = "none";
+      } else {
+        elementProps.fill = rawColor;
+      }
+
+      const styledElement = React.cloneElement(baseElement, elementProps);
+
+      return {
+        ...definition,
+        element: styledElement,
+        color: rawColor,
+        value,
+        opacity,
+        priorityLabel: priority.label,
+      } as LayerMetric;
+    }).filter((metric): metric is LayerMetric => metric !== null);
+  }, [activeChakraSet, resolvedSex, effectiveShowOnlyMale]);
+
+  const barMetrics = useMemo(() => {
+    const metrics = layerMetrics.filter((metric) => metric.category !== "structure");
+    metrics.sort((a, b) => {
+      const orderA = ORGAN_ORDER_INDEX.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+      const orderB = ORGAN_ORDER_INDEX.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.name.localeCompare(b.name);
+    });
+    return metrics;
+  }, [layerMetrics]);
+
+  const chakraMetrics = useMemo(
+    () =>
+      CHAKRA_POINTS.map((chakra, index) => {
+        const isActive = activeChakraSet.has(index);
+        const value = getChakraValue(index, isActive);
+        const priority = getPriorityForValue(value);
+        return {
+          ...chakra,
+          value,
+          color: priority.color,
+          priorityLabel: priority.label,
+          isActive,
+        };
+      }),
+    [activeChakraSet],
+  );
+
+  const organFigureStyle: React.CSSProperties | undefined =
+    organCardHeight != null
+      ? { height: organCardHeight, minHeight: organCardHeight }
+      : undefined;
+  const chakraFigureStyle: React.CSSProperties | undefined =
+    chakraCardHeight != null
+      ? { height: chakraCardHeight, minHeight: chakraCardHeight }
+      : undefined;
 
   return (
-    <div className="flex flex-col gap-6 p-8 bg-bg-card rounded-2xl shadow-card h-full">
-      <div className="flex flex-col gap-6">
-        <h3 className="text-3xl md:text-4xl font-normal leading-tight">Energy Flow Balanced</h3>
-        <div className={`flex items-center justify-center px-4 h-[51px] rounded-full border ${statusColor} ${statusBg} ${statusShadow} w-fit`}>
-          <span className="text-2xl md:text-[28px] font-light leading-tight">{status}</span>
+    <div className="flex h-full flex-col gap-6 rounded-2xl bg-bg-card px-8 py-9 shadow-card">
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-5 md:flex-row md:items-stretch md:gap-8">
+          <div className="flex w-full md:flex-1">
+            <div
+              className="flex w-full items-center justify-center rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
+              style={organFigureStyle}
+            >
+              <svg
+                viewBox={VIEWBOX.body}
+                xmlns="http://www.w3.org/2000/svg"
+                preserveAspectRatio="xMidYMid meet"
+                className="h-auto w-full max-w-[320px] overflow-visible sm:max-w-[360px] md:h-full md:w-auto md:max-h-full"
+                role="img"
+                aria-label="Energy layer map"
+              >
+                {layerMetrics.map((layer) => layer.element)}
+              </svg>
+            </div>
+          </div>
+
+          <div className="w-full md:w-[240px] lg:w-[280px]">
+            <div
+              ref={organCardRef}
+              className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">{resolvedSectionTitle}</span>
+                <span className="text-sm text-text-tertiary">Value</span>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                {barMetrics.map((metric) => (
+                  <div key={`bar-${metric.id}`} className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between text-sm text-text-secondary">
+                      <span className="font-medium uppercase tracking-wide">{metric.name}</span>
+                      <div className="flex items-baseline gap-2 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">{metric.priorityLabel}</span>
+                        <span className="text-sm font-semibold text-text-primary">{metric.value}</span>
+                      </div>
+                    </div>
+                    <div
+                      role="img"
+                      aria-label={`${metric.name}: ${metric.value} (${metric.priorityLabel})`}
+                      className="relative h-2 w-full overflow-hidden rounded-full bg-white/10"
+                    >
+                      <div
+                        className="absolute inset-y-0 left-0 rounded-full"
+                        style={{ width: `${metric.value}%`, backgroundColor: metric.color }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="relative flex items-center justify-center flex-1">
-        <div className="relative w-full max-w-[320px]" onMouseLeave={resetHover}>
-        <svg width="293" height="706" viewBox="0 0 293 706" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <g id="anatomogram-silhouette" className="stroke-accent-teal">
-            <path d="M110.238 46.05C104.508 44.0292 105.238 53.8377 105.988 56.9165C106.739 59.9953 108.342 60.5196 109.782 62.6357C111.912 65.7717 111.212 68.069 116.953 66.8393C116.913 69.8896 117.572 72.7873 118.982 75.5135C119.519 76.5525 120.584 77.5629 120.98 78.4589C121.721 80.1365 122.887 91.1555 122.887 93.3955C122.887 93.8626 122.765 94.1676 122.573 94.587C121.71 96.4553 112.835 99.6962 110.36 100.926C103.818 104.167 96.9914 108.704 90.4997 111.583C85.6614 113.727 80.3768 113.765 75.4878 115.653C53.619 124.079 44.0236 149.043 45.8696 169.833C46.0522 171.854 46.955 174.198 47.0462 176.162C47.2491 180.261 43.2223 189.774 41.9442 194.368C39.1548 204.358 36.1626 216.683 35.9699 226.987C35.8887 231.162 37.3595 236.957 36.7509 240.713C36.4263 242.705 34.2557 246.804 33.5152 249.177C28.2509 265.954 28.9203 283.578 27.693 300.87C27.0844 309.448 26.4352 319.438 25.2282 327.874C24.4573 333.259 17.6107 338.826 14.2837 343.201C10.338 348.396 9.93225 358.128 7.57902 364.362C6.66613 366.783 1.82783 373.408 1.74668 374.8C1.61482 377.211 6.65599 377.002 8.39048 376.62C10.7741 376.106 13.7461 372.665 15.3589 370.949C15.5922 370.692 15.3386 370.234 16.2616 370.472L13.5027 394.045C13.5737 397.477 12.2043 406.77 17.6107 400.136C19.406 397.925 20.1769 395.17 20.9681 392.529C21.6172 390.404 24.3457 377.354 24.9543 376.783C25.1471 376.601 26.0194 376.706 25.7354 377.335C25.5832 386.41 24.153 395.522 25.4006 404.568C30.5432 406.97 31.2533 398.268 31.9329 395.036C32.8559 390.604 33.4341 386.086 34.0325 381.606C34.7222 381.52 34.4078 382.454 34.4281 382.902C34.5701 386.305 33.7992 400.346 35.5844 402.233C36.3553 403.053 38.0695 402.957 38.7897 402.138C39.9663 400.803 39.9866 395.427 40.3517 393.492C41.7211 394.236 42.0456 397.905 43.1107 398.506C43.7294 398.859 45.6262 398.887 46.0826 398.325C47.4925 396.571 46.0015 381.663 46.2754 378.088C46.4985 375.2 47.523 372.388 47.8476 369.538C48.7807 361.35 49.4806 347.529 48.1417 339.579C47.8374 337.816 46.9042 335.814 46.7014 334.251C46.2348 330.705 50.9108 321.63 52.3106 317.684C56.4591 305.931 60.6686 293.234 64.1477 281.3C65.7402 275.848 67.5761 269.786 67.9818 264.124C68.4484 257.556 67.3834 248.014 68.4788 241.943C68.8744 239.779 71.4001 236.347 72.4043 234.126C75.5994 227.044 77.8004 219.723 80.032 212.346C81.6549 214.795 82.4967 217.159 82.943 220C84.2515 228.245 85.5904 238.74 86.1483 247.423C86.7062 256.107 85.9353 265.42 86.5337 274.161C86.7265 277.106 88.2074 280.824 88.1567 283.426C88.1161 285.695 86.4019 289.841 85.8846 292.453C84.6573 298.62 84.1399 304.292 85.7324 310.468C78.1149 347.519 68.8947 384.551 72.739 422.632C74.1286 436.31 78.3178 451.256 77.8917 464.973C77.7092 470.768 75.8631 476.926 75.5081 482.779C75.2444 487.163 75.9848 492.206 75.4574 496.467C75.1734 498.735 73.7837 501.299 73.165 503.587C64.5636 535.595 69.057 574.944 70.3858 607.848C71.0349 623.91 72.5361 634.29 63.5797 648.626C57.8082 657.872 44.6727 674.019 36.619 681.559C34.0122 684 30.7461 684.934 28.3523 687.889C26.5062 690.167 25.1673 693.884 26.4048 696.677C26.486 696.868 29.5188 699.346 29.7926 699.451C30.8171 699.851 31.7097 699.575 32.5719 699.813C33.3428 700.023 34.2049 701.272 35.5134 701.51C37.4305 701.863 38.4549 700.576 39.6721 700.9C40.8893 701.224 42.0659 703.569 45.2915 703.826C51.0224 704.284 53.7306 699.499 57.8488 697.43C60.0904 696.305 62.5653 696.315 64.9896 695.238C72.9114 691.711 76.208 683.485 81.4114 678.013C86.6149 672.542 94.1614 670.55 99.1823 664.65C106.475 656.099 100.004 652.239 100.004 643.813C100.004 642.802 100.734 642.554 100.968 641.83C102.235 637.95 99.8619 634.09 99.5678 630.153C98.7665 619.42 102.814 598.907 105.228 587.926C107.875 575.897 111.344 569.434 116.233 558.558C120.929 548.102 121.071 537.035 120.108 525.835C119.519 518.953 117.298 511.327 116.963 504.674C116.791 501.328 117.724 501.843 118.88 499.431C123.455 489.88 122.573 481.625 123.272 471.636C123.769 464.439 129.409 456.251 132.249 449.264C140.13 429.876 143.346 409.087 148.742 389.031C149.594 388.755 149.31 389.756 149.442 390.213C155.193 409.954 158.764 430.057 166.919 449.15C171.088 458.92 175.53 463.905 176.575 474.962C177.285 482.578 176.879 488.679 179.628 496.219C181.87 502.338 183.797 502.262 183.29 509.849C182.509 521.574 180.074 530.477 181.322 542.888C182.742 556.985 190.005 564.02 194.062 576.574C198.221 589.442 202.826 613.053 203.434 626.417C203.657 631.297 200.868 637.235 202.46 641.439C202.775 642.268 203.769 643.241 203.83 643.87C204.043 646.11 202.4 651.448 202.237 654.231C201.527 666.613 208.699 667.9 217.787 674.172C226.875 680.444 229.127 692.045 240.69 696.077C242.354 696.658 243.956 696.639 245.579 697.421C249.515 699.317 252.578 705.018 258.086 704.531C261.311 704.246 263.37 701.186 264.537 700.89C265.906 700.547 266.931 702.015 269.385 701.024C271.373 700.223 271.14 700.213 273.443 699.642C274.842 699.289 276.688 697.497 277.469 696.363C278.555 694.79 277.449 694.704 277.368 693.522C277.165 690.824 277.794 690.92 275.867 688.26C273.94 685.601 272.905 685.896 270.603 684.295C265.277 680.597 259.364 672.008 255.236 666.813C249.728 659.883 242.77 651.648 238.023 644.394C229.898 631.964 232.829 611.47 233.032 597.077C233.428 568.433 235.274 533.937 227.798 506.246C226.916 502.977 224.786 498.411 224.4 495.332C223.924 491.529 224.573 487.039 224.35 483.122C223.944 476.049 221.854 469.052 221.57 461.97C221.002 447.996 225.07 433.489 225.922 419.629C227.545 393.206 223.437 367.146 217.909 341.419C215.829 331.753 211.63 319.486 210.565 310.087C210.139 306.331 211.255 301.632 210.91 297.514C210.423 291.786 207.319 286.209 207.765 280.442C208.972 264.781 208.313 249.025 209.733 233.297C210.139 228.846 210.717 216.654 213.172 213.528C213.375 213.261 213.496 212.517 214.074 213.061C214.277 213.251 215.119 217.522 215.373 218.341C216.874 223.212 218.598 227.959 220.718 232.62C221.611 234.603 224.268 238.33 224.644 240.065C225.81 245.431 224.755 255.545 225.131 261.512C225.435 266.345 226.652 271.644 227.92 276.334C232.941 294.883 240.153 313.661 246.837 331.725C243.48 342.944 244.332 355.717 245.275 367.308C245.498 369.986 246.583 372.703 246.857 375.105C247.588 381.615 245.792 390.337 246.959 396.552C247.009 396.857 247.131 397.505 247.506 397.581C247.882 397.658 250.144 397.639 250.347 397.515C250.661 397.324 251.685 393.073 252.761 392.739C253.126 394.579 253.349 403.977 257.335 401.299C257.934 400.889 258.684 398.373 258.684 397.743V380.853L263.979 403.158C264.943 404.301 266.637 403.901 267.803 403.262C268.919 394.14 267.458 384.847 267.773 375.658C268.543 375.791 268.412 376.449 268.574 376.945C270.136 381.796 272.996 399.049 277.642 401.089C280.867 402.5 279.64 397.829 279.61 396.628C279.387 387.468 278.119 378.451 277.236 369.348C279.65 371.33 281.466 374.638 284.813 375.4C286.568 375.791 291.619 376.239 291.457 373.646C291.376 372.264 287.501 367.212 286.649 365.506C283.119 358.481 283.687 348.863 279.143 342.496C276.658 339.026 268.98 331.934 268.249 328.236C267.184 322.784 266.667 314.729 266.19 309.019C264.628 290.375 265.531 269.5 260.713 251.436C259.749 247.852 256.808 242.143 256.341 239.216C255.966 236.881 257.011 234.164 257.122 231.829C257.761 218.684 254.556 205.197 251.067 192.567C249.576 187.191 246.228 179.946 246.441 174.646C246.594 170.881 247.527 166.621 247.638 162.779C248.267 141.132 234.807 118.694 211.701 113.012C198.87 109.857 193.727 106.235 182.336 100.897C178.005 98.8669 173.248 97.3418 169.099 95.1494C168.065 93.5481 168.744 83.9016 169.079 81.5186C169.647 77.4294 171.108 76.1617 172.071 72.8254C172.355 71.8436 172.792 67.4017 173.015 67.2111C173.167 67.0776 175.784 67.173 176.96 66.2769C178.036 65.4572 178.279 63.7224 179.04 62.6643C179.912 61.4347 181.332 60.4338 181.991 59.1279C183.29 56.5733 184.061 48.3663 181.88 46.3646C180.024 44.6488 178.462 46.6982 178.117 46.3741L180.125 32.8291C179.283 10.0571 156.37 -2.87787 133.72 2.97479C113.647 8.16974 104.092 27.7771 110.198 46.0119L110.238 46.05ZM110.238 46.05C110.147 46.1358 110.299 46.4313 110.431 46.4217C110.867 46.3931 110.421 45.8784 110.238 46.05Z" stroke="#07D9E0" stroke-width="2" stroke-miterlimit="10"/>
-            <path d="M109.771 45.0952C109.816 45.0528 109.878 45.0519 109.938 45.0757L109.965 45.4663L109.915 45.4546C109.815 45.4069 109.722 45.2315 109.749 45.1353L109.771 45.0952Z" stroke="#07D9E0"/>
-          </g>
+        <div className="flex flex-col gap-5 md:flex-row md:items-stretch md:gap-8">
+          <div className="flex w-full md:flex-1">
+            <div
+              className="flex w-full items-center justify-center rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
+              style={chakraFigureStyle}
+            >
+              <svg
+                viewBox={VIEWBOX.chakra}
+                xmlns="http://www.w3.org/2000/svg"
+                preserveAspectRatio="xMidYMid meet"
+                className="h-auto w-full max-w-[320px] sm:max-w-[360px] md:h-full md:w-auto md:max-h-full"
+                role="img"
+                aria-label="Chakra figure"
+              >
+                {React.cloneElement(PADMASANA_OUTLINE, {
+                  key: "padmasana-outline",
+                  stroke: STRUCTURE_COLOR,
+                  fill: "none",
+                  opacity: 1,
+                })}
+                {chakraMetrics.map((chakra) => (
+                  <g key={chakra.id} id={chakra.id}>
+                    <title>{`${chakra.name}: ${chakra.value} (${chakra.priorityLabel})`}</title>
+                    <circle
+                      cx={chakra.cx}
+                      cy={chakra.cy}
+                      r={CHAKRA_RADIUS}
+                      fill={chakra.color}
+                      opacity={Math.max(0.35, chakra.value / 100)}
+                      aria-label={`${chakra.name} activation`}
+                    />
+                  </g>
+                ))}
+              </svg>
+            </div>
+          </div>
 
-          <g id="chakra-backing" opacity="0.25">
-            {CHAKRA_MARKERS.map((chakra) => (
-              <circle key={`halo-${chakra.name}`} cx={chakra.x} cy={chakra.y} r={NODE_RADIUS + 10} fill={chakra.color} />
-            ))}
-          </g>
+          <div className="w-full md:w-[240px] lg:w-[280px]">
+            <div
+              ref={chakraCardRef}
+              className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">Chakras</span>
+                <span className="text-sm text-text-tertiary">Value</span>
+              </div>
 
-          <g id="chakra-indicators">
-            {CHAKRA_MARKERS.map((chakra, index) => {
-              const isActive = activeNodes.includes(index);
-              const isHovered = hoveredNode === index;
-              const ringStroke = isActive || isHovered ? chakra.color : '#1F2937';
-
-              return (
-                <g key={chakra.name}>
-                  <circle
-                    cx={chakra.x}
-                    cy={chakra.y}
-                    r={NODE_RADIUS + 4}
-                    fill="none"
-                    stroke={ringStroke}
-                    strokeWidth={isHovered ? 3 : 2}
-                    opacity={isActive || isHovered ? 0.6 : 0.2}
-                  />
-                  <circle
-                    cx={chakra.x}
-                    cy={chakra.y}
-                    r={NODE_RADIUS}
-                    fill={isActive ? chakra.color : '#0F172A'}
-                    stroke={isActive ? '#0EA5E9' : '#1E293B'}
-                    strokeWidth={isActive ? 2 : 1}
-                    className="cursor-pointer transition-transform duration-200 hover:scale-105 focus-visible:scale-105"
-                    onMouseEnter={() => setHoveredNode(index)}
-                    onFocus={() => setHoveredNode(index)}
-                    onBlur={() => setHoveredNode((prev) => (prev === index ? null : prev))}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={chakra.name}
-                  />
-                </g>
-              );
-            })}
-          </g>
-        </svg>
-
-        <div className="absolute inset-0 pointer-events-none">
-          <div
-            className="absolute min-w-[140px] max-w-[180px] px-3 py-2 rounded-lg bg-black/80 text-white text-xs leading-snug text-center translate-x-[-50%] -translate-y-full"
-            style={tooltipStyle ?? { left: '50%', top: '92%' }}
-          >
-            {resolvedTooltip ?? 'Hover chakras to inspect'}
+              <div className="flex flex-col gap-2">
+                {chakraMetrics.map((chakra) => (
+                  <div key={`chakra-${chakra.id}`} className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between text-sm text-text-secondary">
+                      <span className="font-medium uppercase tracking-wide">{chakra.name}</span>
+                      <div className="flex items-baseline gap-2 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">{chakra.priorityLabel}</span>
+                        <span className="text-sm font-semibold text-text-primary">{chakra.value}</span>
+                      </div>
+                    </div>
+                    <div
+                      role="img"
+                      aria-label={`${chakra.name}: ${chakra.value} (${chakra.priorityLabel})`}
+                      className="relative h-2 w-full overflow-hidden rounded-full bg-white/10"
+                    >
+                      <div
+                        className="absolute inset-y-0 left-0 rounded-full"
+                        style={{ width: `${chakra.value}%`, backgroundColor: chakra.color }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
   );
 }
+
+export { getPriorityForValue, clampOpacity };
