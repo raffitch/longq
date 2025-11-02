@@ -151,10 +151,10 @@ export default function CardEnergyMap({
   sex,
   showOnlyMale = false,
 }: CardEnergyMapProps) {
-  const organCardRef = useRef<HTMLDivElement>(null);
-  const chakraCardRef = useRef<HTMLDivElement>(null);
-  const [organCardHeight, setOrganCardHeight] = useState<number | null>(null);
-  const [chakraCardHeight, setChakraCardHeight] = useState<number | null>(null);
+  const anthroposSlidersRef = useRef<HTMLDivElement>(null);
+  const padmasanaSlidersRef = useRef<HTMLDivElement>(null);
+  const [anthroposSlidersHeight, setAnthroposSlidersHeight] = useState<number | null>(null);
+  const [padmasanaSlidersHeight, setPadmasanaSlidersHeight] = useState<number | null>(null);
   const resolvedSex = sex ?? DEFAULT_SEX;
   const effectiveShowOnlyMale = resolvedSex === "female" ? false : showOnlyMale;
   const resolvedSectionTitle = organSectionTitle ?? "Organs";
@@ -162,41 +162,41 @@ export default function CardEnergyMap({
 
   useEffect(() => {
     if (typeof ResizeObserver === "undefined") {
-      setOrganCardHeight(null);
+      setAnthroposSlidersHeight(null);
       return;
     }
-    const element = organCardRef.current;
+    const element = anthroposSlidersRef.current;
     if (!element) {
       return;
     }
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
-        setOrganCardHeight(entry.contentRect.height);
+        setAnthroposSlidersHeight(entry.contentRect.height);
       }
     });
     observer.observe(element);
-    setOrganCardHeight(element.getBoundingClientRect().height);
+    setAnthroposSlidersHeight(element.getBoundingClientRect().height);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
     if (typeof ResizeObserver === "undefined") {
-      setChakraCardHeight(null);
+      setPadmasanaSlidersHeight(null);
       return;
     }
-    const element = chakraCardRef.current;
+    const element = padmasanaSlidersRef.current;
     if (!element) {
       return;
     }
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
-        setChakraCardHeight(entry.contentRect.height);
+        setPadmasanaSlidersHeight(entry.contentRect.height);
       }
     });
     observer.observe(element);
-    setChakraCardHeight(element.getBoundingClientRect().height);
+    setPadmasanaSlidersHeight(element.getBoundingClientRect().height);
     return () => observer.disconnect();
   }, []);
 
@@ -249,7 +249,7 @@ export default function CardEnergyMap({
     }).filter((metric): metric is LayerMetric => metric !== null);
   }, [activeChakraSet, resolvedSex, effectiveShowOnlyMale]);
 
-  const barMetrics = useMemo(() => {
+  const anthroposSliderMetrics = useMemo(() => {
     const metrics = layerMetrics.filter((metric) => metric.category !== "structure");
     metrics.sort((a, b) => {
       const orderA = ORGAN_ORDER_INDEX.get(a.id) ?? Number.MAX_SAFE_INTEGER;
@@ -262,7 +262,7 @@ export default function CardEnergyMap({
     return metrics;
   }, [layerMetrics]);
 
-  const chakraMetrics = useMemo(
+  const padmasanaSliderMetrics = useMemo(
     () =>
       CHAKRA_POINTS.map((chakra, index) => {
         const isActive = activeChakraSet.has(index);
@@ -279,23 +279,23 @@ export default function CardEnergyMap({
     [activeChakraSet],
   );
 
-  const organFigureStyle: React.CSSProperties | undefined =
-    organCardHeight != null
-      ? { height: organCardHeight, minHeight: organCardHeight }
+  const anthroposSilouhetteStyle: React.CSSProperties | undefined =
+    anthroposSlidersHeight != null
+      ? { height: anthroposSlidersHeight, minHeight: anthroposSlidersHeight }
       : undefined;
-  const chakraFigureStyle: React.CSSProperties | undefined =
-    chakraCardHeight != null
-      ? { height: chakraCardHeight, minHeight: chakraCardHeight }
+  const padmasanaSilouhetteStyle: React.CSSProperties | undefined =
+    padmasanaSlidersHeight != null
+      ? { height: padmasanaSlidersHeight, minHeight: padmasanaSlidersHeight }
       : undefined;
 
   return (
     <div className="flex h-full flex-col gap-6 rounded-2xl bg-bg-card px-8 py-9 shadow-card">
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-5 md:flex-row md:items-stretch md:gap-8">
-          <div className="flex w-full md:flex-1">
+          <div className="anthropos-card flex w-full md:flex-1">
             <div
-              className="flex w-full items-center justify-center rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
-              style={organFigureStyle}
+              className="anthropos-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
+              style={anthroposSilouhetteStyle}
             >
               <svg
                 viewBox={VIEWBOX.body}
@@ -303,16 +303,16 @@ export default function CardEnergyMap({
                 preserveAspectRatio="xMidYMid meet"
                 className="h-auto w-full max-w-[320px] overflow-visible sm:max-w-[360px] md:h-full md:w-auto md:max-h-full"
                 role="img"
-                aria-label="Energy layer map"
+                aria-label="Anthropos silouhette"
               >
                 {layerMetrics.map((layer) => layer.element)}
               </svg>
             </div>
           </div>
 
-          <div className="w-full md:w-[240px] lg:w-[280px]">
+          <div className="anthropos-sliders w-full md:w-[240px] lg:w-[280px]">
             <div
-              ref={organCardRef}
+              ref={anthroposSlidersRef}
               className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
             >
               <div className="flex items-center justify-between">
@@ -321,8 +321,8 @@ export default function CardEnergyMap({
               </div>
 
               <div className="flex flex-col gap-2.5">
-                {barMetrics.map((metric) => (
-                  <div key={`bar-${metric.id}`} className="flex flex-col gap-1.5">
+                {anthroposSliderMetrics.map((metric) => (
+                  <div key={`anthropos-slider-${metric.id}`} className="anthropos-slider flex flex-col gap-1.5">
                     <div className="flex items-center justify-between text-sm text-text-secondary">
                       <span className="font-medium uppercase tracking-wide">{metric.name}</span>
                       <div className="flex items-baseline gap-2 text-right">
@@ -333,10 +333,10 @@ export default function CardEnergyMap({
                     <div
                       role="img"
                       aria-label={`${metric.name}: ${metric.value} (${metric.priorityLabel})`}
-                      className="relative h-2 w-full overflow-hidden rounded-full bg-white/10"
+                      className="anthropos-slider-track relative h-2 w-full overflow-hidden rounded-full bg-white/10"
                     >
                       <div
-                        className="absolute inset-y-0 left-0 rounded-full"
+                        className="anthropos-slider-fill absolute inset-y-0 left-0 rounded-full"
                         style={{ width: `${metric.value}%`, backgroundColor: metric.color }}
                       />
                     </div>
@@ -348,10 +348,10 @@ export default function CardEnergyMap({
         </div>
 
         <div className="flex flex-col gap-5 md:flex-row md:items-stretch md:gap-8">
-          <div className="flex w-full md:flex-1">
+          <div className="padmasana-card flex w-full md:flex-1">
             <div
-              className="flex w-full items-center justify-center rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
-              style={chakraFigureStyle}
+              className="padmasana-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
+              style={padmasanaSilouhetteStyle}
             >
               <svg
                 viewBox={VIEWBOX.chakra}
@@ -359,7 +359,7 @@ export default function CardEnergyMap({
                 preserveAspectRatio="xMidYMid meet"
                 className="h-auto w-full max-w-[320px] sm:max-w-[360px] md:h-full md:w-auto md:max-h-full"
                 role="img"
-                aria-label="Chakra figure"
+                aria-label="Padmasana silouhette"
               >
                 {React.cloneElement(PADMASANA_OUTLINE, {
                   key: "padmasana-outline",
@@ -367,7 +367,7 @@ export default function CardEnergyMap({
                   fill: "none",
                   opacity: 1,
                 })}
-                {chakraMetrics.map((chakra) => (
+                {padmasanaSliderMetrics.map((chakra) => (
                   <g key={chakra.id} id={chakra.id}>
                     <title>{`${chakra.name}: ${chakra.value} (${chakra.priorityLabel})`}</title>
                     <circle
@@ -384,9 +384,9 @@ export default function CardEnergyMap({
             </div>
           </div>
 
-          <div className="w-full md:w-[240px] lg:w-[280px]">
+          <div className="padmasana-sliders w-full md:w-[240px] lg:w-[280px]">
             <div
-              ref={chakraCardRef}
+              ref={padmasanaSlidersRef}
               className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
             >
               <div className="flex items-center justify-between">
@@ -395,8 +395,8 @@ export default function CardEnergyMap({
               </div>
 
               <div className="flex flex-col gap-2">
-                {chakraMetrics.map((chakra) => (
-                  <div key={`chakra-${chakra.id}`} className="flex flex-col gap-1.5">
+                {padmasanaSliderMetrics.map((chakra) => (
+                  <div key={`padmasana-slider-${chakra.id}`} className="padmasana-slider flex flex-col gap-1.5">
                     <div className="flex items-center justify-between text-sm text-text-secondary">
                       <span className="font-medium uppercase tracking-wide">{chakra.name}</span>
                       <div className="flex items-baseline gap-2 text-right">
@@ -407,10 +407,10 @@ export default function CardEnergyMap({
                     <div
                       role="img"
                       aria-label={`${chakra.name}: ${chakra.value} (${chakra.priorityLabel})`}
-                      className="relative h-2 w-full overflow-hidden rounded-full bg-white/10"
+                      className="padmasana-slider-track relative h-2 w-full overflow-hidden rounded-full bg-white/10"
                     >
                       <div
-                        className="absolute inset-y-0 left-0 rounded-full"
+                        className="padmasana-slider-fill absolute inset-y-0 left-0 rounded-full"
                         style={{ width: `${chakra.value}%`, backgroundColor: chakra.color }}
                       />
                     </div>
