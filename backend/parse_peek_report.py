@@ -30,6 +30,7 @@ except Exception:
 ARROW = r"(?:->|→|➔|➜|:)"
 CHEVR = r"(?:>|›)"
 VALUE_RE = re.compile(r"(\d{1,3})\b")
+TOKEN_SPLIT_RE = re.compile(rf"\s*(?:{ARROW}|{CHEVR}|\|)\s*")
 
 # Organ IDs your UI knows
 TARGET_ORGAN_IDS = [
@@ -77,6 +78,106 @@ CHAKRA_ID_BY_NUM = {
     6: "Chakra_06_ThirdEye",
     7: "Chakra_07_Crown",
 }
+
+
+def _tokenize_line(text: str) -> List[str]:
+    """Split a raw line into semantic tokens."""
+    if not text:
+        return []
+
+    normalized = text.replace("\u200b", " ")
+    normalized = re.sub(r"[\t•]+", " ", normalized)
+    normalized = normalized.strip()
+    if not normalized:
+        return []
+
+    tokens = [part.strip(" -") for part in TOKEN_SPLIT_RE.split(normalized) if part.strip(" -")]
+
+    if len(tokens) <= 1:
+        # Attempt splitting by repeated whitespace as a last resort
+        alt_tokens = [part.strip() for part in re.split(r"\s{2,}", normalized) if part.strip()]
+        if len(alt_tokens) > 1:
+            tokens = alt_tokens
+
+    return tokens
+
+
+def _extract_value(tokens: List[str]) -> tuple[int | None, int | None]:
+    for idx in range(len(tokens) - 1, -1, -1):
+        match = VALUE_RE.search(tokens[idx])
+        if match:
+            return int(match.group(1)), idx
+    return None, None
+
+
+def _parse_organ_tokens(tokens: List[str]) -> tuple[str, int] | None:
+    if not tokens or not tokens[0].lower().startswith("organs"):
+        return None
+
+    body = tokens[1:]
+    if not body:
+        return None
+
+    value, value_idx = _extract_value(body)
+    if value is None:
+        return None
+
+    name_tokens = body[:value_idx]
+    if not name_tokens:
+        return None
+
+    # Drop leading short uppercase codes (e.g., "LI")
+    filtered_tokens: List[str] = []
+    skipped = False
+    for token in name_tokens:
+        if not skipped and re.fullmatch(r"[A-Z]{1,4}", token):
+            skipped = True
+            continue
+        filtered_tokens.append(token)
+
+    if not filtered_tokens:
+        filtered_tokens = name_tokens
+
+    for start in range(len(filtered_tokens)):
+        candidate = " ".join(filtered_tokens[start:]).strip()
+        if not candidate:
+            continue
+        oid = _map_name_to_id(candidate)
+        if oid:
+            return oid, value
+
+    # Fall back to individual tokens before the value
+    for token in reversed(name_tokens):
+        oid = _map_name_to_id(token)
+        if oid:
+            return oid, value
+
+    return None
+
+
+def _parse_chakra_tokens(tokens: List[str]) -> tuple[str, int] | None:
+    if not tokens or not tokens[0].lower().startswith("chakra"):
+        return None
+
+    body = tokens[1:]
+    if not body:
+        return None
+
+    value, value_idx = _extract_value(body)
+    if value is None:
+        return None
+
+    number = None
+    for idx in range(value_idx + 1):
+        match = re.search(r"(\d+)", body[idx])
+        if match:
+            number = int(match.group(1))
+            break
+
+    if number is None or number not in CHAKRA_ID_BY_NUM:
+        return None
+
+    return CHAKRA_ID_BY_NUM[number], value
 
 def _read_doc_all_lines(path: Path) -> List[str]:
     """Read visible text from paragraphs AND table cells, preserving order."""
