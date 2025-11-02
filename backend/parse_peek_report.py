@@ -1,23 +1,9 @@
-#!/usr/bin/env python3
-"""
-parse_word_reports_cardenergymap_v2.py
---------------------------------------
-Reads a single Word report (.docx or .doc) and outputs JSON your CardEnergyMap can use.
+"""Utilities for parsing Peek energy map reports into structured data."""
 
-Fixes:
-- Reads both normal paragraphs AND table cells (your rows are in a table).
-- Accepts ASCII '->' and Unicode arrows (→ ➔ ➜), and '>' or '›' before the value.
-- Keeps strict sequences only:
-    Organs -> CODE -> Name > 53
-    Chakra -> 6 -> Indigo > 81
-- Maps organ names to CardEnergyMap IDs; only known IDs are emitted.
-
-Usage:
-  pip install python-docx
-  # For .doc files (optional): brew install --cask libreoffice
-  python3 parse_word_reports_cardenergymap_v2.py "/path/to/report.docx" -o cardenergymap_values.json
-"""
-import argparse, json, re, shutil, subprocess, tempfile
+import re
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Any
 
@@ -291,17 +277,3 @@ def parse_report(path: Path) -> Dict[str, Any]:
                 continue
 
     return {"organs": organs, "chakras": chakras}
-
-def main():
-    ap = argparse.ArgumentParser(description="Parse a Word report into CardEnergyMap-ready JSON (tables supported).")
-    ap.add_argument("input", help="Path to .docx or .doc file")
-    ap.add_argument("-o", "--out", default="cardenergymap_values.json", help="Output JSON path")
-    args = ap.parse_args()
-
-    data = parse_report(Path(args.input))
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"Wrote {args.out}")
-
-if __name__ == "__main__":
-    main()
