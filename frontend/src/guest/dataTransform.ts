@@ -95,6 +95,238 @@ export const classifyHormoneSeverity = (score: number | undefined | null): "high
   return classifySeverity(score) === "high" ? "high" : "moderate";
 };
 
+const CARD_ENERGY_ORGAN_IDS = [
+  "brain",
+  "thyroid",
+  "lungs",
+  "heart",
+  "lymphatic",
+  "liver",
+  "spleen",
+  "stomach",
+  "gallbladder",
+  "kidneys",
+  "small_intestine",
+  "large_intestine",
+  "bladder",
+  "reproductive_male",
+  "reproductive_female",
+] as const;
+
+const CARD_ENERGY_ORGAN_ID_SET = new Set<string>(CARD_ENERGY_ORGAN_IDS);
+
+const PEEK_ORGAN_NAME_MAP: Record<string, string> = {
+  brain: "brain",
+  "brain cns": "brain",
+  cns: "brain",
+  thyroid: "thyroid",
+  parathyroid: "thyroid",
+  "thyroid parathyroid": "thyroid",
+  lung: "lungs",
+  lungs: "lungs",
+  bronchi: "lungs",
+  bronchial: "lungs",
+  "lungs bronchi": "lungs",
+  heart: "heart",
+  lymph: "lymphatic",
+  lymphatic: "lymphatic",
+  lymphatics: "lymphatic",
+  "lymphatic system": "lymphatic",
+  "lymphatic immune": "lymphatic",
+  "immune system": "lymphatic",
+  liver: "liver",
+  spleen: "spleen",
+  "spleen pancreas": "spleen",
+  pancreas: "spleen",
+  stomach: "stomach",
+  "gall bladder": "gallbladder",
+  gallbladder: "gallbladder",
+  kidney: "kidneys",
+  kidneys: "kidneys",
+  "kidney bladder": "kidneys",
+  "small intestine": "small_intestine",
+  si: "small_intestine",
+  duodenum: "small_intestine",
+  jejunum: "small_intestine",
+  ileum: "small_intestine",
+  "large intestine": "large_intestine",
+  colon: "large_intestine",
+  li: "large_intestine",
+  bladder: "bladder",
+  "urinary bladder": "bladder",
+  "san-jiao": "lymphatic",
+  "san jiao": "lymphatic",
+  sanjiao: "lymphatic",
+  "triple burner": "lymphatic",
+  prostate: "reproductive_male",
+  testes: "reproductive_male",
+  testicles: "reproductive_male",
+  "male reproductive": "reproductive_male",
+  "reproductive male": "reproductive_male",
+  uterus: "reproductive_female",
+  ovary: "reproductive_female",
+  ovaries: "reproductive_female",
+  endometrium: "reproductive_female",
+  "female reproductive": "reproductive_female",
+  "reproductive female": "reproductive_female",
+};
+
+const normalizePeekOrganId = (raw: string): string | null => {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const tryLookup = (candidate: string): string | null => {
+    const key = candidate.toLowerCase();
+    if (PEEK_ORGAN_NAME_MAP[key]) {
+      return PEEK_ORGAN_NAME_MAP[key];
+    }
+    if (CARD_ENERGY_ORGAN_ID_SET.has(key)) {
+      return key;
+    }
+    return null;
+  };
+
+  const dropParens = (input: string) => input.replace(/\(.*?\)/g, "").trim();
+  const canonicalize = (input: string) => input.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+  const direct = tryLookup(trimmed);
+  if (direct) return direct;
+
+  const withoutPrefix = trimmed.replace(/^organs?\b[:\s\-–—>›|]*/i, "").trim();
+  if (!withoutPrefix) {
+    return null;
+  }
+
+  const baseCandidates = [withoutPrefix, dropParens(withoutPrefix)];
+  for (const candidate of baseCandidates) {
+    const lookedUp = tryLookup(candidate);
+    if (lookedUp) return lookedUp;
+
+    const canonicalId = canonicalize(candidate.toLowerCase());
+    if (canonicalId && CARD_ENERGY_ORGAN_ID_SET.has(canonicalId)) {
+      return canonicalId;
+    }
+  }
+
+  const tokenSource = dropParens(withoutPrefix.toLowerCase());
+  const tokens = tokenSource.split(/[^a-z0-9]+/).filter(Boolean);
+  for (const token of tokens) {
+    const alias = PEEK_ORGAN_NAME_MAP[token];
+    if (alias) {
+      return alias;
+    }
+  }
+
+  if (tokens.includes("reproductive")) {
+    if (tokens.includes("male")) return "reproductive_male";
+    if (tokens.includes("female")) return "reproductive_female";
+  }
+
+  return null;
+};
+
+const CHAKRA_IDS = [
+  "Chakra_01_Root",
+  "Chakra_02_Sacral",
+  "Chakra_03_SolarPlexus",
+  "Chakra_04_Heart",
+  "Chakra_05_Throat",
+  "Chakra_06_ThirdEye",
+  "Chakra_07_Crown",
+] as const;
+
+const CHAKRA_ALIAS_MAP: Record<string, string> = {
+  "chakra 1": CHAKRA_IDS[0],
+  "chakra1": CHAKRA_IDS[0],
+  "chakra-1": CHAKRA_IDS[0],
+  "1": CHAKRA_IDS[0],
+  "01": CHAKRA_IDS[0],
+  root: CHAKRA_IDS[0],
+  "root chakra": CHAKRA_IDS[0],
+  "chakra 2": CHAKRA_IDS[1],
+  "chakra2": CHAKRA_IDS[1],
+  "chakra-2": CHAKRA_IDS[1],
+  "2": CHAKRA_IDS[1],
+  "02": CHAKRA_IDS[1],
+  sacral: CHAKRA_IDS[1],
+  "sacral chakra": CHAKRA_IDS[1],
+  "chakra 3": CHAKRA_IDS[2],
+  "chakra3": CHAKRA_IDS[2],
+  "chakra-3": CHAKRA_IDS[2],
+  "3": CHAKRA_IDS[2],
+  "03": CHAKRA_IDS[2],
+  "solar plexus": CHAKRA_IDS[2],
+  "solar plexus chakra": CHAKRA_IDS[2],
+  "chakra 4": CHAKRA_IDS[3],
+  "chakra4": CHAKRA_IDS[3],
+  "chakra-4": CHAKRA_IDS[3],
+  "4": CHAKRA_IDS[3],
+  "04": CHAKRA_IDS[3],
+  heart: CHAKRA_IDS[3],
+  "heart chakra": CHAKRA_IDS[3],
+  "chakra 5": CHAKRA_IDS[4],
+  "chakra5": CHAKRA_IDS[4],
+  "chakra-5": CHAKRA_IDS[4],
+  "5": CHAKRA_IDS[4],
+  "05": CHAKRA_IDS[4],
+  throat: CHAKRA_IDS[4],
+  "throat chakra": CHAKRA_IDS[4],
+  "chakra 6": CHAKRA_IDS[5],
+  "chakra6": CHAKRA_IDS[5],
+  "chakra-6": CHAKRA_IDS[5],
+  "6": CHAKRA_IDS[5],
+  "06": CHAKRA_IDS[5],
+  indigo: CHAKRA_IDS[5],
+  "third eye": CHAKRA_IDS[5],
+  "third eye chakra": CHAKRA_IDS[5],
+  "chakra 7": CHAKRA_IDS[6],
+  "chakra7": CHAKRA_IDS[6],
+  "chakra-7": CHAKRA_IDS[6],
+  "7": CHAKRA_IDS[6],
+  "07": CHAKRA_IDS[6],
+  violet: CHAKRA_IDS[6],
+  crown: CHAKRA_IDS[6],
+  "crown chakra": CHAKRA_IDS[6],
+};
+
+const normalizePeekChakraId = (raw: string): string | null => {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const lower = trimmed.toLowerCase();
+  if (CHAKRA_ALIAS_MAP[lower]) {
+    return CHAKRA_ALIAS_MAP[lower];
+  }
+
+  const withoutPrefix = lower.replace(/^chakra\b[:\s\-–—>›|]*/, "").trim();
+  if (withoutPrefix && CHAKRA_ALIAS_MAP[withoutPrefix]) {
+    return CHAKRA_ALIAS_MAP[withoutPrefix];
+  }
+
+  const base = withoutPrefix.replace(/\(.*?\)/g, "").trim();
+  if (base && CHAKRA_ALIAS_MAP[base]) {
+    return CHAKRA_ALIAS_MAP[base];
+  }
+
+  const numberMatch = base.match(/(\d+)/);
+  if (numberMatch) {
+    const idx = Number.parseInt(numberMatch[1], 10);
+    if (Number.isFinite(idx) && idx >= 1 && idx <= CHAKRA_IDS.length) {
+      return CHAKRA_IDS[idx - 1];
+    }
+  }
+
+  for (const [alias, chakraId] of Object.entries(CHAKRA_ALIAS_MAP)) {
+    if (base.includes(alias)) {
+      return chakraId;
+    }
+  }
+
+  return null;
+};
+
 export function transformFoodData(raw: RawFoodData | null | undefined): Map<string, FoodItem[]> {
   const categories = new Map<string, FoodItem[]>();
   if (!raw?.pages?.length) {
@@ -253,25 +485,32 @@ export function aggregateInsights(
 
   if (energyMapRaw?.organs) {
     for (const [key, value] of Object.entries(energyMapRaw.organs)) {
+      const organId = normalizePeekOrganId(key);
+      if (!organId) continue;
       const numeric = Number(value);
-      if (Number.isFinite(numeric)) {
-        const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
-        sanitizedOrgans[key] = clamped;
-        incrementCounts(counts, classifyEnergySeverity(clamped));
-      }
+      if (!Number.isFinite(numeric)) continue;
+      const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
+      sanitizedOrgans[organId] = clamped;
     }
   }
 
   if (energyMapRaw?.chakras) {
     for (const [key, value] of Object.entries(energyMapRaw.chakras)) {
+      const chakraId = normalizePeekChakraId(key);
+      if (!chakraId) continue;
       const numeric = Number(value);
-      if (Number.isFinite(numeric)) {
-        const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
-        sanitizedChakras[key] = clamped;
-        incrementCounts(counts, classifyEnergySeverity(clamped));
-      }
+      if (!Number.isFinite(numeric)) continue;
+      const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
+      sanitizedChakras[chakraId] = clamped;
     }
   }
+
+  Object.values(sanitizedOrgans).forEach((value) =>
+    incrementCounts(counts, classifyEnergySeverity(value)),
+  );
+  Object.values(sanitizedChakras).forEach((value) =>
+    incrementCounts(counts, classifyEnergySeverity(value)),
+  );
   nutrition.nutrients.forEach((item) => incrementCounts(counts, classifySeverity(item.score)));
 
   const allScores: number[] = [];
