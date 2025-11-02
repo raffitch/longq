@@ -4,11 +4,13 @@ from typing import Optional, Literal, Any, Dict
 class SessionCreate(BaseModel):
     first_name: str
     last_name: str
+    sex: Literal["male", "female"] = "male"
 
 class SessionUpdate(BaseModel):
     client_name: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    sex: Optional[Literal["male", "female"]] = None
 
 class SessionOut(BaseModel):
     id: int
@@ -19,6 +21,7 @@ class SessionOut(BaseModel):
     folder_name: Optional[str]
     state: Literal["CREATED","INGESTING","VALIDATING","PARSING","READY","PUBLISHED","CLOSED"]
     published: bool
+    sex: Literal["male", "female"]
 
 class PublishRequest(BaseModel):
     publish: bool = True
@@ -53,9 +56,12 @@ class DisplayOut(BaseModel):
   staged_session_id: Optional[int] = None
   staged_first_name: Optional[str] = None
   staged_full_name: Optional[str] = None
+  sex: Optional[Literal["male", "female"]] = None
+  staged_sex: Optional[Literal["male", "female"]] = None
 
 class DisplaySet(BaseModel):
   session_id: Optional[int] = None  # set null to clear screen
   staged_session_id: Optional[int] = None
   staged_first_name: Optional[str] = None
   staged_full_name: Optional[str] = None
+  staged_sex: Optional[Literal["male", "female"]] = None

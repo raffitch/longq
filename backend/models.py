@@ -4,7 +4,7 @@ from typing import Optional, Any, Dict
 from datetime import datetime
 from enum import Enum
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, JSON  # <-- use Column + JSON
+from sqlalchemy import Column, JSON, String  # <-- use Column + JSON
 
 class SessionState(str, Enum):
     CREATED = "CREATED"
@@ -25,6 +25,7 @@ class SessionRow(SQLModel, table=True):
     state: SessionState = Field(default=SessionState.CREATED)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     published: bool = Field(default=False)
+    sex: str = Field(default="male", sa_column=Column(String(16), nullable=False, server_default="male"))
     visible_reports: Optional[Dict[str, bool]] = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
@@ -60,3 +61,4 @@ class DisplayRow(SQLModel, table=True):
     staged_session_id: _Opt[int] = _Field(default=None, foreign_key="sessionrow.id")
     staged_first_name: _Opt[str] = _Field(default=None)
     staged_full_name: _Opt[str] = _Field(default=None)
+    staged_sex: _Opt[str] = _Field(default=None)

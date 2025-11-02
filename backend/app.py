@@ -128,6 +128,8 @@ def _ensure_display_table_columns() -> None:
             statements.append("ALTER TABLE displayrow ADD COLUMN staged_first_name TEXT")
         if "staged_full_name" not in existing:
             statements.append("ALTER TABLE displayrow ADD COLUMN staged_full_name TEXT")
+        if "staged_sex" not in existing:
+            statements.append("ALTER TABLE displayrow ADD COLUMN staged_sex TEXT")
         for stmt in statements:
             conn.execute(text(stmt))
         if statements:
@@ -139,6 +141,9 @@ def _ensure_session_table_columns() -> None:
         existing = {row[1] for row in info}
         if "visible_reports" not in existing:
             conn.execute(text("ALTER TABLE sessionrow ADD COLUMN visible_reports TEXT"))
+            conn.commit()
+        if "sex" not in existing:
+            conn.execute(text("ALTER TABLE sessionrow ADD COLUMN sex TEXT DEFAULT 'male'"))
             conn.commit()
 
 # ----------------- Idle shutdown utilities -----------------
@@ -417,7 +422,8 @@ def create_session(payload: SessionCreate, db=Depends(get_session)):
     if not first:
         raise HTTPException(400, "First name is required.")
     client_name = _compose_client_name(first, last)
-    s = SessionRow(client_name=client_name, first_name=first, last_name=last, code=short_code())
+    sex = payload.sex if payload.sex in {"male", "female"} else "male"
+    s = SessionRow(client_name=client_name, first_name=first, last_name=last, code=short_code(), sex=sex)
     db.add(s); db.commit(); db.refresh(s)
     try:
         ensure_session_scaffold(s.id)
@@ -433,6 +439,7 @@ def create_session(payload: SessionCreate, db=Depends(get_session)):
         folder_name=s.folder_name,
         state=s.state,
         published=s.published,
+        sex=s.sex,
     )
 
 @app.get("/sessions", response_model=List[SessionOut])
@@ -448,6 +455,7 @@ def list_sessions(db=Depends(get_session)):
             folder_name=r.folder_name,
             state=r.state,
             published=r.published,
+            sex=r.sex,
         )
         for r in rows
     ]
@@ -465,6 +473,7 @@ def get_session_status(session_id: int, db=Depends(get_session)):
         folder_name=s.folder_name,
         state=s.state,
         published=s.published,
+        sex=s.sex,
     )
 
 @app.patch("/sessions/{session_id}", response_model=SessionOut)
@@ -497,6 +506,13 @@ def update_session(session_id: int, payload: SessionUpdate, db=Depends(get_sessi
         new_last = pieces[1] if len(pieces) > 1 else ""
         updated = True
 
+    if payload.sex is not None:
+        if payload.sex not in {"male", "female"}:
+            raise HTTPException(400, "Sex must be 'male' or 'female'.")
+        if s.sex != payload.sex:
+            s.sex = payload.sex
+            updated = True
+
     if updated:
         s.first_name = new_first
         s.last_name = new_last or None
@@ -514,6 +530,7 @@ def update_session(session_id: int, payload: SessionUpdate, db=Depends(get_sessi
         folder_name=s.folder_name,
         state=s.state,
         published=s.published,
+        sex=s.sex,
     )
 
 # Greet immediately
@@ -709,10 +726,23 @@ def display_current(db=Depends(get_session)):
     if not d or not d.current_session_id:
         staged_name = d.staged_full_name if d else None
         staged_first = d.staged_first_name if d else None
-        return DisplayOut(session_id=None, staged_session_id=d.staged_session_id if d else None, staged_full_name=staged_name, staged_first_name=staged_first)
+        staged_sex = d.staged_sex if d else None
+        return DisplayOut(
+            session_id=None,
+            staged_session_id=d.staged_session_id if d else None,
+            staged_full_name=staged_name,
+            staged_first_name=staged_first,
+            staged_sex=staged_sex,
+        )
     s = db.get(SessionRow, d.current_session_id)
     if not s:
-        return DisplayOut(session_id=None, staged_session_id=d.staged_session_id, staged_full_name=d.staged_full_name, staged_first_name=d.staged_first_name)
+        return DisplayOut(
+            session_id=None,
+            staged_session_id=d.staged_session_id,
+            staged_full_name=d.staged_full_name,
+            staged_first_name=d.staged_first_name,
+            staged_sex=d.staged_sex,
+        )
     return DisplayOut(
         session_id=s.id,
         client_name=s.client_name,
@@ -722,6 +752,8 @@ def display_current(db=Depends(get_session)):
         staged_session_id=d.staged_session_id,
         staged_full_name=d.staged_full_name,
         staged_first_name=d.staged_first_name,
+        sex=s.sex,
+        staged_sex=d.staged_sex,
     )
 
 @app.post("/display/current")
@@ -734,6 +766,10 @@ async def display_set(req: DisplaySet, db=Depends(get_session)):
         d.staged_session_id = req.staged_session_id
         d.staged_first_name = req.staged_first_name
         d.staged_full_name = req.staged_full_name
+        if req.staged_sex in {"male", "female"}:
+            d.staged_sex = req.staged_sex
+        elif req.staged_sex is None:
+            d.staged_sex = None
     if "session_id" in fields:
         d.current_session_id = req.session_id
     db.add(d); db.commit(); db.refresh(d)

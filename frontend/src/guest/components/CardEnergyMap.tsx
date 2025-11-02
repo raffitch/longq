@@ -51,8 +51,8 @@ const LAYER_DEFINITIONS: LayerDefinition[] = [
   { id: "kidneys", name: "Kidneys", category: "organ" },
   { id: "liver", name: "Liver", category: "organ" },
   { id: "brain", name: "Brain", category: "organ" },
-  { id: "reproductive_female", name: "Reproductive (Female)", category: "reproductive" },
-  { id: "reproductive_male", name: "Reproductive (Male)", category: "reproductive" },
+  { id: "reproductive_female", name: "Reproductive", category: "reproductive" },
+  { id: "reproductive_male", name: "Reproductive", category: "reproductive" },
   { id: "thyroid", name: "Thyroid", category: "organ" },
   { id: "lungs", name: "Lungs", category: "organ" },
   { id: "spleen", name: "Spleen", category: "organ" },
@@ -61,13 +61,13 @@ const LAYER_DEFINITIONS: LayerDefinition[] = [
 ];
 
 const CHAKRA_POINTS = [
-  { id: "Chakra_01_Crown", name: "Crown", cx: 170.49, cy: 8.8 },
-  { id: "Chakra_02_ThirdEye", name: "Third Eye", cx: 170.49, cy: 62.88 },
-  { id: "Chakra_03_Throat", name: "Throat", cx: 170.49, cy: 115.53 },
+  { id: "Chakra_07_Crown", name: "Crown", cx: 170.49, cy: 8.8 },
+  { id: "Chakra_06_ThirdEye", name: "Third Eye", cx: 170.49, cy: 62.88 },
+  { id: "Chakra_05_Throat", name: "Throat", cx: 170.49, cy: 115.53 },
   { id: "Chakra_04_Heart", name: "Heart", cx: 170.49, cy: 172.72 },
-  { id: "Chakra_05_SolarPlexus", name: "Solar Plexus", cx: 170.49, cy: 224.12 },
-  { id: "Chakra_06_Sacral", name: "Sacral", cx: 170.49, cy: 278.29 },
-  { id: "Chakra_07_Root", name: "Root", cx: 170.49, cy: 329.82 },
+  { id: "Chakra_03_SolarPlexus", name: "Solar Plexus", cx: 170.49, cy: 224.12 },
+  { id: "Chakra_02_Sacral", name: "Sacral", cx: 170.49, cy: 278.29 },
+  { id: "Chakra_01_Root", name: "Root", cx: 170.49, cy: 329.82 },
 ];
 
 const STRUCTURE_COLOR = "#06B6D4";
@@ -156,7 +156,8 @@ export default function CardEnergyMap({
   const [anthroposSlidersHeight, setAnthroposSlidersHeight] = useState<number | null>(null);
   const [padmasanaSlidersHeight, setPadmasanaSlidersHeight] = useState<number | null>(null);
   const resolvedSex = sex ?? DEFAULT_SEX;
-  const effectiveShowOnlyMale = resolvedSex === "female" ? false : showOnlyMale;
+  const resolvedShowOnlyMale = Boolean(showOnlyMale);
+  const effectiveShowOnlyMale = resolvedSex === "female" ? false : resolvedShowOnlyMale;
   const resolvedSectionTitle = organSectionTitle ?? "Organs";
   const activeChakraSet = useMemo(() => new Set(activeNodes), [activeNodes]);
 

@@ -15,6 +15,7 @@ import {
   type Session,
   type FileOut,
   type ReportKind,
+  type Sex,
 } from "./api";
 
 const REPORT_DEFS: { kind: ReportKind; label: string; aliases: string[] }[] = [
@@ -310,13 +311,22 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [isEditingName, setIsEditingName] = useState<boolean>(false);
   const [editedFirstName, setEditedFirstName] = useState<string>("");
   const [editedLastName, setEditedLastName] = useState<string>("");
+  const [editedSex, setEditedSex] = useState<Sex | null>(null);
   const [lastDroppedFiles, setLastDroppedFiles] = useState<DroppedFile[]>([]);
   const [backendDown, setBackendDown] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [sexSelection, setSexSelection] = useState<Sex | "">("");
 
   useEffect(() => {
     document.title = "Quantum Qi - Operator Portal";
   }, []);
+  useEffect(() => {
+    if (session?.sex) {
+      setSexSelection(session.sex);
+    } else {
+      setSexSelection("");
+    }
+  }, [session?.sex]);
   useEffect(() => {
     let closeNotified = false;
 
@@ -583,9 +593,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setIsEditingName(false);
     setEditedFirstName("");
     setEditedLastName("");
+    setEditedSex(null);
     setStagedPreviewSessionId(null);
     setStagedPreviewVersion((v) => v + 1);
     setHasShownOnGuest(false);
+    setSexSelection("");
     void (async () => {
       if (currentSessionId) {
         try {
@@ -601,6 +613,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           stagedSessionId: null,
           stagedFirstName: null,
           stagedFullName: null,
+          stagedSex: null,
         });
         markBackendUp();
       } catch (err) {
@@ -737,6 +750,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     const { first: currentFirst, last: currentLast } = currentSessionNames(session);
     setEditedFirstName(formatClientName(currentFirst));
     setEditedLastName(formatClientName(currentLast));
+    setEditedSex(session.sex);
     setIsEditingName(true);
     setStatus("Editing guest name…");
     setError("");
@@ -746,6 +760,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setIsEditingName(false);
     setEditedFirstName("");
     setEditedLastName("");
+    setEditedSex(null);
     if (session) {
       const currentName = formatFullName(session.first_name, session.last_name) || session.client_name;
       setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next guest folder.");
@@ -762,14 +777,21 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setError("Enter the guest's first name.");
       return;
     }
+    const nextSex = editedSex ?? session.sex;
+    if (!nextSex) {
+      setError("Select the guest's gender.");
+      return;
+    }
     const { first: currentFirst, last: currentLast } = currentSessionNames(session);
     if (
       normalizeName(first) === normalizeName(currentFirst) &&
-      normalizeName(last) === normalizeName(currentLast)
+      normalizeName(last) === normalizeName(currentLast) &&
+      nextSex === session.sex
     ) {
       setIsEditingName(false);
       setEditedFirstName("");
       setEditedLastName("");
+      setEditedSex(null);
       const currentName = formatFullName(currentFirst, currentLast) || session.client_name;
       setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next guest folder.");
       return;
@@ -779,25 +801,31 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       clientName: session.client_name,
       firstName: session.first_name,
       lastName: session.last_name,
+      sex: session.sex,
     };
 
     try {
       setStatus("Updating guest name…");
       setError("");
       const provisionalFull = formatFullName(first, last);
-      setSession((prev) => (prev ? { ...prev, first_name: first, last_name: last, client_name: provisionalFull } : prev));
-      const updated = await updateSession(session.id, { first_name: first, last_name: last });
+      setSession((prev) =>
+        prev ? { ...prev, first_name: first, last_name: last, client_name: provisionalFull, sex: nextSex } : prev,
+      );
+      const updated = await updateSession(session.id, { first_name: first, last_name: last, sex: nextSex });
       markBackendUp();
       setSession(updated);
+      setSexSelection(updated.sex);
       setIsEditingName(false);
       setEditedFirstName("");
       setEditedLastName("");
+      setEditedSex(null);
       setStatus(`Guest name updated to ${formatFullName(updated.first_name, updated.last_name)}. Re-drop the folder if needed.`);
       try {
         await setDisplaySession({
           stagedSessionId: updated.id,
           stagedFirstName: updated.first_name ?? first,
           stagedFullName: formatFullName(updated.first_name, updated.last_name),
+          stagedSex: updated.sex,
         });
         markBackendUp();
       } catch (err) {
@@ -815,9 +843,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               first_name: previous.firstName,
               last_name: previous.lastName,
               client_name: previous.clientName ?? prev.client_name,
-          }
-          : prev
+              sex: previous.sex,
+            }
+          : prev,
       );
+      setSexSelection(previous.sex ?? "");
       setError(formatErrorMessage(e));
       setStatus("Failed to update guest name.");
       markBackendDown(e);
@@ -1233,6 +1263,31 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   }}
                   className={cn(darkInputClasses, "min-w-[160px]")}
                 />
+                <fieldset className="flex items-center gap-2 text-[13px] text-text-secondary">
+                  <legend className="sr-only">Gender</legend>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="edit-sex"
+                      value="male"
+                      checked={editedSex === "male"}
+                      onChange={() => setEditedSex("male")}
+                      className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
+                    />
+                    Male
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="edit-sex"
+                      value="female"
+                      checked={editedSex === "female"}
+                      onChange={() => setEditedSex("female")}
+                      className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
+                    />
+                    Female
+                  </label>
+                </fieldset>
                 <Button type="button" variant="primary" size="icon" onClick={saveEditName} title="Save name">
                   <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path d="M5 10.5l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -1303,13 +1358,19 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           setStatus("");
           return;
         }
+        if (!sexSelection) {
+          setError("Select the guest's gender.");
+          setStatus("");
+          return;
+        }
         try {
           setError("");
           const full = formatFullName(first, last);
           setStatus(`Creating session for ${full}…`);
-          const created = await createSession(first, last);
+          const created = await createSession(first, last, sexSelection as Sex);
           markBackendUp();
           setSession(created);
+          setSexSelection(created.sex);
           onSessionReady(created.id);
           setStagedPreviewSessionId(created.published ? created.id : null);
           setStagedPreviewVersion((v) => v + 1);
@@ -1324,6 +1385,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           stagedSessionId: created.id,
           stagedFirstName: created.first_name ?? first,
           stagedFullName: formatFullName(created.first_name, created.last_name),
+          stagedSex: created.sex,
         });
         markBackendUp();
       } catch (err) {
@@ -1349,7 +1411,32 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         value={lastNameInput}
         onChange={(e) => setLastNameInput(e.target.value)}
       />
-      <Button type="submit" variant="primary" disabled={!firstNameInput.trim()}>
+      <div className="flex items-center gap-3 text-[13px] text-text-secondary">
+        <span>Gender:</span>
+        <label className="flex items-center gap-1.5">
+          <input
+            type="radio"
+            name="session-sex-inline"
+            value="male"
+            checked={sexSelection === "male"}
+            onChange={() => setSexSelection("male")}
+            className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
+          />
+          Male
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input
+            type="radio"
+            name="session-sex-inline"
+            value="female"
+            checked={sexSelection === "female"}
+            onChange={() => setSexSelection("female")}
+            className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
+          />
+          Female
+        </label>
+      </div>
+      <Button type="submit" variant="primary" disabled={!firstNameInput.trim() || !sexSelection}>
         Create Session
       </Button>
     </form>
@@ -1648,13 +1735,19 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                     setStatus("");
                     return;
                   }
+                  if (!sexSelection) {
+                    setError("Select the guest's gender.");
+                    setStatus("");
+                    return;
+                  }
                   try {
                     setError("");
                     const full = formatFullName(first, last);
                     setStatus(`Creating session for ${full}…`);
-                    const created = await createSession(first, last);
+                    const created = await createSession(first, last, sexSelection as Sex);
                     markBackendUp();
                     setSession(created);
+                    setSexSelection(created.sex);
                     onSessionReady(created.id);
                     setStagedPreviewSessionId(created.published ? created.id : null);
                     setStagedPreviewVersion((v) => v + 1);
@@ -1669,6 +1762,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                         stagedSessionId: created.id,
                         stagedFirstName: created.first_name ?? first,
                         stagedFullName: formatFullName(created.first_name, created.last_name),
+                        stagedSex: created.sex,
                       });
                       markBackendUp();
                     } catch (err) {
@@ -1697,7 +1791,33 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                     onChange={(e) => setLastNameInput(e.target.value)}
                   />
                 </div>
-                <Button type="submit" variant="primary" disabled={!firstNameInput.trim() || !lastNameInput.trim()} className="mt-2">
+                <fieldset className="flex flex-wrap items-center gap-3 text-[13px] text-text-secondary">
+                  <legend className="sr-only">Gender</legend>
+                  <span>Gender:</span>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="session-sex-full"
+                      value="male"
+                      checked={sexSelection === "male"}
+                      onChange={() => setSexSelection("male")}
+                      className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
+                    />
+                    Male
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="session-sex-full"
+                      value="female"
+                      checked={sexSelection === "female"}
+                      onChange={() => setSexSelection("female")}
+                      className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
+                    />
+                    Female
+                  </label>
+                </fieldset>
+                <Button type="submit" variant="primary" disabled={!firstNameInput.trim() || !lastNameInput.trim() || !sexSelection} className="mt-2">
                   Create Session
                 </Button>
               </form>

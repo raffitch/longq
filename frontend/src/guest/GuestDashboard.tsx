@@ -1,4 +1,5 @@
 import React from "react";
+import type { Sex } from "../api";
 import {
   CardEnergyMap,
   FoodCategoryCard,
@@ -17,6 +18,7 @@ interface GuestDashboardProps {
   reportDate?: string | null;
   aggregated: AggregatedInsights;
   isPreview: boolean;
+  sex: Sex;
 }
 
 const defaultIcon = (
@@ -76,7 +78,7 @@ const formatDate = (input?: string | null): string => {
 
 const computeEnergyStatus = (counts: PriorityCounts) => (counts.highCount > 2 ? "Imbalanced" : "Stable");
 
-const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportDate, aggregated, isPreview }) => {
+const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportDate, aggregated, isPreview, sex }) => {
   const {
     categories,
     nutrition,
@@ -145,7 +147,7 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
             <h2 id="key-highlights" className="text-4xl font-bold md:text-5xl lg:text-6xl">
               PEEK Report
             </h2>
-            <CardEnergyMap status={computeEnergyStatus(priorityCounts)} showOnlyMale />
+            <CardEnergyMap status={computeEnergyStatus(priorityCounts)} sex={sex} />
           </div>
         </section>
         <div className="h-px w-full bg-white/20" aria-hidden="true" />

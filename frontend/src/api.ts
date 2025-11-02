@@ -1,7 +1,8 @@
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
 export type ReportKind = "food" | "heavy-metals" | "hormones" | "nutrition" | "toxins";
-export type Session = { id:number; code:string; client_name:string; first_name:string|null; last_name:string|null; folder_name:string|null; state:string; published:boolean };
+export type Sex = "male" | "female";
+export type Session = { id:number; code:string; client_name:string; first_name:string|null; last_name:string|null; folder_name:string|null; state:string; published:boolean; sex: Sex };
 export type FileOut = { id:number; kind:string; filename:string; status:string; error?:string };
 export type ParsedOut<T=any> = { session_id:number; kind:string; data:T };
 export type BannerOut = { message:string };
@@ -9,10 +10,19 @@ export type ParsedBundleOut = { session_id:number; reports:Record<string, unknow
 
 async function ok<T>(r: Response): Promise<T> { if (!r.ok) throw new Error(await r.text()); return r.json(); }
 
-export async function createSession(first_name: string, last_name: string): Promise<Session> {
-  return ok(await fetch(`${BASE}/sessions`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ first_name, last_name })}));
+export async function createSession(first_name: string, last_name: string, sex: Sex): Promise<Session> {
+  return ok(
+    await fetch(`${BASE}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ first_name, last_name, sex }),
+    }),
+  );
 }
-export async function updateSession(sessionId:number, data:{client_name?:string; first_name?:string; last_name?:string}): Promise<Session> {
+export async function updateSession(
+  sessionId:number,
+  data:{client_name?:string; first_name?:string; last_name?:string; sex?: Sex},
+): Promise<Session> {
   return ok(await fetch(`${BASE}/sessions/${sessionId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -60,6 +70,7 @@ export type DisplaySessionPayload = {
   stagedSessionId?: number | null;
   stagedFirstName?: string | null;
   stagedFullName?: string | null;
+  stagedSex?: Sex | null;
 };
 
 export async function setDisplaySession(payload: DisplaySessionPayload): Promise<{ok:boolean}> {
@@ -75,6 +86,9 @@ export async function setDisplaySession(payload: DisplaySessionPayload): Promise
   }
   if ("stagedFullName" in payload) {
     body.staged_full_name = payload.stagedFullName;
+  }
+  if ("stagedSex" in payload) {
+    body.staged_sex = payload.stagedSex;
   }
   const r = await fetch(`${BASE}/display/current`, {
     method: "POST",
@@ -94,6 +108,8 @@ export async function getDisplay(): Promise<{
   staged_session_id?: number | null;
   staged_first_name?: string | null;
   staged_full_name?: string | null;
+  sex?: Sex | null;
+  staged_sex?: Sex | null;
 }> {
   const r = await fetch(`${BASE}/display/current`);
   if (!r.ok) throw new Error(await r.text());

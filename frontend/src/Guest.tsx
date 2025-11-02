@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getDisplay, getParsedBundle, getSession } from "./api";
+import { getDisplay, getParsedBundle, getSession, type Sex } from "./api";
 
 import GuestDashboard from "./guest/GuestDashboard";
 import {
@@ -27,6 +27,7 @@ export default function Guest() {
   const [hormones, setHormones] = useState<RawHormonesData | null>(null);
   const [heavyMetals, setHeavyMetals] = useState<RawHeavyMetalsData | null>(null);
   const [toxins, setToxins] = useState<RawToxinsData | null>(null);
+  const [sex, setSex] = useState<Sex>("male");
   const lastSessionId = useRef<number | null>(null);
   const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
   const [searchParams] = useSearchParams();
@@ -118,6 +119,7 @@ export default function Guest() {
               : null))?.trim() || null;
         setFirstName(stagedFirst);
         setClientFullName(stagedFull ?? stagedFirst);
+        setSex(d.staged_sex ?? "male");
         setData(null);
         setNutrition(null);
         setHormones(null);
@@ -133,6 +135,7 @@ export default function Guest() {
           (d.first_name || d.last_name ? [d.first_name, d.last_name].filter(Boolean).join(" ") : null))?.trim() || null;
       setFirstName(stagedFirst ?? null);
       setClientFullName(stagedFull ?? stagedFirst ?? null);
+      setSex(d.sex ?? d.staged_sex ?? "male");
 
       const sid = d.session_id;
       if (sid) {
@@ -160,6 +163,7 @@ export default function Guest() {
         setHormones(null);
         setHeavyMetals(null);
         setToxins(null);
+        setSex(d.staged_sex ?? "male");
       }
       lastSessionId.current = sid ?? null;
     } catch (err) {
@@ -174,6 +178,7 @@ export default function Guest() {
       setHormones(null);
       setHeavyMetals(null);
       setToxins(null);
+      setSex("male");
     }
   }
 
@@ -285,6 +290,7 @@ export default function Guest() {
           (sessionInfo.client_name ? sessionInfo.client_name.split(" ", 1)[0] : null);
         setFirstName(displayFirst ?? null);
         setClientFullName(sessionInfo.client_name ?? null);
+        setSex(sessionInfo.sex ?? "male");
 
         if (!sessionInfo.published) {
           setData(null);
@@ -293,6 +299,7 @@ export default function Guest() {
           setHormones(null);
           setHeavyMetals(null);
           setToxins(null);
+          setSex(sessionInfo.sex ?? "male");
           return;
         }
 
@@ -317,6 +324,7 @@ export default function Guest() {
           setHormones(null);
           setHeavyMetals(null);
           setToxins(null);
+          setSex("male");
         }
       } catch (err) {
         if (cancelled) return;
@@ -329,6 +337,7 @@ export default function Guest() {
         setHormones(null);
         setHeavyMetals(null);
         setToxins(null);
+        setSex("male");
       }
     }
 
@@ -383,5 +392,13 @@ export default function Guest() {
 
   const displayFullName = clientFullName ?? firstName ?? null;
 
-  return <GuestDashboard clientFullName={displayFullName} reportDate={null} aggregated={aggregated} isPreview={isPreview} />;
+  return (
+    <GuestDashboard
+      clientFullName={displayFullName}
+      reportDate={null}
+      aggregated={aggregated}
+      isPreview={isPreview}
+      sex={sex}
+    />
+  );
 }
