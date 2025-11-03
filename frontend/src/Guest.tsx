@@ -42,7 +42,7 @@ export default function Guest() {
   const [serverDown, setServerDown] = useState(false);
 
   useEffect(() => {
-    document.title = "Quantum Qi - Guest Portal";
+    document.title = "Quantum Qi™ - Guest Portal";
   }, []);
 
   const aggregated = useMemo(() => {
@@ -309,6 +309,7 @@ export default function Guest() {
           setHormones(null);
           setHeavyMetals(null);
           setToxins(null);
+          setEnergyMap(null);
           setSex(sessionInfo.sex ?? "male");
           return;
         }
@@ -322,6 +323,7 @@ export default function Guest() {
           setHormones((reports["hormones"] ?? null) as RawHormonesData | null);
           setHeavyMetals((reports["heavy-metals"] ?? null) as RawHeavyMetalsData | null);
           setToxins((reports["toxins"] ?? null) as RawToxinsData | null);
+          setEnergyMap((reports["peek"] ?? null) as RawPeekData | null);
           setPreviewError(null);
         } catch (err) {
           if (cancelled) return;
@@ -334,6 +336,7 @@ export default function Guest() {
           setHormones(null);
           setHeavyMetals(null);
           setToxins(null);
+          setEnergyMap(null);
           setSex("male");
         }
       } catch (err) {
@@ -347,6 +350,7 @@ export default function Guest() {
         setHormones(null);
         setHeavyMetals(null);
         setToxins(null);
+        setEnergyMap(null);
         setSex("male");
       }
     }
@@ -389,12 +393,26 @@ export default function Guest() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f1114] px-6 text-center text-slate-100">
         <div className="space-y-4">
-          <img src="/quantum-qi-logo.png" alt="Quantum Qi logo" className="mx-auto w-52 max-w-[70vw]" />
-          <h1 className="text-4xl font-extrabold tracking-wide text-text-primary">Quantum Qi</h1>
+          <div className="relative mx-auto w-fit">
+            <div
+              className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-cyan-400/40 blur-3xl"
+              aria-hidden="true"
+            />
+            <img src="/quantum-qi-logo.png" alt="Quantum Qi™ logo" className="mx-auto w-52 max-w-[70vw]" />
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <h1 className="font-logo text-4xl font-semibold tracking-wider text-text-primary leading-none">
+              <span className="inline-flex items-baseline">
+                <span>Quantum Qi</span>
+                <span className="logo-tm">TM</span>
+              </span>
+            </h1>
+            <span className="text-xs font-medium tracking-[0.12em] text-teal-300">by Longevity Wellness</span>
+          </div>
           <p className="text-2xl text-slate-200">
             {displayName ? `Welcome ${displayName}.` : "Welcome."}
           </p>
-          <p className="text-lg text-slate-300">Your wellness journey is about to begin.</p>
+          <p className="text-lg text-slate-300">Your wellness journey is in process.</p>
         </div>
       </div>
     );

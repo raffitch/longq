@@ -234,16 +234,16 @@ function readLogTail(filePath, maxBytes = 4000) {
 function setupMenu() {
   const template = [
     {
-      label: process.platform === 'darwin' ? app.name : 'Quantum Qi',
+      label: process.platform === 'darwin' ? app.name : 'Quantum Qi™',
       submenu: [
         {
-          label: 'About Quantum Qi',
+          label: 'About Quantum Qi™',
           click: () => {
             dialog.showMessageBox({
               type: 'info',
               buttons: ['OK'],
-              title: 'About Quantum Qi',
-              message: 'Quantum Qi Operator Portal',
+              title: 'About Quantum Qi™',
+              message: 'Quantum Qi™ Operator Portal',
               detail: 'Desktop shell for managing guest sessions.',
             });
           },
@@ -419,7 +419,7 @@ app.whenReady().then(async () => {
     await dialog.showMessageBox({
       type: 'error',
       buttons: ['OK'],
-      title: 'Quantum Qi Backend',
+      title: 'Quantum Qi™ Backend',
       message: 'Failed to launch backend.',
       detail: `${message}\n\nLog tail:\n${logTail}`,
     });

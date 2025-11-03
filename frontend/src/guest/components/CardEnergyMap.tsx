@@ -91,11 +91,19 @@ export interface PeekPriorityTier {
   range: string;
 }
 
+const CHAKRA_PRIORITY_TIERS: PeekPriorityTier[] = [
+  { label: "Very High", color: "#EF4444", min: 93, range: "93 – 100" },
+  { label: "High", color: "#F97316", min: 81, range: "81 – 92" },
+  { label: "Neutral", color: "#9CA3AF", min: 23, range: "23 – 80" },
+  { label: "Low", color: "#FACC15", min: 11, range: "11 – 22" },
+  { label: "Very Low", color: "#0EA5E9", min: 0, range: "0 – 10" },
+];
+
 export const PEAK_PRIORITY_TIERS: PeekPriorityTier[] = [
   { label: "Very High", color: "#EF4444", min: 91, range: "91 – 100" },
   { label: "High", color: "#F97316", min: 76, range: "76 – 90" },
   { label: "Neutral", color: "#9CA3AF", min: 26, range: "26 – 75" },
-  { label: "Low", color: "#22C55E", min: 11, range: "11 – 25" },
+  { label: "Low", color: "#FACC15", min: 11, range: "11 – 25" },
   { label: "Very Low", color: "#0EA5E9", min: 0, range: "0 – 10" },
 ];
 
@@ -151,6 +159,11 @@ const shouldIncludeLayer = (definition: LayerDefinition, sex: Sex, showOnlyMale:
 const getPriorityForValue = (value: number) => {
   const match = PEAK_PRIORITY_TIERS.find((entry) => value >= entry.min);
   return match ?? PEAK_PRIORITY_TIERS[PEAK_PRIORITY_TIERS.length - 1];
+};
+
+const getChakraPriorityForValue = (value: number) => {
+  const match = CHAKRA_PRIORITY_TIERS.find((entry) => value >= entry.min);
+  return match ?? CHAKRA_PRIORITY_TIERS[CHAKRA_PRIORITY_TIERS.length - 1];
 };
 
 export default function CardEnergyMap({
@@ -301,24 +314,24 @@ export default function CardEnergyMap({
     return metrics;
   }, [layerMetrics]);
 
-  const padmasanaSliderMetrics = useMemo(
-    () =>
-      CHAKRA_POINTS.map((chakra) => {
-        const value = chakraValueMap.get(chakra.id) ?? 0;
-        const hasValue = chakraValueMap.has(chakra.id);
-        const priority = getPriorityForValue(value);
-        const baseColor = CHAKRA_BASE_COLORS[chakra.id] ?? priority.color;
-        return {
-          ...chakra,
-          value,
-          color: hasValue ? priority.color : "#9CA3AF",
-          priorityLabel: hasValue ? priority.label : "Not Provided",
-          hasValue,
-          baseColor,
-        };
-      }),
-    [chakraValueMap],
-  );
+const padmasanaSliderMetrics = useMemo(
+  () =>
+    CHAKRA_POINTS.map((chakra) => {
+      const value = chakraValueMap.get(chakra.id) ?? 0;
+      const hasValue = chakraValueMap.has(chakra.id);
+      const priority = getChakraPriorityForValue(value);
+      const baseColor = CHAKRA_BASE_COLORS[chakra.id] ?? priority.color;
+      return {
+        ...chakra,
+        value,
+        color: hasValue ? priority.color : "#9CA3AF",
+        priorityLabel: hasValue ? priority.label : "Not Provided",
+        hasValue,
+        baseColor,
+      };
+    }),
+  [chakraValueMap],
+);
 
   const silhouetteScale = 16 / 15;
   const anthroposSilouhetteStyle: React.CSSProperties | undefined =

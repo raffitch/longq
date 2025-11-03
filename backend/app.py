@@ -104,7 +104,7 @@ async def lifespan(_: FastAPI):
         _event_loop = None
 
 
-app = FastAPI(title="Quantum Qi Backend", lifespan=lifespan)
+app = FastAPI(title="Quantum Qi™ Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -188,8 +188,8 @@ def _validate_uploaded_filename(session: SessionRow, kind: str, filename: str) -
 
     suffix = Path(filename).suffix.lower()
     if kind == "peek":
-        if suffix not in {".docx", ".doc"}:
-            raise HTTPException(400, "PEEK reports must be Word documents (.docx or .doc).")
+        if suffix != ".docx":
+            raise HTTPException(400, "PEEK reports must be Word documents (.docx).")
     else:
         if suffix != ".pdf":
             raise HTTPException(400, "Only PDF files are accepted.")

@@ -18,7 +18,7 @@ ITEM_RE = re.compile(
     """,
     re.VERBOSE,
 )
-EXPECTED_FIRST_THREE = ["anthocyanidins", "bioflavonoids", "biotin"]
+EXPECTED_FIRST_THREE = ["anthrocyandins", "bioflavonoids", "biotin"]
 
 
 def _norm_name(s: str) -> str:

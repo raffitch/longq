@@ -7,6 +7,11 @@ import type {
   NutritionData,
   ToxinItem,
 } from "./components";
+import {
+  GENERAL_SEVERITY_THRESHOLDS,
+  makeSeverityClassifier,
+  type GeneralSeverity,
+} from "./priority";
 import type {
   RawFoodData,
   RawHeavyMetalsData,
@@ -55,7 +60,7 @@ export const FOOD_CATEGORY_ORDER = [
   "Lectins",
 ] as const;
 
-const severityThresholds: Array<{ min: number; severity: FoodSeverity }> = [
+const FOOD_SEVERITY_THRESHOLDS: Array<{ min: number; severity: FoodSeverity }> = [
   { min: 90, severity: "high" },
   { min: 80, severity: "moderate" },
   { min: 65, severity: "medium" },
@@ -83,17 +88,10 @@ const toDisplayName = (name: string): string => {
     .join(" ");
 };
 
-export const classifySeverity = (score: number | undefined | null): FoodSeverity => {
-  const value = Number.isFinite(score) ? Math.abs(Number(score)) : 0;
-  for (const { min, severity } of severityThresholds) {
-    if (value >= min) return severity;
-  }
-  return "low";
-};
+export const classifySeverity = makeSeverityClassifier(GENERAL_SEVERITY_THRESHOLDS);
+export const classifyFoodSeverity = makeSeverityClassifier(FOOD_SEVERITY_THRESHOLDS);
 
-export const classifyHormoneSeverity = (score: number | undefined | null): "high" | "moderate" => {
-  return classifySeverity(score) === "high" ? "high" : "moderate";
-};
+export const classifyHormoneSeverity = classifySeverity;
 
 const CARD_ENERGY_ORGAN_IDS = [
   "brain",
@@ -341,7 +339,7 @@ export function transformFoodData(raw: RawFoodData | null | undefined): Map<stri
         if (typeof item.score !== "number") continue;
         const severity = (item.severity && ["high", "moderate", "medium", "low"].includes(item.severity))
           ? (item.severity as FoodSeverity)
-          : classifySeverity(item.score);
+          : classifyFoodSeverity(item.score);
         existing.push({
           name: item.name,
           score: item.score,
@@ -364,8 +362,11 @@ export function transformNutritionData(raw: RawNutritionData | null | undefined,
     }))
     .filter((item) => Number.isFinite(item.score))
     .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
-    .slice(0, limit)
-    .map((item) => ({ ...item, score: Math.round(item.score) }));
+    .map((item) => ({
+      ...item,
+      score: Math.round(item.score),
+      severity: classifySeverity(item.score),
+    }));
 
   return {
     note: items.length ? "" : undefined,
@@ -413,17 +414,49 @@ export function transformToxins(raw: RawToxinsData | null | undefined): ToxinIte
 }
 
 export interface PriorityCounts {
+  veryLowCount: number;
   lowCount: number;
-  mediumCount: number;
+  normalCount: number;
   moderateCount: number;
   highCount: number;
+  veryHighCount: number;
 }
 
-const incrementCounts = (counts: PriorityCounts, severity: FoodSeverity) => {
-  if (severity === "high") counts.highCount += 1;
-  else if (severity === "moderate") counts.moderateCount += 1;
-  else if (severity === "medium") counts.mediumCount += 1;
-  else counts.lowCount += 1;
+const incrementCounts = (counts: PriorityCounts, severity: GeneralSeverity) => {
+  switch (severity) {
+    case "very high":
+      counts.veryHighCount += 1;
+      break;
+    case "high":
+      counts.highCount += 1;
+      break;
+    case "moderate":
+      counts.moderateCount += 1;
+      break;
+    case "normal":
+      counts.normalCount += 1;
+      break;
+    case "low":
+      counts.lowCount += 1;
+      break;
+    case "very low":
+      counts.veryLowCount += 1;
+      break;
+  }
+};
+
+const mapFoodSeverityToGeneral = (severity: FoodSeverity): GeneralSeverity => {
+  switch (severity) {
+    case "high":
+      return "high";
+    case "moderate":
+      return "moderate";
+    case "medium":
+      return "normal";
+    case "low":
+    default:
+      return "low";
+  }
 };
 
 export interface AggregatedInsights {
@@ -435,7 +468,7 @@ export interface AggregatedInsights {
   priorityCounts: PriorityCounts;
   overallScore: number;
   scoreStatus: string;
-  topHighItems: Array<{ category: string; item: FoodItem }>;
+  topHighItems: Array<{ category: string; item: { name: string } }>;
   nextSteps: string[];
   energyMap: {
     organs: Record<string, number>;
@@ -451,7 +484,14 @@ export function aggregateInsights(
   toxins: ToxinItem[],
   energyMapRaw: RawPeekData | null,
 ): AggregatedInsights {
-  const counts: PriorityCounts = { lowCount: 0, mediumCount: 0, moderateCount: 0, highCount: 0 };
+  const counts: PriorityCounts = {
+    veryLowCount: 0,
+    lowCount: 0,
+    normalCount: 0,
+    moderateCount: 0,
+    highCount: 0,
+    veryHighCount: 0,
+  };
 
   const categories: Array<{ name: string; items: FoodItem[] }> = [];
 
@@ -465,18 +505,29 @@ export function aggregateInsights(
 
   sortedKeys.forEach((key) => {
     const items = foodMap.get(key) ?? [];
-    items.forEach((item) => incrementCounts(counts, item.severity));
+    items.forEach((item) => incrementCounts(counts, mapFoodSeverityToGeneral(item.severity)));
     categories.push({ name: key, items: items.slice().sort((a, b) => b.score - a.score) });
   });
 
   heavyMetals.forEach((item) => incrementCounts(counts, item.severity));
-  hormones.forEach((item) => incrementCounts(counts, item.severity === "high" ? "high" : "moderate"));
+  hormones.forEach((item) => incrementCounts(counts, item.severity));
   toxins.forEach((item) => incrementCounts(counts, item.severity));
-  const classifyEnergySeverity = (score: number | undefined | null): FoodSeverity => {
-    const value = Number.isFinite(score) ? Math.max(0, Math.min(100, Number(score))) : 0;
+  const toPercent = (score: number | undefined | null) =>
+    Number.isFinite(score) ? Math.max(0, Math.min(100, Number(score))) : 0;
+
+  const classifyOrganSeverity = (score: number | undefined | null): FoodSeverity => {
+    const value = toPercent(score);
     if (value >= 91) return "high";
     if (value >= 76) return "moderate";
     if (value >= 26) return "medium";
+    return "low";
+  };
+
+  const classifyChakraSeverity = (score: number | undefined | null): FoodSeverity => {
+    const value = toPercent(score);
+    if (value >= 93) return "high";
+    if (value >= 81) return "moderate";
+    if (value >= 23) return "medium";
     return "low";
   };
 
@@ -506,10 +557,10 @@ export function aggregateInsights(
   }
 
   Object.values(sanitizedOrgans).forEach((value) =>
-    incrementCounts(counts, classifyEnergySeverity(value)),
+    incrementCounts(counts, mapFoodSeverityToGeneral(classifyOrganSeverity(value))),
   );
   Object.values(sanitizedChakras).forEach((value) =>
-    incrementCounts(counts, classifyEnergySeverity(value)),
+    incrementCounts(counts, mapFoodSeverityToGeneral(classifyChakraSeverity(value))),
   );
   nutrition.nutrients.forEach((item) => incrementCounts(counts, classifySeverity(item.score)));
 
@@ -524,14 +575,17 @@ export function aggregateInsights(
   const overallScore =
     allScores.length > 0 ? allScores.reduce((sum, value) => sum + value, 0) / allScores.length : 0;
 
+  const elevatedCount = counts.highCount + counts.veryHighCount;
   const scoreStatus =
-    counts.highCount > 3 || overallScore >= 85
+    elevatedCount > 3 || overallScore >= 85
       ? "High Priority"
-      : counts.moderateCount > 5 || overallScore >= 75
+      : counts.moderateCount > 5 || overallScore >= 70
         ? "Moderate"
-        : "Stable";
+        : counts.normalCount > 5
+          ? "Normal"
+          : "Stable";
 
-  const topHighItems: Array<{ category: string; item: FoodItem }> = [];
+  const topHighItems: Array<{ category: string; item: { name: string } }> = [];
   categories.forEach(({ name, items }) => {
     items
       .filter((item) => item.severity === "high")
@@ -540,12 +594,12 @@ export function aggregateInsights(
   });
 
   heavyMetals
-    .filter((item) => item.severity === "high")
+    .filter((item) => item.severity === "high" || item.severity === "very high")
     .slice(0, 2)
     .forEach((item) => topHighItems.push({ category: "Heavy Metals", item }));
 
   toxins
-    .filter((item) => item.severity === "high")
+    .filter((item) => item.severity === "high" || item.severity === "very high")
     .slice(0, 2)
     .forEach((item) => topHighItems.push({ category: "Toxins", item }));
 
@@ -573,7 +627,7 @@ export function aggregateInsights(
   };
 }
 
-function buildNextSteps(topHighItems: Array<{ category: string; item: FoodItem }>, counts: PriorityCounts): string[] {
+function buildNextSteps(topHighItems: Array<{ category: string; item: { name: string } }>, counts: PriorityCounts): string[] {
   const steps: string[] = [];
 
   if (topHighItems.length) {
@@ -594,11 +648,11 @@ function buildNextSteps(topHighItems: Array<{ category: string; item: FoodItem }
     );
   }
 
-  if (counts.moderateCount > 0) {
-    steps.push("Rotate moderate-priority foods and allow 72 hours before reintroducing them.");
+  if (counts.moderateCount + counts.highCount + counts.veryHighCount > 0) {
+    steps.push("Rotate moderate- and high-priority foods and allow 72 hours before reintroducing them.");
   }
 
-  if (counts.highCount === 0) {
+  if (counts.highCount + counts.veryHighCount === 0) {
     steps.push("Maintain hydration and continue current regimen to preserve stability.");
   } else {
     steps.push("Pair meals with supportive nutrients to offset inflammatory responses.");

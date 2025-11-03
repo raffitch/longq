@@ -1,45 +1,20 @@
 import React from "react";
+import {
+  GENERAL_SEVERITY_META,
+  GENERAL_SEVERITY_ORDER,
+  type GeneralSeverity,
+} from "../priority";
 
 export interface NutrientItem {
   name: string;
   score: number;
+  severity: GeneralSeverity;
 }
 
 export interface NutritionData {
   note?: string;
   nutrients: NutrientItem[];
 }
-
-const getScoreColorClass = (score: number): string => {
-  if (score >= 85) return "bg-priority-high";
-  if (score >= 70) return "bg-priority-moderate";
-  if (score >= 50) return "bg-priority-medium";
-  return "bg-priority-low";
-};
-
-const NutrientBar: React.FC<{ item: NutrientItem }> = ({ item }) => {
-  const colorClass = getScoreColorClass(item.score);
-  const barWidth = `${Math.min(Math.abs(item.score), 100)}%`;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between text-xl font-medium md:text-2xl">
-        <span className="text-text-primary">{item.name}</span>
-        <span className="text-text-primary">{Math.round(item.score)}</span>
-      </div>
-      <div className="h-2.5 w-full rounded-full bg-background-gray">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ease-out ${colorClass}`}
-          style={{ width: barWidth }}
-          role="progressbar"
-          aria-valuenow={item.score}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        />
-      </div>
-    </div>
-  );
-};
 
 interface NutritionInsightCardProps {
   data: NutritionData | null;
@@ -51,19 +26,57 @@ const NutritionInsightCard: React.FC<NutritionInsightCardProps> = ({ data }) => 
   }
 
   const hasTitle = Boolean(data.note);
+  const grouped = GENERAL_SEVERITY_ORDER.reduce<Record<GeneralSeverity, NutrientItem[]>>(
+    (acc, severity) => {
+      acc[severity] = [];
+      return acc;
+    },
+    {} as Record<GeneralSeverity, NutrientItem[]>,
+  );
+
+  data.nutrients.forEach((item) => {
+    if (!grouped[item.severity]) {
+      grouped[item.severity] = [];
+    }
+    grouped[item.severity].push(item);
+  });
 
   return (
-    <div className="overflow-hidden rounded-2xl bg-bg-card shadow-card">
+    <div className="flex h-full flex-col gap-6 rounded-2xl bg-bg-card p-8 shadow-card md:p-10">
       {hasTitle && (
-        <div className="p-6 md:p-8">
-          <h3 className="text-2xl font-semibold text-text-primary md:text-3xl">{data.note}</h3>
-        </div>
+        <h3 className="text-3xl font-normal leading-tight text-text-secondary md:text-4xl">{data.note}</h3>
       )}
 
-      <div className={`flex flex-col gap-6 px-6 pb-6 md:gap-8 md:px-8 md:pb-8 ${hasTitle ? "pt-6" : "pt-8"}`}>
-        {data.nutrients.map((item) => (
-          <NutrientBar key={`${item.name}-${item.score}`} item={item} />
-        ))}
+      <div className="flex flex-col gap-6">
+        {GENERAL_SEVERITY_ORDER.map((severity) => {
+          const items = grouped[severity];
+          if (!items.length) return null;
+          const meta = GENERAL_SEVERITY_META[severity];
+          return (
+            <div key={severity} className="flex flex-col gap-4">
+              <h4 className="text-2xl font-normal text-text-secondary md:text-[28px]">
+                {meta.label}
+                <span className="ml-3 text-sm text-text-secondary/70">{meta.range}</span>
+              </h4>
+              <div className="flex flex-wrap items-center gap-4 md:gap-6">
+                {items.map((item) => (
+                  <div
+                    key={`${item.name}-${item.score}`}
+                    className="flex h-14 items-center justify-center rounded-[30px] px-4 md:px-6"
+                    style={{ backgroundColor: meta.background }}
+                  >
+                    <span
+                      className="whitespace-nowrap text-2xl font-normal md:text-[28px]"
+                      style={{ color: meta.color }}
+                    >
+                      {item.name} {Math.round(item.score)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

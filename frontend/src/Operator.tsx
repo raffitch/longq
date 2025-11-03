@@ -320,7 +320,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
 
   useEffect(() => {
-    document.title = "Quantum Qi - Operator Portal";
+    document.title = "Quantum Qi™ - Operator Portal";
   }, []);
   useEffect(() => {
     if (session?.sex) {
@@ -1697,7 +1697,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         <div className="space-y-4">
           <div className="text-[30px] font-bold">Operator Console Offline</div>
           <div className="mt-2 text-[16px] opacity-80">
-            The Quantum Qi services are no longer reachable. Close this window and restart the program once
+            The Quantum Qi™ services are no longer reachable. Close this window and restart the program once
             the server is running again.
           </div>
         </div>
@@ -1716,7 +1716,17 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       <div className={cn("flex min-w-[320px] max-w-[760px] flex-1 flex-col", session ? "" : "min-h-[calc(100vh-64px)]")}> 
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <h1 className="text-[20px] font-bold">Quantum Qi Operator Console</h1>
+            <h1 className="text-text-primary">
+              <span className="font-logo block text-[28px] font-semibold leading-none">
+                <span className="inline-flex items-baseline">
+                  <span>Quantum Qi</span>
+                  <span className="logo-tm">TM</span>
+                </span>
+              </span>
+              <span className="mt-1 block text-[18px] font-normal tracking-[0.18em] text-teal-100 uppercase">
+                Operator Console
+              </span>
+            </h1>
           </div>
           {session && (
             <Button onClick={resetSession} variant="danger" size="sm" className="px-3">

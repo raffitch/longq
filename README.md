@@ -1,6 +1,6 @@
-# Quantum Qi
+# Quantum Qi™
 
-Quantum Qi is a two-screen experience built for clinic operators and their guests. The operator console handles session creation, multi-report ingestion, parsing, and staged publishing, while the guest screen stays in sync via WebSockets so new data lands instantly when the operator is ready to “Go Live”.
+Quantum Qi™ is a two-screen experience built for clinic operators and their guests. The operator console handles session creation, multi-report ingestion, parsing, and staged publishing, while the guest screen stays in sync via WebSockets so new data lands instantly when the operator is ready to “Go Live”.
 
 This document walks through the project layout, local setup, and day-to-day workflows so someone new to the codebase can get productive quickly.
 
@@ -8,7 +8,7 @@ This document walks through the project layout, local setup, and day-to-day work
 
 # Quick start TL;DR
 
-The fastest way to spin up Quantum Qi locally:
+The fastest way to spin up Quantum Qi™ locally:
 
 ```bash
 ./scripts/dev.sh

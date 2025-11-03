@@ -1,58 +1,79 @@
-"""Utilities for parsing Peek energy map reports into structured data."""
+"""Utilities for parsing PEEK energy reports into structured organ/chakra data."""
+
+from __future__ import annotations
 
 import re
-import shutil
-import subprocess
-import tempfile
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Tuple
 
 try:
-    from docx import Document  # pip install python-docx
-except Exception:
+    from docx import Document  # type: ignore
+except Exception:  # pragma: no cover - runtime dependency
     Document = None
 
-# Allow ASCII '->' and common Unicode arrows; allow '>' or '›'
-ARROW = r"(?:->|→|➔|➜|:)"
-CHEVR = r"(?:>|›)"
+# ---------------------------------------------------------------------------
+# Constants & mappings
+# ---------------------------------------------------------------------------
+
+ARROW_SEPARATORS = r"(->|→|➔|➜)"
+CHEVR_SEPARATORS = r"(>|›)"
 VALUE_RE = re.compile(r"(\d{1,3})\b")
-TOKEN_SPLIT_RE = re.compile(rf"\s*(?:{ARROW}|{CHEVR}|\|)\s*")
+VALUE_AFTER_CHEVRON = re.compile(r"(?<!-)[>›]\s*(\d{1,3})\b")
 
-# Organ IDs your UI knows
-TARGET_ORGAN_IDS = [
-    "brain","thyroid","lungs","heart","lymphatic","liver","spleen","stomach",
-    "gallbladder","kidneys","small_intestine","large_intestine","bladder",
-    "reproductive_male","reproductive_female",
-]
+TARGET_ORGAN_IDS = {
+    "brain",
+    "thyroid",
+    "lungs",
+    "heart",
+    "lymphatic",
+    "liver",
+    "spleen",
+    "stomach",
+    "gallbladder",
+    "kidneys",
+    "small_intestine",
+    "large_intestine",
+    "bladder",
+    "reproductive_male",
+    "reproductive_female",
+}
 
-# Map report names/synonyms → IDs above
 NAME_TO_ID = {
     "brain": "brain",
+    "br": "brain",
     "thyroid": "thyroid",
-    "lung": "lungs", "lungs": "lungs",
+    "th": "thyroid",
+    "lung": "lungs",
+    "lungs": "lungs",
+    "lu": "lungs",
     "heart": "heart",
-    "lymphatic": "lymphatic", "lymphatic system": "lymphatic",
+    "hr": "heart",
+    "pericardium": "heart",
+    "pc": "heart",
+    "lymphatic": "lymphatic",
+    "ly": "lymphatic",
     "liver": "liver",
+    "lv": "liver",
     "spleen": "spleen",
+    "sp": "spleen",
     "stomach": "stomach",
-    "gall bladder": "gallbladder", "gallbladder": "gallbladder",
-    "kidney": "kidneys", "kidneys": "kidneys",
-    "small intestine": "small_intestine", "si": "small_intestine",
-    "large intestine": "large_intestine", "li": "large_intestine", "colon": "large_intestine",
-    "bladder": "bladder", "urinary bladder": "bladder",
-
-    # TCM / alternates → nearest UI slot
-    "san-jiao": "lymphatic", "san jiao": "lymphatic", "triple burner": "lymphatic", "sanjiao": "lymphatic",
-    "spleen-pancreas": "spleen", "pancreas": "spleen",
-    "duodenum": "small_intestine",
-    "intestine (small)": "small_intestine",
-    "intestine (large)": "large_intestine",
-
-    # reproductive
-    "prostate": "reproductive_male",
-    "testes": "reproductive_male", "testicles": "reproductive_male",
-    "uterus": "reproductive_female", "ovary": "reproductive_female", "ovaries": "reproductive_female",
-    "endometrium": "reproductive_female",
+    "st": "stomach",
+    "gallbladder": "gallbladder",
+    "gall bladder": "gallbladder",
+    "gb": "gallbladder",
+    "kidney": "kidneys",
+    "kidneys": "kidneys",
+    "ki": "kidneys",
+    "small intestine": "small_intestine",
+    "si": "small_intestine",
+    "large intestine": "large_intestine",
+    "li": "large_intestine",
+    "bladder": "bladder",
+    "bl": "bladder",
+    "pancreas": "pancreas_placeholder",
+    "pa": "pancreas_placeholder",
+    "reproductive": "__reproductive__",
+    "re": "__reproductive__",
 }
 
 CHAKRA_ID_BY_NUM = {
@@ -65,30 +86,30 @@ CHAKRA_ID_BY_NUM = {
     7: "Chakra_07_Crown",
 }
 
+SUPPORTED_CHAKRA_IDS = set(CHAKRA_ID_BY_NUM.values())
 
-def _tokenize_line(text: str) -> List[str]:
-    """Split a raw line into semantic tokens."""
-    if not text:
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _tokenize_line(raw: str) -> List[str]:
+    if not raw:
         return []
-
-    normalized = text.replace("\u200b", " ")
-    normalized = re.sub(r"[\t•]+", " ", normalized)
-    normalized = normalized.strip()
+    normalized = raw.replace("\u200b", " ").strip()
     if not normalized:
         return []
+    normalized = re.sub(r"[\t•]+", " ", normalized)
+    normalized = re.sub(ARROW_SEPARATORS, "|", normalized)
+    normalized = re.sub(CHEVR_SEPARATORS, "|", normalized)
+    parts = [part.strip(" -") for part in normalized.split("|") if part.strip(" -")]
+    if len(parts) <= 1:
+        parts = [token.strip() for token in re.split(r"\s{2,}", normalized) if token.strip()]
+    if len(parts) <= 1:
+        parts = [token.strip() for token in normalized.split() if token.strip()]
+    return parts
 
-    tokens = [part.strip(" -") for part in TOKEN_SPLIT_RE.split(normalized) if part.strip(" -")]
 
-    if len(tokens) <= 1:
-        # Attempt splitting by repeated whitespace as a last resort
-        alt_tokens = [part.strip() for part in re.split(r"\s{2,}", normalized) if part.strip()]
-        if len(alt_tokens) > 1:
-            tokens = alt_tokens
-
-    return tokens
-
-
-def _extract_value(tokens: List[str]) -> tuple[int | None, int | None]:
+def _extract_value(tokens: List[str]) -> Tuple[int | None, int | None]:
     for idx in range(len(tokens) - 1, -1, -1):
         match = VALUE_RE.search(tokens[idx])
         if match:
@@ -96,8 +117,28 @@ def _extract_value(tokens: List[str]) -> tuple[int | None, int | None]:
     return None, None
 
 
-def _parse_organ_tokens(tokens: List[str]) -> tuple[str, int] | None:
-    if not tokens or not tokens[0].lower().startswith("organs"):
+def _norm(text: str) -> str:
+    text = text.strip().lower()
+    text = re.sub(r"[.\u200b]", " ", text)
+    return re.sub(r"\s+", " ", text)
+
+
+def _map_name_to_id(name: str) -> str | None:
+    key = _norm(name)
+    if key in NAME_TO_ID:
+        return NAME_TO_ID[key]
+    base = re.sub(r"\s*\(.*?\)\s*", "", key).strip()
+    if base in NAME_TO_ID:
+        return NAME_TO_ID[base]
+    for segment in re.split(r"[-/]", base):
+        segment = segment.strip()
+        if segment in NAME_TO_ID:
+            return NAME_TO_ID[segment]
+    return None
+
+
+def _parse_organ_tokens(tokens: List[str]) -> Tuple[str, int] | None:
+    if not tokens or not tokens[0].lower().startswith("organ"):
         return None
 
     body = tokens[1:]
@@ -112,36 +153,29 @@ def _parse_organ_tokens(tokens: List[str]) -> tuple[str, int] | None:
     if not name_tokens:
         return None
 
-    # Drop leading short uppercase codes (e.g., "LI")
-    filtered_tokens: List[str] = []
-    skipped = False
-    for token in name_tokens:
-        if not skipped and re.fullmatch(r"[A-Z]{1,4}", token):
-            skipped = True
-            continue
-        filtered_tokens.append(token)
+    # remove leading short uppercase codes (e.g. LI, SI)
+    filtered = list(name_tokens)
+    while filtered and re.fullmatch(r"[A-Za-z]{1,4}[.:]?", filtered[0]):
+        filtered.pop(0)
+    if not filtered:
+        filtered = name_tokens
 
-    if not filtered_tokens:
-        filtered_tokens = name_tokens
+    candidates: List[str] = []
+    for start in range(len(filtered)):
+        candidate = " ".join(filtered[start:]).strip()
+        if candidate:
+            candidates.append(candidate)
+    candidates.extend(name_tokens)
 
-    for start in range(len(filtered_tokens)):
-        candidate = " ".join(filtered_tokens[start:]).strip()
-        if not candidate:
-            continue
-        oid = _map_name_to_id(candidate)
-        if oid:
-            return oid, value
-
-    # Fall back to individual tokens before the value
-    for token in reversed(name_tokens):
-        oid = _map_name_to_id(token)
-        if oid:
-            return oid, value
+    for candidate in candidates:
+        organ_id = _map_name_to_id(candidate)
+        if organ_id:
+            return organ_id, value
 
     return None
 
 
-def _parse_chakra_tokens(tokens: List[str]) -> tuple[str, int] | None:
+def _parse_chakra_tokens(tokens: List[str]) -> Tuple[str, int] | None:
     if not tokens or not tokens[0].lower().startswith("chakra"):
         return None
 
@@ -165,115 +199,128 @@ def _parse_chakra_tokens(tokens: List[str]) -> tuple[str, int] | None:
 
     return CHAKRA_ID_BY_NUM[number], value
 
+
+def _value_after_chevron(raw_line: str) -> int | None:
+    match = VALUE_AFTER_CHEVRON.search(raw_line)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _parse_organ_strict(raw_line: str) -> Tuple[str, int] | None:
+    if not raw_line.lower().startswith("organs"):
+        return None
+    value = _value_after_chevron(raw_line)
+    if value is None:
+        return None
+    tokens = _tokenize_line(raw_line)
+    parsed = _parse_organ_tokens(tokens)
+    if not parsed:
+        return None
+    organ_id, _ = parsed
+    return organ_id, value
+
+
+def _parse_chakra_strict(raw_line: str) -> Tuple[str, int] | None:
+    if not raw_line.lower().startswith("chakra"):
+        return None
+    value = _value_after_chevron(raw_line)
+    if value is None:
+        return None
+    tokens = _tokenize_line(raw_line)
+    parsed = _parse_chakra_tokens(tokens)
+    if not parsed:
+        return None
+    chakra_id, _ = parsed
+    return chakra_id, value
+
+
 def _read_doc_all_lines(path: Path) -> List[str]:
-    """Read visible text from paragraphs AND table cells, preserving order."""
     if Document is None:
         raise RuntimeError("python-docx is not installed. Run: pip install python-docx")
+
     doc = Document(str(path))
     lines: List[str] = []
 
-    # Normal paragraphs
-    for p in doc.paragraphs:
-        t = (p.text or "").strip()
-        if t:
-            lines.append(t)
+    for paragraph in doc.paragraphs:
+        value = (paragraph.text or "").strip()
+        if value:
+            lines.append(value)
 
-    # Tables (each cell has its own paragraphs)
-    for tbl in doc.tables:
-        for row in tbl.rows:
-            cell_texts: List[str] = []
-            for cell in row.cells:
-                cell_value = " ".join((p.text or "").strip() for p in cell.paragraphs if (p.text or "").strip())
-                if cell_value:
-                    cell_texts.append(cell_value)
-            if cell_texts:
-                lines.append(" | ".join(cell_texts))
+    for table in doc.tables:
+        for row in table.rows:
+            if not row.cells:
+                continue
+            first = row.cells[0]
+            text = " ".join(
+                (p.text or "").strip() for p in first.paragraphs if (p.text or "").strip()
+            )
+            text = text.strip()
+            if text:
+                lines.append(text)
+
     return lines
 
-def _has_soffice() -> bool:
-    return bool(shutil.which("soffice") or shutil.which("soffice.bin"))
-
-def _convert_doc_to_docx(src_doc: Path, tmpdir: Path) -> Path:
-    if not _has_soffice():
-        raise RuntimeError("LibreOffice (soffice) not found for .doc conversion. Install it or convert to .docx manually.")
-    cmd = [shutil.which("soffice") or "soffice", "--headless", "--convert-to", "docx", "--outdir", str(tmpdir), str(src_doc)]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"LibreOffice failed to convert {src_doc.name}:\n{proc.stderr or proc.stdout}")
-    out_path = tmpdir / (src_doc.stem + ".docx")
-    if not out_path.exists():
-        raise RuntimeError(f"Converted file not found at {out_path}")
-    return out_path
 
 def read_word_lines(path: Path) -> List[str]:
-    suf = path.suffix.lower()
-    if suf == ".docx":
-        return _read_doc_all_lines(path)
-    if suf == ".doc":
-        with tempfile.TemporaryDirectory() as td:
-            td_path = Path(td)
-            docx_path = _convert_doc_to_docx(path, td_path)
-            return _read_doc_all_lines(docx_path)
-    raise RuntimeError(f"Unsupported file type: {path.suffix}")
+    suffix = path.suffix.lower()
+    if suffix != ".docx":
+        raise RuntimeError(f"Unsupported file type for PEEK report: {path.suffix}. Expected '.docx'.")
+    return _read_doc_all_lines(path)
 
-def _norm(s: str) -> str:
-    s = s.strip().lower()
-    s = re.sub(r"[.\u200b]", " ", s)
-    s = re.sub(r"\s+", " ", s)
-    return s
 
-def _map_name_to_id(name: str) -> str | None:
-    key = _norm(name)
-    if key in NAME_TO_ID:
-        return NAME_TO_ID[key]
-    base = re.sub(r"\s*\(.*?\)\s*", "", key).strip()
-    if base in NAME_TO_ID:
-        return NAME_TO_ID[base]
-    for part in re.split(r"[-/]", base):
-        part = part.strip()
-        if part in NAME_TO_ID:
-            return NAME_TO_ID[part]
-    return None
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def parse_report(path: Path) -> Dict[str, Any]:
-    lines = read_word_lines(path)
     organs: Dict[str, int] = {}
     chakras: Dict[str, int] = {}
 
-    for raw in lines:
-        line = " ".join(raw.replace("\u200b", " ").split())
-        tokens = _tokenize_line(raw)
+    for raw_line in read_word_lines(path):
+        tokens = _tokenize_line(raw_line)
+        if not tokens:
+            continue
 
-        if tokens:
-            header = tokens[0].lower()
-            if header.startswith("organs"):
-                parsed = _parse_organ_tokens(tokens)
-                if parsed:
-                    oid, value = parsed
-                    organs[oid] = value
+        header = tokens[0].lower()
+        if header.startswith("organ"):
+            parsed_strict = _parse_organ_strict(raw_line)
+            if parsed_strict:
+                organ_id, value = parsed_strict
+                if organ_id == "__reproductive__":
+                    organs.setdefault("reproductive_male", value)
+                    organs.setdefault("reproductive_female", value)
+                elif organ_id == "pancreas_placeholder":
                     continue
-            if header.startswith("chakra"):
-                parsed = _parse_chakra_tokens(tokens)
-                if parsed:
-                    cid, value = parsed
-                    chakras[cid] = value
-                    continue
+                elif organ_id in TARGET_ORGAN_IDS:
+                    organs[organ_id] = value
+            continue
 
-        # Fallback: attempt to parse inline text with arrows/chevrons
-        tokens_from_line = _tokenize_line(line)
-        if tokens_from_line:
-            header = tokens_from_line[0].lower()
-            if header.startswith("organs"):
-                parsed = _parse_organ_tokens(tokens_from_line)
-                if parsed:
-                    oid, value = parsed
-                    organs[oid] = value
-                continue
-            if header.startswith("chakra"):
-                parsed = _parse_chakra_tokens(tokens_from_line)
-                if parsed:
-                    cid, value = parsed
-                    chakras[cid] = value
-                continue
+        if header.startswith("chakra"):
+            parsed_strict = _parse_chakra_strict(raw_line)
+            if parsed_strict:
+                chakra_id, value = parsed_strict
+                if chakra_id in SUPPORTED_CHAKRA_IDS:
+                    chakras[chakra_id] = value
+            continue
 
     return {"organs": organs, "chakras": chakras}
+
+
+def main() -> None:  # pragma: no cover - CLI helper
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(description="Parse a PEEK Word report into JSON.")
+    parser.add_argument("input", help="Path to a .docx file")
+    parser.add_argument("-o", "--out", default="cardenergymap_values.json", help="Output JSON path")
+    args = parser.parse_args()
+
+    data = parse_report(Path(args.input))
+    with open(args.out, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    print(f"Wrote {args.out}")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()
