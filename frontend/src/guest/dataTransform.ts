@@ -7,6 +7,15 @@ import type {
   NutritionData,
   ToxinItem,
 } from "./components";
+import {
+  GENERAL_SEVERITY_META,
+  GENERAL_SEVERITY_ORDER,
+  GENERAL_SEVERITY_THRESHOLDS,
+  FOOD_SEVERITY_THRESHOLDS as SHARED_FOOD_SEVERITY_THRESHOLDS,
+  makeSeverityClassifier,
+  type GeneralSeverity,
+} from "../shared/priority";
+import { setThresholdMax } from "../shared/thresholdConfig";
 import type {
   RawFoodData,
   RawHeavyMetalsData,
@@ -55,13 +64,6 @@ export const FOOD_CATEGORY_ORDER = [
   "Lectins",
 ] as const;
 
-const severityThresholds: Array<{ min: number; severity: FoodSeverity }> = [
-  { min: 90, severity: "high" },
-  { min: 80, severity: "moderate" },
-  { min: 65, severity: "medium" },
-  { min: 0, severity: "low" },
-];
-
 const toCanonical = (name: string): string =>
   name
     .toLowerCase()
@@ -83,16 +85,241 @@ const toDisplayName = (name: string): string => {
     .join(" ");
 };
 
-export const classifySeverity = (score: number | undefined | null): FoodSeverity => {
-  const value = Number.isFinite(score) ? Math.abs(Number(score)) : 0;
-  for (const { min, severity } of severityThresholds) {
-    if (value >= min) return severity;
-  }
-  return "low";
+export const classifySeverity = makeSeverityClassifier(GENERAL_SEVERITY_THRESHOLDS);
+export const classifyFoodSeverity = makeSeverityClassifier(SHARED_FOOD_SEVERITY_THRESHOLDS);
+
+export const classifyHormoneSeverity = classifySeverity;
+
+const CARD_ENERGY_ORGAN_IDS = [
+  "brain",
+  "thyroid",
+  "lungs",
+  "heart",
+  "lymphatic",
+  "liver",
+  "spleen",
+  "stomach",
+  "gallbladder",
+  "kidneys",
+  "small_intestine",
+  "large_intestine",
+  "bladder",
+  "reproductive_male",
+  "reproductive_female",
+] as const;
+
+const CARD_ENERGY_ORGAN_ID_SET = new Set<string>(CARD_ENERGY_ORGAN_IDS);
+
+const PEEK_ORGAN_NAME_MAP: Record<string, string> = {
+  brain: "brain",
+  "brain cns": "brain",
+  cns: "brain",
+  thyroid: "thyroid",
+  parathyroid: "thyroid",
+  "thyroid parathyroid": "thyroid",
+  lung: "lungs",
+  lungs: "lungs",
+  bronchi: "lungs",
+  bronchial: "lungs",
+  "lungs bronchi": "lungs",
+  heart: "heart",
+  lymph: "lymphatic",
+  lymphatic: "lymphatic",
+  lymphatics: "lymphatic",
+  "lymphatic system": "lymphatic",
+  "lymphatic immune": "lymphatic",
+  "immune system": "lymphatic",
+  liver: "liver",
+  spleen: "spleen",
+  "spleen pancreas": "spleen",
+  pancreas: "spleen",
+  stomach: "stomach",
+  "gall bladder": "gallbladder",
+  gallbladder: "gallbladder",
+  kidney: "kidneys",
+  kidneys: "kidneys",
+  "kidney bladder": "kidneys",
+  "small intestine": "small_intestine",
+  si: "small_intestine",
+  duodenum: "small_intestine",
+  jejunum: "small_intestine",
+  ileum: "small_intestine",
+  "large intestine": "large_intestine",
+  colon: "large_intestine",
+  li: "large_intestine",
+  bladder: "bladder",
+  "urinary bladder": "bladder",
+  "san-jiao": "lymphatic",
+  "san jiao": "lymphatic",
+  sanjiao: "lymphatic",
+  "triple burner": "lymphatic",
+  prostate: "reproductive_male",
+  testes: "reproductive_male",
+  testicles: "reproductive_male",
+  "male reproductive": "reproductive_male",
+  "reproductive male": "reproductive_male",
+  uterus: "reproductive_female",
+  ovary: "reproductive_female",
+  ovaries: "reproductive_female",
+  endometrium: "reproductive_female",
+  "female reproductive": "reproductive_female",
+  "reproductive female": "reproductive_female",
 };
 
-export const classifyHormoneSeverity = (score: number | undefined | null): "high" | "moderate" => {
-  return classifySeverity(score) === "high" ? "high" : "moderate";
+const normalizePeekOrganId = (raw: string): string | null => {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const tryLookup = (candidate: string): string | null => {
+    const key = candidate.toLowerCase();
+    if (PEEK_ORGAN_NAME_MAP[key]) {
+      return PEEK_ORGAN_NAME_MAP[key];
+    }
+    if (CARD_ENERGY_ORGAN_ID_SET.has(key)) {
+      return key;
+    }
+    return null;
+  };
+
+  const dropParens = (input: string) => input.replace(/\(.*?\)/g, "").trim();
+  const canonicalize = (input: string) => input.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+  const direct = tryLookup(trimmed);
+  if (direct) return direct;
+
+  const withoutPrefix = trimmed.replace(/^organs?\b[:\s\-–—>›|]*/i, "").trim();
+  if (!withoutPrefix) {
+    return null;
+  }
+
+  const baseCandidates = [withoutPrefix, dropParens(withoutPrefix)];
+  for (const candidate of baseCandidates) {
+    const lookedUp = tryLookup(candidate);
+    if (lookedUp) return lookedUp;
+
+    const canonicalId = canonicalize(candidate.toLowerCase());
+    if (canonicalId && CARD_ENERGY_ORGAN_ID_SET.has(canonicalId)) {
+      return canonicalId;
+    }
+  }
+
+  const tokenSource = dropParens(withoutPrefix.toLowerCase());
+  const tokens = tokenSource.split(/[^a-z0-9]+/).filter(Boolean);
+  for (const token of tokens) {
+    const alias = PEEK_ORGAN_NAME_MAP[token];
+    if (alias) {
+      return alias;
+    }
+  }
+
+  if (tokens.includes("reproductive")) {
+    if (tokens.includes("male")) return "reproductive_male";
+    if (tokens.includes("female")) return "reproductive_female";
+  }
+
+  return null;
+};
+
+const CHAKRA_IDS = [
+  "Chakra_01_Root",
+  "Chakra_02_Sacral",
+  "Chakra_03_SolarPlexus",
+  "Chakra_04_Heart",
+  "Chakra_05_Throat",
+  "Chakra_06_ThirdEye",
+  "Chakra_07_Crown",
+] as const;
+
+const CHAKRA_ALIAS_MAP: Record<string, string> = {
+  "chakra 1": CHAKRA_IDS[0],
+  "chakra1": CHAKRA_IDS[0],
+  "chakra-1": CHAKRA_IDS[0],
+  "1": CHAKRA_IDS[0],
+  "01": CHAKRA_IDS[0],
+  root: CHAKRA_IDS[0],
+  "root chakra": CHAKRA_IDS[0],
+  "chakra 2": CHAKRA_IDS[1],
+  "chakra2": CHAKRA_IDS[1],
+  "chakra-2": CHAKRA_IDS[1],
+  "2": CHAKRA_IDS[1],
+  "02": CHAKRA_IDS[1],
+  sacral: CHAKRA_IDS[1],
+  "sacral chakra": CHAKRA_IDS[1],
+  "chakra 3": CHAKRA_IDS[2],
+  "chakra3": CHAKRA_IDS[2],
+  "chakra-3": CHAKRA_IDS[2],
+  "3": CHAKRA_IDS[2],
+  "03": CHAKRA_IDS[2],
+  "solar plexus": CHAKRA_IDS[2],
+  "solar plexus chakra": CHAKRA_IDS[2],
+  "chakra 4": CHAKRA_IDS[3],
+  "chakra4": CHAKRA_IDS[3],
+  "chakra-4": CHAKRA_IDS[3],
+  "4": CHAKRA_IDS[3],
+  "04": CHAKRA_IDS[3],
+  heart: CHAKRA_IDS[3],
+  "heart chakra": CHAKRA_IDS[3],
+  "chakra 5": CHAKRA_IDS[4],
+  "chakra5": CHAKRA_IDS[4],
+  "chakra-5": CHAKRA_IDS[4],
+  "5": CHAKRA_IDS[4],
+  "05": CHAKRA_IDS[4],
+  throat: CHAKRA_IDS[4],
+  "throat chakra": CHAKRA_IDS[4],
+  "chakra 6": CHAKRA_IDS[5],
+  "chakra6": CHAKRA_IDS[5],
+  "chakra-6": CHAKRA_IDS[5],
+  "6": CHAKRA_IDS[5],
+  "06": CHAKRA_IDS[5],
+  indigo: CHAKRA_IDS[5],
+  "third eye": CHAKRA_IDS[5],
+  "third eye chakra": CHAKRA_IDS[5],
+  "chakra 7": CHAKRA_IDS[6],
+  "chakra7": CHAKRA_IDS[6],
+  "chakra-7": CHAKRA_IDS[6],
+  "7": CHAKRA_IDS[6],
+  "07": CHAKRA_IDS[6],
+  violet: CHAKRA_IDS[6],
+  crown: CHAKRA_IDS[6],
+  "crown chakra": CHAKRA_IDS[6],
+};
+
+const normalizePeekChakraId = (raw: string): string | null => {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const lower = trimmed.toLowerCase();
+  if (CHAKRA_ALIAS_MAP[lower]) {
+    return CHAKRA_ALIAS_MAP[lower];
+  }
+
+  const withoutPrefix = lower.replace(/^chakra\b[:\s\-–—>›|]*/, "").trim();
+  if (withoutPrefix && CHAKRA_ALIAS_MAP[withoutPrefix]) {
+    return CHAKRA_ALIAS_MAP[withoutPrefix];
+  }
+
+  const base = withoutPrefix.replace(/\(.*?\)/g, "").trim();
+  if (base && CHAKRA_ALIAS_MAP[base]) {
+    return CHAKRA_ALIAS_MAP[base];
+  }
+
+  const numberMatch = base.match(/(\d+)/);
+  if (numberMatch) {
+    const idx = Number.parseInt(numberMatch[1], 10);
+    if (Number.isFinite(idx) && idx >= 1 && idx <= CHAKRA_IDS.length) {
+      return CHAKRA_IDS[idx - 1];
+    }
+  }
+
+  for (const [alias, chakraId] of Object.entries(CHAKRA_ALIAS_MAP)) {
+    if (base.includes(alias)) {
+      return chakraId;
+    }
+  }
+
+  return null;
 };
 
 export function transformFoodData(raw: RawFoodData | null | undefined): Map<string, FoodItem[]> {
@@ -109,7 +336,7 @@ export function transformFoodData(raw: RawFoodData | null | undefined): Map<stri
         if (typeof item.score !== "number") continue;
         const severity = (item.severity && ["high", "moderate", "medium", "low"].includes(item.severity))
           ? (item.severity as FoodSeverity)
-          : classifySeverity(item.score);
+          : classifyFoodSeverity(item.score);
         existing.push({
           name: item.name,
           score: item.score,
@@ -132,8 +359,11 @@ export function transformNutritionData(raw: RawNutritionData | null | undefined,
     }))
     .filter((item) => Number.isFinite(item.score))
     .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
-    .slice(0, limit)
-    .map((item) => ({ ...item, score: Math.round(item.score) }));
+    .map((item) => ({
+      ...item,
+      score: Math.round(item.score),
+      severity: classifySeverity(item.score),
+    }));
 
   return {
     note: items.length ? "" : undefined,
@@ -181,17 +411,49 @@ export function transformToxins(raw: RawToxinsData | null | undefined): ToxinIte
 }
 
 export interface PriorityCounts {
+  veryLowCount: number;
   lowCount: number;
-  mediumCount: number;
+  normalCount: number;
   moderateCount: number;
   highCount: number;
+  veryHighCount: number;
 }
 
-const incrementCounts = (counts: PriorityCounts, severity: FoodSeverity) => {
-  if (severity === "high") counts.highCount += 1;
-  else if (severity === "moderate") counts.moderateCount += 1;
-  else if (severity === "medium") counts.mediumCount += 1;
-  else counts.lowCount += 1;
+const incrementCounts = (counts: PriorityCounts, severity: GeneralSeverity) => {
+  switch (severity) {
+    case "very high":
+      counts.veryHighCount += 1;
+      break;
+    case "high":
+      counts.highCount += 1;
+      break;
+    case "moderate":
+      counts.moderateCount += 1;
+      break;
+    case "normal":
+      counts.normalCount += 1;
+      break;
+    case "low":
+      counts.lowCount += 1;
+      break;
+    case "very low":
+      counts.veryLowCount += 1;
+      break;
+  }
+};
+
+const mapFoodSeverityToGeneral = (severity: FoodSeverity): GeneralSeverity => {
+  switch (severity) {
+    case "high":
+      return "high";
+    case "moderate":
+      return "moderate";
+    case "medium":
+      return "normal";
+    case "low":
+    default:
+      return "low";
+  }
 };
 
 export interface AggregatedInsights {
@@ -203,7 +465,7 @@ export interface AggregatedInsights {
   priorityCounts: PriorityCounts;
   overallScore: number;
   scoreStatus: string;
-  topHighItems: Array<{ category: string; item: FoodItem }>;
+  topHighItems: Array<{ category: string; item: { name: string } }>;
   nextSteps: string[];
   energyMap: {
     organs: Record<string, number>;
@@ -219,7 +481,14 @@ export function aggregateInsights(
   toxins: ToxinItem[],
   energyMapRaw: RawPeekData | null,
 ): AggregatedInsights {
-  const counts: PriorityCounts = { lowCount: 0, mediumCount: 0, moderateCount: 0, highCount: 0 };
+  const counts: PriorityCounts = {
+    veryLowCount: 0,
+    lowCount: 0,
+    normalCount: 0,
+    moderateCount: 0,
+    highCount: 0,
+    veryHighCount: 0,
+  };
 
   const categories: Array<{ name: string; items: FoodItem[] }> = [];
 
@@ -231,20 +500,50 @@ export function aggregateInsights(
     return a.localeCompare(b);
   });
 
+  const severityTotals = GENERAL_SEVERITY_ORDER.reduce<Record<GeneralSeverity, number>>((acc, severity) => {
+    acc[severity] = 0;
+    return acc;
+  }, {} as Record<GeneralSeverity, number>);
+
   sortedKeys.forEach((key) => {
     const items = foodMap.get(key) ?? [];
-    items.forEach((item) => incrementCounts(counts, item.severity));
+    items.forEach((item) => {
+      const mapped = mapFoodSeverityToGeneral(item.severity);
+      incrementCounts(counts, mapped);
+      severityTotals[mapped] += 1;
+    });
     categories.push({ name: key, items: items.slice().sort((a, b) => b.score - a.score) });
   });
 
-  heavyMetals.forEach((item) => incrementCounts(counts, item.severity));
-  hormones.forEach((item) => incrementCounts(counts, item.severity === "high" ? "high" : "moderate"));
-  toxins.forEach((item) => incrementCounts(counts, item.severity));
-  const classifyEnergySeverity = (score: number | undefined | null): FoodSeverity => {
-    const value = Number.isFinite(score) ? Math.max(0, Math.min(100, Number(score))) : 0;
+  heavyMetals.forEach((item) => {
+    incrementCounts(counts, item.severity);
+    severityTotals[item.severity] += 1;
+  });
+  hormones.forEach((item) => {
+    incrementCounts(counts, item.severity);
+    severityTotals[item.severity] += 1;
+  });
+  toxins.forEach((item) => {
+    incrementCounts(counts, item.severity);
+    severityTotals[item.severity] += 1;
+  });
+
+  const toPercent = (score: number | undefined | null) =>
+    Number.isFinite(score) ? Math.max(0, Math.min(100, Number(score))) : 0;
+
+  const classifyOrganSeverity = (score: number | undefined | null): FoodSeverity => {
+    const value = toPercent(score);
     if (value >= 91) return "high";
     if (value >= 76) return "moderate";
     if (value >= 26) return "medium";
+    return "low";
+  };
+
+  const classifyChakraSeverity = (score: number | undefined | null): FoodSeverity => {
+    const value = toPercent(score);
+    if (value >= 93) return "high";
+    if (value >= 81) return "moderate";
+    if (value >= 23) return "medium";
     return "low";
   };
 
@@ -253,26 +552,51 @@ export function aggregateInsights(
 
   if (energyMapRaw?.organs) {
     for (const [key, value] of Object.entries(energyMapRaw.organs)) {
+      const organId = normalizePeekOrganId(key);
+      if (!organId) continue;
       const numeric = Number(value);
-      if (Number.isFinite(numeric)) {
-        const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
-        sanitizedOrgans[key] = clamped;
-        incrementCounts(counts, classifyEnergySeverity(clamped));
-      }
+      if (!Number.isFinite(numeric)) continue;
+      const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
+      sanitizedOrgans[organId] = clamped;
     }
   }
 
   if (energyMapRaw?.chakras) {
     for (const [key, value] of Object.entries(energyMapRaw.chakras)) {
+      const chakraId = normalizePeekChakraId(key);
+      if (!chakraId) continue;
       const numeric = Number(value);
-      if (Number.isFinite(numeric)) {
-        const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
-        sanitizedChakras[key] = clamped;
-        incrementCounts(counts, classifyEnergySeverity(clamped));
-      }
+      if (!Number.isFinite(numeric)) continue;
+      const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
+      sanitizedChakras[chakraId] = clamped;
     }
   }
-  nutrition.nutrients.forEach((item) => incrementCounts(counts, classifySeverity(item.score)));
+
+  Object.values(sanitizedOrgans).forEach((value) =>
+    incrementCounts(counts, mapFoodSeverityToGeneral(classifyOrganSeverity(value))),
+  );
+  Object.values(sanitizedOrgans).forEach((value) => {
+    const mapped = mapFoodSeverityToGeneral(classifyOrganSeverity(value));
+    severityTotals[mapped] += 1;
+  });
+  Object.values(sanitizedChakras).forEach((value) =>
+    incrementCounts(counts, mapFoodSeverityToGeneral(classifyChakraSeverity(value))),
+  );
+  Object.values(sanitizedChakras).forEach((value) => {
+    const mapped = mapFoodSeverityToGeneral(classifyChakraSeverity(value));
+    severityTotals[mapped] += 1;
+  });
+  nutrition.nutrients.forEach((item) => {
+    severityTotals[item.severity] += 1;
+    incrementCounts(counts, item.severity);
+  });
+
+  try {
+    const highestBucket = Math.max(...Object.values(severityTotals));
+    setThresholdMax(highestBucket > 0 ? highestBucket : 1);
+  } catch {
+    /* ignore storage errors */
+  }
 
   const allScores: number[] = [];
   categories.forEach(({ items }) => items.forEach((item) => allScores.push(Math.abs(item.score))));
@@ -285,30 +609,33 @@ export function aggregateInsights(
   const overallScore =
     allScores.length > 0 ? allScores.reduce((sum, value) => sum + value, 0) / allScores.length : 0;
 
+  const elevatedCount = counts.highCount + counts.veryHighCount;
   const scoreStatus =
-    counts.highCount > 3 || overallScore >= 85
+    elevatedCount > 3 || overallScore >= 85
       ? "High Priority"
-      : counts.moderateCount > 5 || overallScore >= 75
+      : counts.moderateCount > 5 || overallScore >= 70
         ? "Moderate"
-        : "Stable";
+        : counts.normalCount > 5
+          ? "Normal"
+          : "Stable";
 
-  const topHighItems: Array<{ category: string; item: FoodItem }> = [];
+  const topHighItems: Array<{ category: string; item: { name: string } }> = [];
   categories.forEach(({ name, items }) => {
     items
       .filter((item) => item.severity === "high")
       .slice(0, 3)
-      .forEach((item) => topHighItems.push({ category: name, item }));
+      .forEach((item) => topHighItems.push({ category: name, item: { name: item.name } }));
   });
 
   heavyMetals
-    .filter((item) => item.severity === "high")
+    .filter((item) => item.severity === "high" || item.severity === "very high")
     .slice(0, 2)
-    .forEach((item) => topHighItems.push({ category: "Heavy Metals", item }));
+    .forEach((item) => topHighItems.push({ category: "Heavy Metals", item: { name: item.name } }));
 
   toxins
-    .filter((item) => item.severity === "high")
+    .filter((item) => item.severity === "high" || item.severity === "very high")
     .slice(0, 2)
-    .forEach((item) => topHighItems.push({ category: "Toxins", item }));
+    .forEach((item) => topHighItems.push({ category: "Toxins", item: { name: item.name } }));
 
   const nextSteps = buildNextSteps(topHighItems, counts);
 
@@ -334,7 +661,7 @@ export function aggregateInsights(
   };
 }
 
-function buildNextSteps(topHighItems: Array<{ category: string; item: FoodItem }>, counts: PriorityCounts): string[] {
+function buildNextSteps(topHighItems: Array<{ category: string; item: { name: string } }>, counts: PriorityCounts): string[] {
   const steps: string[] = [];
 
   if (topHighItems.length) {
@@ -355,11 +682,11 @@ function buildNextSteps(topHighItems: Array<{ category: string; item: FoodItem }
     );
   }
 
-  if (counts.moderateCount > 0) {
-    steps.push("Rotate moderate-priority foods and allow 72 hours before reintroducing them.");
+  if (counts.moderateCount + counts.highCount + counts.veryHighCount > 0) {
+    steps.push("Rotate moderate- and high-priority foods and allow 72 hours before reintroducing them.");
   }
 
-  if (counts.highCount === 0) {
+  if (counts.highCount + counts.veryHighCount === 0) {
     steps.push("Maintain hydration and continue current regimen to preserve stability.");
   } else {
     steps.push("Pair meals with supportive nutrients to offset inflammatory responses.");

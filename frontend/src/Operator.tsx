@@ -3,6 +3,13 @@ import { Button } from "./ui/Button";
 import { Chip } from "./ui/Chip";
 import { cn } from "./ui/cn";
 import {
+  useThresholdLimitValue,
+  useThresholdMaxValue,
+  useVisibleSeverities,
+} from "./hooks/useThresholdSettings";
+import { setThresholdLimit, setVisibleSeverities } from "./shared/thresholdConfig";
+import { GENERAL_SEVERITY_META, GENERAL_SEVERITY_ORDER, type GeneralSeverity } from "./shared/priority";
+import {
   createSession,
   updateSession,
   uploadPdf,
@@ -48,6 +55,7 @@ const PREVIEW_SCALE = 0.55;
 const PREVIEW_WIDTH = 5120;
 const PREVIEW_HEIGHT = 1440;
 const PREVIEW_ASPECT = (PREVIEW_HEIGHT / PREVIEW_WIDTH) * 100;
+const MIN_PREVIEW_HEIGHT = 1000;
 const scaledFrameStyle: React.CSSProperties = {
   transform: `scale(${PREVIEW_SCALE})`,
   transformOrigin: "top left",
@@ -57,7 +65,7 @@ const scaledFrameStyle: React.CSSProperties = {
 
 const previewContainerStyle: React.CSSProperties = {
   paddingBottom: `${PREVIEW_ASPECT}%`,
-  minHeight: `${PREVIEW_HEIGHT * PREVIEW_SCALE}px`,
+  minHeight: `${Math.max(PREVIEW_HEIGHT * PREVIEW_SCALE, MIN_PREVIEW_HEIGHT)}px`,
 };
 
 const darkInputClasses =
@@ -318,9 +326,15 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [backendDown, setBackendDown] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
+  const thresholdLimit = useThresholdLimitValue();
+  const thresholdMax = useThresholdMaxValue();
+  const visibleSeverities = useVisibleSeverities();
+  const visibleSeveritiesSet = new Set<GeneralSeverity>(visibleSeverities as GeneralSeverity[]);
+  const [showThresholdControls, setShowThresholdControls] = useState(false);
+
 
   useEffect(() => {
-    document.title = "Quantum Qi - Operator Portal";
+    document.title = "Quantum Qi™ - Operator Portal";
   }, []);
   useEffect(() => {
     if (session?.sex) {
@@ -369,12 +383,35 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
   const autoOpenAttemptedRef = useRef(false);
   const autoOpenTimerRef = useRef<number | null>(null);
+  const thresholdPanelRef = useRef<HTMLDivElement | null>(null);
 
   type OperationContext = { seq: number; signal: AbortSignal };
 
   const mountedRef = useRef(true);
   const operationSeqRef = useRef(0);
   const operationAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!showThresholdControls) {
+      return;
+    }
+    const handleMouseDown = (event: MouseEvent) => {
+      const panel = thresholdPanelRef.current;
+      if (panel && !panel.contains(event.target as Node)) {
+        setShowThresholdControls(false);
+      }
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, [showThresholdControls]);
+
+  useEffect(() => {
+    const maxAllowed = Math.max(1, thresholdMax);
+    if (thresholdLimit > maxAllowed) {
+      setThresholdLimit(maxAllowed);
+    }
+  }, [thresholdMax, thresholdLimit]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -1495,6 +1532,21 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       : session.published
       ? "Publishing will hide all reports from the guest view."
       : "Upload at least one report to publish.";
+    const sliderMax = Math.max(1, thresholdMax);
+    const sliderValue = Math.min(thresholdLimit, sliderMax);
+    const handleToggleSeverity = (severity: GeneralSeverity, checked: boolean) => {
+      const next = new Set(visibleSeveritiesSet);
+      if (checked) {
+        next.add(severity);
+      } else {
+        next.delete(severity);
+        if (next.size === 0) {
+          return;
+        }
+      }
+      const ordered = GENERAL_SEVERITY_ORDER.filter((value) => next.has(value));
+      setVisibleSeverities(ordered);
+    };
 
     return (
       <div className="mt-4 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)]">
@@ -1505,14 +1557,90 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               <div className="text-[13px] font-semibold text-text-primary">Publish Session</div>
               <div className="text-[11px] text-text-secondary">{publishStatusText}</div>
             </div>
-            <Button
-              onClick={onPublish}
-              disabled={disablePublish}
-              variant={publishButtonVariant}
-              className="ml-auto px-[18px]"
-            >
-              {publishLabel}
-            </Button>
+            <div className="ml-auto flex items-center gap-3">
+              <Button
+                onClick={onPublish}
+                disabled={disablePublish}
+                variant={publishButtonVariant}
+                className="px-[18px]"
+              >
+                {publishLabel}
+              </Button>
+              <div className="relative" ref={thresholdPanelRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowThresholdControls((prev) => !prev)}
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-text-primary shadow-surface-md transition-colors duration-150",
+                    showThresholdControls ? "ring-2 ring-accent-info/40" : "hover:border-accent-info/40",
+                  )}
+                  title="Adjust priority display limit"
+                  >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="h-4 w-4"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M11.983 1.517a1 1 0 0 1 1.034.229l1.29 1.29a1 1 0 0 1 .21 1.09l-.42 1.05a7.52 7.52 0 0 1 1.436.83l1.047-.42a1 1 0 0 1 1.09.21l1.29 1.29a1 1 0 0 1 .229 1.034l-.42 1.046a7.53 7.53 0 0 1 0 1.661l.42 1.046a1 1 0 0 1-.229 1.034l-1.29 1.29a1 1 0 0 1-1.09.21l-1.047-.42a7.52 7.52 0 0 1-1.436.83l.42 1.05a1 1 0 0 1-.21 1.09l-1.29 1.29a1 1 0 0 1-1.034.229l-1.046-.42a7.52 7.52 0 0 1-1.661 0l-1.046.42a1 1 0 0 1-1.034-.229l-1.29-1.29a1 1 0 0 1-.21-1.09l.42-1.05a7.52 7.52 0 0 1-.83-1.436l-1.05.42a1 1 0 0 1-1.09-.21l-1.29-1.29a1 1 0 0 1-.229-1.034l.42-1.046a7.53 7.53 0 0 1 0-1.661l-.42-1.046a1 1 0 0 1 .229-1.034l1.29-1.29a1 1 0 0 1 1.09-.21l1.05.42a7.52 7.52 0 0 1 .83-1.436l-0.42-1.05a1 1 0 0 1 .21-1.09l1.29-1.29a1 1 0 0 1 1.034-.229l1.046.42a7.52 7.52 0 0 1 1.661 0l1.046-.42Zm-1.983 7.483a3 3 0 1 0 6 0 3 3 0 0 0-6 0Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+                {showThresholdControls && (
+                  <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-border bg-surface shadow-surface-md">
+                    <div className="flex flex-col gap-3 p-4 text-[12px] text-text-secondary">
+                      <div className="flex items-center justify-between text-[13px] text-text-primary">
+                        <span>Items per priority band</span>
+                        <span className="font-semibold">{sliderValue}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={1}
+                        max={sliderMax}
+                        value={sliderValue}
+                        onChange={(event) => setThresholdLimit(Number(event.target.value))}
+                        className="w-full"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span>Min: 1</span>
+                        <span>Max available: {sliderMax}</span>
+                      </div>
+                      <div className="mt-1 border-t border-border pt-3">
+                        <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.4px] text-text-primary">
+                          Visible priority bands
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {GENERAL_SEVERITY_ORDER.map((severity) => {
+                            const meta = GENERAL_SEVERITY_META[severity];
+                            const checked = visibleSeveritiesSet.has(severity);
+                            const disable = checked && visibleSeveritiesSet.size <= 1;
+                            return (
+                              <label key={severity} className="flex items-center gap-3 text-[12px] text-text-secondary">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={disable}
+                                  onChange={(event) => handleToggleSeverity(severity, event.target.checked)}
+                                  className="h-3.5 w-3.5 accent-accent-info"
+                                />
+                                <span className="flex flex-col">
+                                  <span className="text-text-primary">{meta.label}</span>
+                                  <span className="text-[11px] text-text-secondary/70">{meta.range}</span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1697,7 +1825,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         <div className="space-y-4">
           <div className="text-[30px] font-bold">Operator Console Offline</div>
           <div className="mt-2 text-[16px] opacity-80">
-            The Quantum Qi services are no longer reachable. Close this window and restart the program once
+            The Quantum Qi™ services are no longer reachable. Close this window and restart the program once
             the server is running again.
           </div>
         </div>
@@ -1716,7 +1844,17 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       <div className={cn("flex min-w-[320px] max-w-[760px] flex-1 flex-col", session ? "" : "min-h-[calc(100vh-64px)]")}> 
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <h1 className="text-[20px] font-bold">Quantum Qi Operator Console</h1>
+            <h1 className="text-text-primary">
+              <span className="font-logo block text-[28px] font-semibold leading-none">
+                <span className="inline-flex items-baseline">
+                  <span>Quantum Qi</span>
+                  <span className="logo-tm">TM</span>
+                </span>
+              </span>
+              <span className="mt-1 block text-[18px] font-normal tracking-[0.18em] text-teal-100 uppercase">
+                Operator Console
+              </span>
+            </h1>
           </div>
           {session && (
             <Button onClick={resetSession} variant="danger" size="sm" className="px-3">

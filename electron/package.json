@@ -19,7 +19,7 @@
   },
   "build": {
     "appId": "com.longq.operator",
-    "productName": "Quantum Qi Operator",
+    "productName": "Quantum Qi™ Operator",
     "files": [
       "**/*",
       "../backend/**/*",

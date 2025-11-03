@@ -13,14 +13,35 @@ BACKEND_PORT="${BACKEND_PORT:-8000}"
 IDLE_SHUTDOWN_DELAY="${IDLE_SHUTDOWN_DELAY:-5}"
 
 ensure_python() {
-  if [[ -x "$BACKEND_PYTHON" ]]; then
-    return
+  if [[ ! -x "$BACKEND_PYTHON" ]]; then
+    echo "Creating backend virtualenv..."
+    (cd "$BACKEND_DIR" && python3 -m venv .venv)
+    (cd "$BACKEND_DIR" && "$BACKEND_PYTHON" -m pip install --upgrade pip)
   fi
-  echo "Creating backend virtualenv..."
-  (cd "$BACKEND_DIR" && python3 -m venv .venv)
-  (cd "$BACKEND_DIR" && "$BACKEND_PYTHON" -m pip install --upgrade pip)
-  echo "Installing backend requirements..."
-  (cd "$BACKEND_DIR" && "$BACKEND_PYTHON" -m pip install -r requirements.txt)
+  local requirements_file="$BACKEND_DIR/requirements.txt"
+  if [[ ! -f "$requirements_file" ]]; then
+    echo "Missing backend requirements file: $requirements_file"
+    exit 1
+  fi
+  local hash_file="$BACKEND_VENV/.requirements.sha256"
+  local current_hash cached_hash=""
+  current_hash=$(python3 - <<'PY' "$requirements_file"
+import hashlib
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+data = path.read_bytes()
+print(hashlib.sha256(data).hexdigest())
+PY
+)
+  if [[ -f "$hash_file" ]]; then
+    cached_hash=$(<"$hash_file")
+  fi
+  if [[ "$current_hash" != "$cached_hash" ]]; then
+    echo "Installing backend requirements..."
+    (cd "$BACKEND_DIR" && "$BACKEND_PYTHON" -m pip install -r requirements.txt)
+    printf '%s' "$current_hash" >"$hash_file"
+  fi
 }
 
 ensure_frontend_deps() {
@@ -135,7 +156,7 @@ cleanup() {
 trap 'cleanup; exit 130' INT TERM
 trap cleanup EXIT
 
-echo "Starting Quantum Qi dev environment..."
+echo "Starting Quantum Qi™ dev environment..."
 echo "  Backend → http://127.0.0.1:$BACKEND_PORT"
 echo "  Frontend → http://$FRONTEND_HOST:$FRONTEND_PORT"
 
