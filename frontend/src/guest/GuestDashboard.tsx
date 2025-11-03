@@ -12,7 +12,7 @@ import {
 } from "./components";
 import { BiohazardIcon, DairyIcon, EggsIcon, FruitsIcon, GrainIcon, MeatIcon, SeafoodIcon } from "./icons";
 import type { AggregatedInsights, PriorityCounts } from "./dataTransform";
-import { GENERAL_SEVERITY_META, GENERAL_SEVERITY_ORDER } from "./priority";
+import { GENERAL_SEVERITY_META, GENERAL_SEVERITY_ORDER } from "../shared/priority";
 
 interface GuestDashboardProps {
   clientFullName: string | null;

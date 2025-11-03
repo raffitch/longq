@@ -8,10 +8,14 @@ import type {
   ToxinItem,
 } from "./components";
 import {
+  GENERAL_SEVERITY_META,
+  GENERAL_SEVERITY_ORDER,
   GENERAL_SEVERITY_THRESHOLDS,
+  FOOD_SEVERITY_THRESHOLDS as SHARED_FOOD_SEVERITY_THRESHOLDS,
   makeSeverityClassifier,
   type GeneralSeverity,
-} from "./priority";
+} from "../shared/priority";
+import { setThresholdMax } from "../shared/thresholdConfig";
 import type {
   RawFoodData,
   RawHeavyMetalsData,
@@ -60,13 +64,6 @@ export const FOOD_CATEGORY_ORDER = [
   "Lectins",
 ] as const;
 
-const FOOD_SEVERITY_THRESHOLDS: Array<{ min: number; severity: FoodSeverity }> = [
-  { min: 90, severity: "high" },
-  { min: 80, severity: "moderate" },
-  { min: 65, severity: "medium" },
-  { min: 0, severity: "low" },
-];
-
 const toCanonical = (name: string): string =>
   name
     .toLowerCase()
@@ -89,7 +86,7 @@ const toDisplayName = (name: string): string => {
 };
 
 export const classifySeverity = makeSeverityClassifier(GENERAL_SEVERITY_THRESHOLDS);
-export const classifyFoodSeverity = makeSeverityClassifier(FOOD_SEVERITY_THRESHOLDS);
+export const classifyFoodSeverity = makeSeverityClassifier(SHARED_FOOD_SEVERITY_THRESHOLDS);
 
 export const classifyHormoneSeverity = classifySeverity;
 
@@ -503,15 +500,34 @@ export function aggregateInsights(
     return a.localeCompare(b);
   });
 
+  const severityTotals = GENERAL_SEVERITY_ORDER.reduce<Record<GeneralSeverity, number>>((acc, severity) => {
+    acc[severity] = 0;
+    return acc;
+  }, {} as Record<GeneralSeverity, number>);
+
   sortedKeys.forEach((key) => {
     const items = foodMap.get(key) ?? [];
-    items.forEach((item) => incrementCounts(counts, mapFoodSeverityToGeneral(item.severity)));
+    items.forEach((item) => {
+      const mapped = mapFoodSeverityToGeneral(item.severity);
+      incrementCounts(counts, mapped);
+      severityTotals[mapped] += 1;
+    });
     categories.push({ name: key, items: items.slice().sort((a, b) => b.score - a.score) });
   });
 
-  heavyMetals.forEach((item) => incrementCounts(counts, item.severity));
-  hormones.forEach((item) => incrementCounts(counts, item.severity));
-  toxins.forEach((item) => incrementCounts(counts, item.severity));
+  heavyMetals.forEach((item) => {
+    incrementCounts(counts, item.severity);
+    severityTotals[item.severity] += 1;
+  });
+  hormones.forEach((item) => {
+    incrementCounts(counts, item.severity);
+    severityTotals[item.severity] += 1;
+  });
+  toxins.forEach((item) => {
+    incrementCounts(counts, item.severity);
+    severityTotals[item.severity] += 1;
+  });
+
   const toPercent = (score: number | undefined | null) =>
     Number.isFinite(score) ? Math.max(0, Math.min(100, Number(score))) : 0;
 
@@ -559,10 +575,28 @@ export function aggregateInsights(
   Object.values(sanitizedOrgans).forEach((value) =>
     incrementCounts(counts, mapFoodSeverityToGeneral(classifyOrganSeverity(value))),
   );
+  Object.values(sanitizedOrgans).forEach((value) => {
+    const mapped = mapFoodSeverityToGeneral(classifyOrganSeverity(value));
+    severityTotals[mapped] += 1;
+  });
   Object.values(sanitizedChakras).forEach((value) =>
     incrementCounts(counts, mapFoodSeverityToGeneral(classifyChakraSeverity(value))),
   );
-  nutrition.nutrients.forEach((item) => incrementCounts(counts, classifySeverity(item.score)));
+  Object.values(sanitizedChakras).forEach((value) => {
+    const mapped = mapFoodSeverityToGeneral(classifyChakraSeverity(value));
+    severityTotals[mapped] += 1;
+  });
+  nutrition.nutrients.forEach((item) => {
+    severityTotals[item.severity] += 1;
+    incrementCounts(counts, item.severity);
+  });
+
+  try {
+    const highestBucket = Math.max(...Object.values(severityTotals));
+    setThresholdMax(highestBucket > 0 ? highestBucket : 1);
+  } catch {
+    /* ignore storage errors */
+  }
 
   const allScores: number[] = [];
   categories.forEach(({ items }) => items.forEach((item) => allScores.push(Math.abs(item.score))));
@@ -590,18 +624,18 @@ export function aggregateInsights(
     items
       .filter((item) => item.severity === "high")
       .slice(0, 3)
-      .forEach((item) => topHighItems.push({ category: name, item }));
+      .forEach((item) => topHighItems.push({ category: name, item: { name: item.name } }));
   });
 
   heavyMetals
     .filter((item) => item.severity === "high" || item.severity === "very high")
     .slice(0, 2)
-    .forEach((item) => topHighItems.push({ category: "Heavy Metals", item }));
+    .forEach((item) => topHighItems.push({ category: "Heavy Metals", item: { name: item.name } }));
 
   toxins
     .filter((item) => item.severity === "high" || item.severity === "very high")
     .slice(0, 2)
-    .forEach((item) => topHighItems.push({ category: "Toxins", item }));
+    .forEach((item) => topHighItems.push({ category: "Toxins", item: { name: item.name } }));
 
   const nextSteps = buildNextSteps(topHighItems, counts);
 

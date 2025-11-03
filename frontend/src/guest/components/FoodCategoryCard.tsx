@@ -1,4 +1,6 @@
 import React from "react";
+import { useThresholdLimitValue, useVisibleSeverities } from "../../hooks/useThresholdSettings";
+import type { GeneralSeverity } from "../../shared/priority";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 
 export type FoodSeverity = "high" | "moderate" | "medium" | "low";
@@ -57,6 +59,16 @@ const formatCategoryLabel = (label: string): string[] => {
 };
 
 export default function FoodCategoryCard({ category, icon, items }: FoodCategoryCardProps) {
+  const limit = useThresholdLimitValue();
+  const visibleSeverities = useVisibleSeverities();
+  const visibleSet = new Set(visibleSeverities);
+
+  const severityMap: Record<FoodSeverity, GeneralSeverity> = {
+    high: "high",
+    moderate: "moderate",
+    medium: "normal",
+    low: "low",
+  };
   const groupedItems = items.reduce<Record<FoodSeverity, FoodItem[]>>((acc, item) => {
     if (!acc[item.severity]) {
       acc[item.severity] = [];
@@ -110,18 +122,19 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
       <div className="flex min-w-0 flex-1 flex-col gap-6 md:gap-8">
         {DISPLAY_ORDER.map((severity) => {
           const severityItems = groupedItems[severity];
-          if (!severityItems.length) return null;
+          const general = severityMap[severity];
+          if (!severityItems.length || !visibleSet.has(general)) return null;
 
           return (
             <div key={severity} className="flex flex-col gap-4 md:gap-6">
               <h4 className="text-2xl font-normal text-white/60 md:text-[28px]">{SEVERITY_LABELS[severity]}</h4>
-              <div className="flex flex-wrap items-center gap-4 md:gap-6">
-                {severityItems.map((item) => (
-                  <div
-                    key={`${item.name}-${item.score}`}
-                    className={`flex h-14 items-center justify-center rounded-[30px] px-4 md:px-6 ${SEVERITY_BG[severity]}`}
-                  >
-                    <span className={`whitespace-nowrap text-xl font-normal md:text-[28px] ${SEVERITY_TEXT[severity]}`}>
+          <div className="flex flex-wrap items-center gap-4 md:gap-6">
+            {severityItems.slice(0, limit).map((item) => (
+              <div
+                key={`${item.name}-${item.score}`}
+                className={`flex h-14 items-center justify-center rounded-[30px] px-4 md:px-6 ${SEVERITY_BG[severity]}`}
+              >
+                <span className={`whitespace-nowrap text-xl font-normal md:text-[28px] ${SEVERITY_TEXT[severity]}`}>
                       {item.name} {Math.round(item.score)}
                     </span>
                   </div>

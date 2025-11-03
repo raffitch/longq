@@ -1,12 +1,12 @@
 export type GeneralSeverity = "very high" | "high" | "moderate" | "normal" | "low" | "very low";
 
 export const GENERAL_SEVERITY_ORDER: GeneralSeverity[] = [
-  "very low",
-  "low",
-  "normal",
-  "moderate",
-  "high",
   "very high",
+  "high",
+  "moderate",
+  "normal",
+  "low",
+  "very low",
 ];
 
 export const GENERAL_SEVERITY_META: Record<GeneralSeverity, { label: string; color: string; background: string}> = {
@@ -49,6 +49,13 @@ export const GENERAL_SEVERITY_THRESHOLDS: Array<{ min: number; severity: General
   { min: 29, severity: "normal" },
   { min: 14, severity: "low" },
   { min: 0, severity: "very low" },
+];
+
+export const FOOD_SEVERITY_THRESHOLDS: Array<{ min: number; severity: "high" | "moderate" | "medium" | "low" }> = [
+  { min: 90, severity: "high" },
+  { min: 80, severity: "moderate" },
+  { min: 65, severity: "medium" },
+  { min: 0, severity: "low" },
 ];
 
 export const makeSeverityClassifier = <S extends string>(

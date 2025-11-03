@@ -1,5 +1,6 @@
 import React from "react";
-import { GENERAL_SEVERITY_META, GENERAL_SEVERITY_ORDER } from "../priority";
+import { GENERAL_SEVERITY_META, GENERAL_SEVERITY_ORDER } from "../../shared/priority";
+import { useVisibleSeverities } from "../../hooks/useThresholdSettings";
 
 export interface OverallScoreCardProps {
   overallScore?: number;
@@ -27,6 +28,8 @@ export default function OverallScoreCard({
   nextSteps = DEFAULT_NEXT_STEPS,
 }: OverallScoreCardProps) {
   const statusBadge = { bgColor: "bg-accent-teal/20", textColor: "text-accent-teal" };
+  const visibleSeverities = useVisibleSeverities();
+  const visibleSet = new Set(visibleSeverities);
 
   const counts = (
     [
@@ -37,7 +40,7 @@ export default function OverallScoreCard({
       { severity: "low" as const, count: lowCount },
       { severity: "very low" as const, count: veryLowCount },
     ] satisfies Array<{ severity: (typeof GENERAL_SEVERITY_ORDER)[number]; count: number }>
-  ).filter((entry) => entry.count > 0);
+  ).filter((entry) => entry.count > 0 && visibleSet.has(entry.severity));
 
   return (
     <div className="flex flex-col gap-8 rounded-2xl bg-bg-card p-8 shadow-card md:p-10">

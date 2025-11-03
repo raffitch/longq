@@ -3,7 +3,8 @@ import {
   GENERAL_SEVERITY_META,
   GENERAL_SEVERITY_ORDER,
   type GeneralSeverity,
-} from "../priority";
+} from "../../shared/priority";
+import { useThresholdLimitValue, useVisibleSeverities } from "../../hooks/useThresholdSettings";
 
 export interface NutrientItem {
   name: string;
@@ -26,6 +27,10 @@ const NutritionInsightCard: React.FC<NutritionInsightCardProps> = ({ data }) => 
   }
 
   const hasTitle = Boolean(data.note);
+  const limit = useThresholdLimitValue();
+  const visibleSeverities = useVisibleSeverities();
+  const visibleSet = new Set(visibleSeverities);
+
   const grouped = GENERAL_SEVERITY_ORDER.reduce<Record<GeneralSeverity, NutrientItem[]>>(
     (acc, severity) => {
       acc[severity] = [];
@@ -50,7 +55,7 @@ const NutritionInsightCard: React.FC<NutritionInsightCardProps> = ({ data }) => 
       <div className="flex flex-col gap-6">
         {GENERAL_SEVERITY_ORDER.map((severity) => {
           const items = grouped[severity];
-          if (!items.length) return null;
+          if (!items.length || !visibleSet.has(severity)) return null;
           const meta = GENERAL_SEVERITY_META[severity];
           return (
             <div key={severity} className="flex flex-col gap-4">
@@ -59,7 +64,11 @@ const NutritionInsightCard: React.FC<NutritionInsightCardProps> = ({ data }) => 
                 <span className="ml-3 text-sm text-text-secondary/70">{meta.range}</span>
               </h4>
               <div className="flex flex-wrap items-center gap-4 md:gap-6">
-                {items.map((item) => (
+                {items
+                  .slice()
+                  .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
+                  .slice(0, limit)
+                  .map((item) => (
                   <div
                     key={`${item.name}-${item.score}`}
                     className="flex h-14 items-center justify-center rounded-[30px] px-4 md:px-6"
