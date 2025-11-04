@@ -354,7 +354,7 @@ const padmasanaSliderMetrics = useMemo(
 
   return (
     <div className="flex h-full flex-col gap-6 rounded-2xl bg-bg-card px-8 py-9 shadow-card">
-      <div className="flex flex-col gap-5 md:flex-row md:flex-wrap md:gap-6">
+      <div className="grid gap-5 md:grid-cols-4 md:gap-6">
         <div className="anthropos-card flex h-full">
           <div
             className="anthropos-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-4 py-6 md:self-stretch"
@@ -420,14 +420,14 @@ const padmasanaSliderMetrics = useMemo(
 
         <div className="padmasana-card flex h-full">
           <div
-            className="padmasana-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-4 py-6 md:self-stretch"
+            className="padmasana-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-3 py-6 md:self-stretch"
             style={padmasanaSilouhetteStyle}
           >
             <svg
               viewBox={VIEWBOX.chakra}
               xmlns="http://www.w3.org/2000/svg"
               preserveAspectRatio="xMidYMid meet"
-              className="h-auto w-full max-w-[280px] overflow-visible sm:max-w-[300px] md:h-full md:w-auto md:max-h-full"
+              className="h-auto w-full max-w-[260px] overflow-visible sm:max-w-[280px] md:h-full md:w-auto md:max-h-full"
               role="img"
               aria-label="Padmasana silouhette"
             >
