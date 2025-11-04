@@ -9,36 +9,45 @@ export const GENERAL_SEVERITY_ORDER: GeneralSeverity[] = [
   "very low",
 ];
 
-export const GENERAL_SEVERITY_META: Record<GeneralSeverity, { label: string; color: string; background: string}> = {
+export const GENERAL_SEVERITY_META: Record<
+  GeneralSeverity,
+  { label: string; color: string; background: string; range: string }
+> = {
   "very high": {
     label: "Very High",
     color: "#e63946",
     background: "rgba(230, 57, 70, 0.18)",
+    range: "86 – 100",
   },
   high: {
     label: "High",
     color: "#f87171",
     background: "rgba(248, 113, 113, 0.18)",
+    range: "71 – 85",
   },
   moderate: {
     label: "Moderate",
     color: "#ff8a00",
     background: "rgba(255, 138, 0, 0.18)",
+    range: "57 – 70",
   },
   normal: {
     label: "Normal",
     color: "#ffc300",
     background: "rgba(255, 195, 0, 0.18)",
+    range: "29 – 56",
   },
   low: {
     label: "Low",
     color: "#43aa8b",
     background: "rgba(67, 170, 139, 0.18)",
+    range: "14 – 28",
   },
   "very low": {
     label: "Very Low",
     color: "#2aa198",
     background: "rgba(42, 161, 152, 0.18)",
+    range: "0 – 13",
   },
 };
 

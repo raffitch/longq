@@ -1,4 +1,5 @@
 const LIMIT_KEY = "longevityq_threshold_limit";
+const LIMIT_VERSION_KEY = "longevityq_threshold_limit_version";
 const MAX_KEY = "longevityq_threshold_limit_max";
 const VISIBLE_KEY = "longevityq_threshold_visible";
 
@@ -6,11 +7,14 @@ const LIMIT_EVENT = "longevityq-threshold-limit-change";
 const MAX_EVENT = "longevityq-threshold-max-change";
 const VISIBLE_EVENT = "longevityq-threshold-visible-change";
 
+// Default number of items surfaced per priority band in UI sliders/cards.
 const DEFAULT_LIMIT = 4;
 const DEFAULT_MAX = 10;
 const CANON_VISIBLE_ORDER = ["very low", "low", "normal", "moderate", "high", "very high"] as const;
 type VisibleValue = (typeof CANON_VISIBLE_ORDER)[number];
 type VisibleArray = readonly VisibleValue[];
+
+const CURRENT_LIMIT_VERSION = "2";
 
 const DEFAULT_VISIBLE = Object.freeze(["very high", "high", "moderate"] as const) as VisibleArray;
 
@@ -52,6 +56,21 @@ const readLimitFromStorage = (): number => {
 const ensureLimitHydrated = () => {
   if (limitHydrated) return;
   limitHydrated = true;
+  const win = getWindow();
+  if (win) {
+    try {
+      const storedVersion = win.localStorage.getItem(LIMIT_VERSION_KEY);
+      if (storedVersion !== CURRENT_LIMIT_VERSION) {
+        cachedLimit = DEFAULT_LIMIT;
+        win.localStorage.setItem(LIMIT_KEY, String(DEFAULT_LIMIT));
+        win.localStorage.setItem(LIMIT_VERSION_KEY, CURRENT_LIMIT_VERSION);
+        return;
+      }
+    } catch {
+      cachedLimit = DEFAULT_LIMIT;
+      return;
+    }
+  }
   cachedLimit = readLimitFromStorage();
 };
 
@@ -133,6 +152,7 @@ export const setThresholdLimit = (value: number) => {
   cachedLimit = limit;
   try {
     win.localStorage.setItem(LIMIT_KEY, String(limit));
+    win.localStorage.setItem(LIMIT_VERSION_KEY, CURRENT_LIMIT_VERSION);
   } catch {
     /* ignore storage quota issues */
   }

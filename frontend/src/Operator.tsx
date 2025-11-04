@@ -315,6 +315,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [editedSex, setEditedSex] = useState<Sex | null>(null);
   const [lastDroppedFiles, setLastDroppedFiles] = useState<DroppedFile[]>([]);
   const [backendDown, setBackendDown] = useState(false);
+  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
   const [fitPreview, setFitPreview] = useState(false);
@@ -518,7 +519,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     return beat !== null && !Number.isNaN(beat) && Date.now() - beat < GUEST_HEARTBEAT_GRACE_MS;
   };
 
-  const markBackendUp = (ctx?: OperationContext) => applyState(setBackendDown, false, ctx);
+  const markBackendUp = (ctx?: OperationContext) => {
+    applyState(setBackendDown, false, ctx);
+    applyState(setHasConnectedOnce, true, ctx);
+  };
   const markBackendDown = (err?: unknown, ctx?: OperationContext) => {
     if (err === undefined || isNetworkError(err)) {
       applyState(setBackendDown, true, ctx);
@@ -771,6 +775,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     const noteState = (down: boolean) => {
       if (!disposed) {
         setBackendDown(down);
+        if (!down) {
+          setHasConnectedOnce(true);
+        }
       }
     };
 
@@ -1842,6 +1849,24 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   }, [stagedPreviewVisible, showStagedPreviewBlock, hasShownOnGuest]);
 
   if (backendDown) {
+    if (!hasConnectedOnce) {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center bg-logo-background px-6 text-center text-text-primary">
+          <div className="space-y-6">
+            <div className="font-logo text-[26px] font-semibold uppercase tracking-[0.2em] text-teal-100">
+              Quantum Qi Operator Console
+            </div>
+            <div className="flex flex-col items-center gap-4 text-text-secondary">
+              <div
+                className="h-12 w-12 animate-spin rounded-full border-4 border-teal-300 border-t-transparent"
+                aria-hidden="true"
+              />
+              <p className="text-sm text-teal-100/80">Starting local services…</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-center text-text-primary">
         <div className="space-y-4">
@@ -1865,7 +1890,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     >
       <div className={cn("flex min-w-[320px] max-w-[760px] flex-1 flex-col", session ? "" : "min-h-[calc(100vh-64px)]")}> 
         <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5">
             <h1 className="text-text-primary">
               <span className="font-logo block text-[28px] font-semibold leading-none">
                 <span className="inline-flex items-baseline">
@@ -1873,10 +1898,13 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   <span className="logo-tm">TM</span>
                 </span>
               </span>
-              <span className="mt-1 block text-[18px] font-normal tracking-[0.18em] text-teal-100 uppercase">
-                Operator Console
-              </span>
             </h1>
+            <span className="pl-1 text-[14px] font-medium tracking-[0.18em] text-teal-300">
+              by Longevity Wellness
+            </span>
+            <span className="text-[18px] font-normal uppercase tracking-[0.18em] text-teal-100">
+              Operator Console
+            </span>
           </div>
           {session && (
             <Button onClick={resetSession} variant="danger" size="sm" className="px-3">

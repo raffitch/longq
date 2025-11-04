@@ -66,4 +66,13 @@ export type RawToxinsData = {
 export type RawPeekData = {
   organs?: Record<string, number>;
   chakras?: Record<string, number>;
+  metrics?: Record<
+    string,
+    | number
+    | {
+        value?: number | null;
+        label?: string | null;
+        name?: string | null;
+      }
+  >;
 };

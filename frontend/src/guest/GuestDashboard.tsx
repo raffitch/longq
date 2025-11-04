@@ -128,7 +128,8 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
 
   const organCount = energyMap?.organs ? Object.keys(energyMap.organs).length : 0;
   const chakraCount = energyMap?.chakras ? Object.keys(energyMap.chakras).length : 0;
-  const hasEnergyMap = organCount > 0 || chakraCount > 0;
+  const metricCount = energyMap?.metrics ? Object.keys(energyMap.metrics).length : 0;
+  const hasEnergyMap = organCount > 0 || chakraCount > 0 || metricCount > 0;
   const showFoodSection = visibleFoodSections.length > 0;
   const showBioEnergeticStatusLegend =
     hasEnergyMap || showNutrition || showHeavyMetals || showHormones || showToxins;
@@ -201,6 +202,7 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
                 sex={sex}
                 organValues={energyMap?.organs}
                 chakraValues={energyMap?.chakras}
+                metricValues={energyMap?.metrics}
               />
             </div>
           </div>
@@ -257,14 +259,9 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
                       style={{ background: meta.color }}
                       aria-hidden="true"
                     />
-                    <div className="flex flex-col text-text-primary">
-                      <span className="whitespace-nowrap text-xl font-normal md:text-2xl lg:text-[28px]">
-                        {meta.label}
-                      </span>
-                      <span className="whitespace-nowrap text-sm font-normal text-text-secondary/70">
-                        {meta.range}
-                      </span>
-                    </div>
+                    <span className="whitespace-nowrap text-xl font-normal text-text-primary md:text-2xl lg:text-[28px]">
+                      {meta.label}
+                    </span>
                   </div>
                 );
               })}

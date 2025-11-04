@@ -8,6 +8,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from backend.parse_peek_report import (
     _parse_chakra_tokens,
     _parse_organ_tokens,
+    _parse_special_metric,
     _tokenize_line,
     CHAKRA_ID_BY_NUM,
 )
@@ -30,7 +31,7 @@ def test_parse_organ_tokens_returns_mapped_id_and_value():
 
 def test_parse_organ_tokens_falls_back_to_single_token():
     tokens = ["Organs", "Pancreas", "41"]
-    assert _parse_organ_tokens(tokens) == ("spleen", 41)
+    assert _parse_organ_tokens(tokens) == ("pancreas_placeholder", 41)
 
 
 def test_parse_chakra_tokens_uses_numeric_mapping():
@@ -38,3 +39,19 @@ def test_parse_chakra_tokens_uses_numeric_mapping():
     chakra_id, value = _parse_chakra_tokens(tokens)
     assert chakra_id == CHAKRA_ID_BY_NUM[6]
     assert value == 81
+
+
+def test_parse_special_metric_extracts_inflammatory_score():
+    tokens = ["Organs", "As", "Inflammatory score", "7 (Very Low)"]
+    metric_id, metric_values = _parse_special_metric(tokens, "Organs -> As -> Inflammatory score > 7 (Very Low)")
+    assert metric_id == "inflammatory_score"
+    assert metric_values["value"] == 7
+    assert metric_values["label"] == "Very Low"
+
+
+def test_parse_special_metric_extracts_immunal_defense():
+    tokens = ["Organs", "Ai", "Immunal defense", "72 (Normal)"]
+    metric_id, metric_values = _parse_special_metric(tokens, "Organs -> Ai -> Immunal defense > 72 (Normal)")
+    assert metric_id == "immunal_defense"
+    assert metric_values["value"] == 72
+    assert metric_values["label"] == "Normal"

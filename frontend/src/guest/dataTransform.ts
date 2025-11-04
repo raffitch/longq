@@ -456,6 +456,12 @@ const mapFoodSeverityToGeneral = (severity: FoodSeverity): GeneralSeverity => {
   }
 };
 
+export type PeekMetricValue = {
+  value: number;
+  label?: string;
+  name?: string;
+};
+
 export interface AggregatedInsights {
   categories: Array<{ name: string; items: FoodItem[] }>;
   nutrition: NutritionData;
@@ -470,6 +476,7 @@ export interface AggregatedInsights {
   energyMap: {
     organs: Record<string, number>;
     chakras: Record<string, number>;
+    metrics: Record<string, PeekMetricValue>;
   } | null;
 }
 
@@ -549,6 +556,7 @@ export function aggregateInsights(
 
   const sanitizedOrgans: Record<string, number> = {};
   const sanitizedChakras: Record<string, number> = {};
+  const sanitizedMetrics: Record<string, PeekMetricValue> = {};
 
   if (energyMapRaw?.organs) {
     for (const [key, value] of Object.entries(energyMapRaw.organs)) {
@@ -569,6 +577,39 @@ export function aggregateInsights(
       if (!Number.isFinite(numeric)) continue;
       const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
       sanitizedChakras[chakraId] = clamped;
+    }
+  }
+
+  if (energyMapRaw?.metrics) {
+    for (const [rawKey, rawValue] of Object.entries(energyMapRaw.metrics)) {
+      if (!rawKey) continue;
+      const metricId = rawKey.trim().replace(/\s+/g, "_").toLowerCase();
+      if (!metricId) continue;
+
+      let numericInput: number | null | undefined;
+      let label: string | null | undefined;
+      let name: string | null | undefined;
+
+      if (typeof rawValue === "number") {
+        numericInput = rawValue;
+      } else if (rawValue && typeof rawValue === "object") {
+        numericInput =
+          "value" in rawValue ? (rawValue.value as number | null | undefined) : undefined;
+        label = "label" in rawValue ? (rawValue.label as string | null | undefined) : undefined;
+        name = "name" in rawValue ? (rawValue.name as string | null | undefined) : undefined;
+      } else {
+        continue;
+      }
+
+      if (numericInput == null) continue;
+      const numeric = Number(numericInput);
+      if (!Number.isFinite(numeric)) continue;
+      const clamped = Math.max(0, Math.min(100, Math.round(numeric)));
+      sanitizedMetrics[metricId] = {
+        value: clamped,
+        ...(label ? { label: String(label) } : {}),
+        ...(name ? { name: String(name) } : {}),
+      };
     }
   }
 
@@ -605,6 +646,7 @@ export function aggregateInsights(
   toxins.forEach((item) => allScores.push(Math.abs(item.score)));
   Object.values(sanitizedOrgans).forEach((value) => allScores.push(Math.abs(value)));
   Object.values(sanitizedChakras).forEach((value) => allScores.push(Math.abs(value)));
+  Object.values(sanitizedMetrics).forEach((metric) => allScores.push(Math.abs(metric.value)));
 
   const overallScore =
     allScores.length > 0 ? allScores.reduce((sum, value) => sum + value, 0) / allScores.length : 0;
@@ -639,10 +681,15 @@ export function aggregateInsights(
 
   const nextSteps = buildNextSteps(topHighItems, counts);
 
-  const energyMap = Object.keys(sanitizedOrgans).length || Object.keys(sanitizedChakras).length
+  const hasOrgans = Object.keys(sanitizedOrgans).length > 0;
+  const hasChakras = Object.keys(sanitizedChakras).length > 0;
+  const hasMetrics = Object.keys(sanitizedMetrics).length > 0;
+
+  const energyMap = hasOrgans || hasChakras || hasMetrics
     ? {
         organs: sanitizedOrgans,
         chakras: sanitizedChakras,
+        metrics: sanitizedMetrics,
       }
     : null;
 

@@ -13,6 +13,17 @@ interface CardEnergyMapProps {
   showOnlyMale?: boolean;
   organValues?: Record<string, number | null | undefined>;
   chakraValues?: Record<string, number | null | undefined>;
+  metricValues?: Record<
+    string,
+    | number
+    | null
+    | undefined
+    | {
+        value?: number | null;
+        label?: string | null;
+        name?: string | null;
+      }
+  >;
 }
 
 type LayerCategory = "structure" | "organ" | "system" | "reproductive";
@@ -83,6 +94,39 @@ const CHAKRA_BASE_COLORS: Record<string, string> = {
 };
 
 const STRUCTURE_COLOR = "#06B6D4";
+
+type MetricValueInput = {
+  value?: number | null;
+  label?: string | null;
+  name?: string | null;
+};
+
+interface MetricDefinition {
+  id: string;
+  title: string;
+  gridClass: string;
+}
+
+interface MetricCardState extends MetricDefinition {
+  name: string;
+  value: number | null;
+  label: string | null;
+  color: string;
+  hasValue: boolean;
+}
+
+const METRIC_CARD_DEFINITIONS: MetricDefinition[] = [
+  {
+    id: "inflammatory_score",
+    title: "Inflammatory Score",
+    gridClass: "hidden md:block md:col-start-3 md:row-start-2",
+  },
+  {
+    id: "immunal_defense",
+    title: "Immunal Defense",
+    gridClass: "hidden md:block md:col-start-4 md:row-start-2",
+  },
+];
 
 export interface PeekPriorityTier {
   label: string;
@@ -173,6 +217,7 @@ export default function CardEnergyMap({
   showOnlyMale = false,
   organValues,
   chakraValues,
+  metricValues,
 }: CardEnergyMapProps) {
   const anthroposSlidersRef = useRef<HTMLDivElement>(null);
   const padmasanaSlidersRef = useRef<HTMLDivElement>(null);
@@ -317,24 +362,62 @@ export default function CardEnergyMap({
     return metrics;
   }, [layerMetrics]);
 
-const padmasanaSliderMetrics = useMemo(
-  () =>
-    CHAKRA_POINTS.map((chakra) => {
-      const value = chakraValueMap.get(chakra.id) ?? 0;
-      const hasValue = chakraValueMap.has(chakra.id);
-      const priority = getChakraPriorityForValue(value);
-      const baseColor = CHAKRA_BASE_COLORS[chakra.id] ?? priority.color;
+  const padmasanaSliderMetrics = useMemo(
+    () =>
+      CHAKRA_POINTS.map((chakra) => {
+        const value = chakraValueMap.get(chakra.id) ?? 0;
+        const hasValue = chakraValueMap.has(chakra.id);
+        const priority = getChakraPriorityForValue(value);
+        const baseColor = CHAKRA_BASE_COLORS[chakra.id] ?? priority.color;
+        return {
+          ...chakra,
+          value,
+          color: hasValue ? priority.color : "#9CA3AF",
+          priorityLabel: hasValue ? priority.label : "Not Provided",
+          hasValue,
+          baseColor,
+        };
+      }),
+    [chakraValueMap],
+  );
+
+  const metricCardStates = useMemo<MetricCardState[]>(() => {
+    return METRIC_CARD_DEFINITIONS.map((definition) => {
+      const raw = metricValues?.[definition.id] as MetricValueInput | number | null | undefined;
+      let rawValue: number | null | undefined;
+      let rawLabel: string | null = null;
+      let rawName: string | null = null;
+
+      if (typeof raw === "number") {
+        rawValue = raw;
+      } else if (raw && typeof raw === "object") {
+        if ("value" in raw) {
+          rawValue = raw.value as number | null | undefined;
+        }
+        if ("label" in raw && raw.label != null) {
+          rawLabel = String(raw.label);
+        }
+        if ("name" in raw && raw.name != null) {
+          rawName = String(raw.name);
+        }
+      }
+
+      const normalizedValue = clampToPercent(rawValue);
+      const hasValue = normalizedValue !== null;
+      const priority = hasValue ? getPriorityForValue(normalizedValue) : null;
+      const displayLabel = rawLabel ?? (hasValue && priority ? priority.label : null);
+      const displayName = rawName ?? definition.title;
+
       return {
-        ...chakra,
-        value,
-        color: hasValue ? priority.color : "#9CA3AF",
-        priorityLabel: hasValue ? priority.label : "Not Provided",
+        ...definition,
+        name: displayName,
+        value: normalizedValue,
+        label: displayLabel,
+        color: hasValue && priority ? priority.color : "#ffffff33",
         hasValue,
-        baseColor,
       };
-    }),
-  [chakraValueMap],
-);
+    });
+  }, [metricValues]);
 
   const silhouetteScale = 16 / 15;
   const anthroposSilouhetteStyle: React.CSSProperties | undefined =
@@ -391,11 +474,11 @@ const padmasanaSliderMetrics = useMemo(
                     <span className="font-medium uppercase tracking-wide" style={{ color: metric.color }}>
                       {metric.name}
                     </span>
-                    <div className="flex items-baseline gap-2 text-right">
-                      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: metric.color }}>
+                    <div className="flex items-center justify-end gap-0.5 text-right">
+                      <span className="text-right font-medium uppercase tracking-wide" style={{ color: metric.color }}>
                         {metric.priorityLabel}
                       </span>
-                      <span className="text-sm font-semibold" style={{ color: metric.color }}>
+                      <span className="w-8 text-right font-medium uppercase tracking-wide tabular-nums" style={{ color: metric.color }}>
                         {metric.hasValue ? metric.value : "—"}
                       </span>
                     </div>
@@ -509,11 +592,11 @@ const padmasanaSliderMetrics = useMemo(
                     <span className="font-medium uppercase tracking-wide" style={{ color: chakra.color }}>
                       {chakra.name}
                     </span>
-                    <div className="flex items-baseline gap-2 text-right">
-                      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: chakra.color }}>
+                    <div className="flex items-center justify-end gap-1 text-right">
+                      <span className="font-medium uppercase tracking-wide" style={{ color: chakra.color }}>
                         {chakra.priorityLabel}
                       </span>
-                      <span className="text-sm font-semibold" style={{ color: chakra.color }}>
+                      <span className="w-8 text-right font-medium uppercase tracking-wide tabular-nums" style={{ color: chakra.color }}>
                         {chakra.hasValue ? chakra.value : "—"}
                       </span>
                     </div>
@@ -537,27 +620,43 @@ const padmasanaSliderMetrics = useMemo(
           </div>
         </div>
 
-        <div className="hidden md:block md:col-start-3 md:row-start-2">
-          <div className="rounded-2xl bg-white/5 p-6 backdrop-blur h-full">
-            <div className="flex flex-col gap-3">
-              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">Inflammatory Score</span>
-              <div className="flex h-14 items-center justify-center rounded-[30px] bg-white/10 text-text-secondary">
-                <span className="text-sm uppercase tracking-wide">Coming soon</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        {metricCardStates.map((metric) => {
+          const progress = metric.value ?? 0;
+          const pieStyle: React.CSSProperties | undefined = metric.hasValue
+            ? {
+                backgroundImage: `conic-gradient(${metric.color} ${progress}%, rgba(255,255,255,0.08) ${progress}% 100%)`,
+              }
+            : undefined;
 
-        <div className="hidden md:block md:col-start-4 md:row-start-2">
-           <div className="rounded-2xl bg-white/5 p-6 backdrop-blur h-full">
-            <div className="flex flex-col gap-3">
-              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">Immunal Defense</span>
-              <div className="flex h-14 items-center justify-center rounded-[30px] bg-white/10 text-text-secondary">
-                <span className="text-sm uppercase tracking-wide">Coming soon</span>
+          return (
+            <div key={metric.id} className={metric.gridClass}>
+              <div className="flex h-full flex-col gap-4 rounded-2xl bg-white/5 p-6 backdrop-blur">
+                <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">{metric.name}</span>
+                {metric.hasValue ? (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+                    <div
+                      className="relative flex h-36 w-36 items-center justify-center rounded-full bg-white/10"
+                      style={pieStyle}
+                      role="img"
+                      aria-label={`${metric.name}: ${progress} (${metric.label ?? "No label"})`}
+                    >
+                      <div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-bg-card text-center shadow-inner">
+                        <span className="text-3xl font-bold text-text-primary">{progress}</span>
+                      </div>
+                    </div>
+                    {metric.label && (
+                      <span className="text-xs uppercase tracking-wide text-text-secondary">{metric.label}</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex h-14 items-center justify-center rounded-[30px] bg-white/10 text-center text-text-secondary">
+                    <span className="text-sm uppercase tracking-wide">No data</span>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
     </div>
   );

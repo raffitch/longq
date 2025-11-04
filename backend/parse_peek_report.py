@@ -19,6 +19,7 @@ ARROW_SEPARATORS = r"(->|→|➔|➜)"
 CHEVR_SEPARATORS = r"(>|›)"
 VALUE_RE = re.compile(r"(\d{1,3})\b")
 VALUE_AFTER_CHEVRON = re.compile(r"(?<!-)[>›]\s*(\d{1,3})\b")
+PAREN_LABEL_RE = re.compile(r"\(([^)]+)\)")
 
 TARGET_ORGAN_IDS = {
     "brain",
@@ -87,6 +88,11 @@ CHAKRA_ID_BY_NUM = {
 }
 
 SUPPORTED_CHAKRA_IDS = set(CHAKRA_ID_BY_NUM.values())
+
+SPECIAL_METRIC_KEYS = {
+    "inflammatory score": "inflammatory_score",
+    "immunal defense": "immunal_defense",
+}
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -235,6 +241,41 @@ def _parse_chakra_strict(raw_line: str) -> Tuple[str, int] | None:
     return chakra_id, value
 
 
+def _parse_special_metric(tokens: List[str], raw_line: str) -> Tuple[str, Dict[str, Any]] | None:
+    value, value_idx = _extract_value(tokens)
+    if value is None or value_idx is None or value_idx <= 1:
+        return None
+
+    name_tokens = tokens[1:value_idx]
+    filtered = [
+        token
+        for token in name_tokens
+        if not re.fullmatch(r"[A-Za-z]{1,3}(?:[.:])?", token) or _norm(token) in SPECIAL_METRIC_KEYS
+    ]
+    if filtered:
+        name_tokens = filtered
+
+    if not name_tokens:
+        return None
+
+    metric_name = _norm(" ".join(name_tokens))
+    metric_id = SPECIAL_METRIC_KEYS.get(metric_name)
+    if not metric_id:
+        return None
+
+    label_match = PAREN_LABEL_RE.search(raw_line)
+    label = label_match.group(1).strip() if label_match else None
+    display_name = " ".join(name_tokens).strip()
+
+    metric: Dict[str, Any] = {"value": value}
+    if display_name:
+        metric["name"] = display_name
+    if label:
+        metric["label"] = label
+
+    return metric_id, metric
+
+
 def _read_doc_all_lines(path: Path) -> List[str]:
     if Document is None:
         raise RuntimeError("python-docx is not installed. Run: pip install python-docx")
@@ -276,6 +317,7 @@ def read_word_lines(path: Path) -> List[str]:
 def parse_report(path: Path) -> Dict[str, Any]:
     organs: Dict[str, int] = {}
     chakras: Dict[str, int] = {}
+    metrics: Dict[str, Dict[str, Any]] = {}
 
     for raw_line in read_word_lines(path):
         tokens = _tokenize_line(raw_line)
@@ -294,6 +336,12 @@ def parse_report(path: Path) -> Dict[str, Any]:
                     continue
                 elif organ_id in TARGET_ORGAN_IDS:
                     organs[organ_id] = value
+                continue
+
+            metric_parsed = _parse_special_metric(tokens, raw_line)
+            if metric_parsed:
+                metric_id, metric_values = metric_parsed
+                metrics[metric_id] = metric_values
             continue
 
         if header.startswith("chakra"):
@@ -304,7 +352,10 @@ def parse_report(path: Path) -> Dict[str, Any]:
                     chakras[chakra_id] = value
             continue
 
-    return {"organs": organs, "chakras": chakras}
+    result: Dict[str, Any] = {"organs": organs, "chakras": chakras}
+    if metrics:
+        result["metrics"] = metrics
+    return result
 
 
 def main() -> None:  # pragma: no cover - CLI helper

@@ -40,6 +40,7 @@ export default function Guest() {
   const isPreview = previewSessionId !== null;
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [serverDown, setServerDown] = useState(false);
+  const [hasConnected, setHasConnected] = useState(false);
 
   useEffect(() => {
     document.title = "Quantum Qi™ - Guest Portal";
@@ -109,6 +110,7 @@ export default function Guest() {
     try {
       const d = await getDisplay();
       setServerDown(false);
+      setHasConnected(true);
       if (!d.session_id) {
         lastSessionId.current = null;
         const stagedFirst =
@@ -248,6 +250,9 @@ export default function Guest() {
     const noteServerState = (down: boolean) => {
       if (!disposed) {
         setServerDown(down);
+        if (!down) {
+          setHasConnected(true);
+        }
       }
     };
 
@@ -295,6 +300,7 @@ export default function Guest() {
         const sessionInfo = await getSession(activePreviewId);
         if (cancelled) return;
         setServerDown(false);
+        setHasConnected(true);
         const displayFirst =
           sessionInfo.first_name ??
           (sessionInfo.client_name ? sessionInfo.client_name.split(" ", 1)[0] : null);
@@ -364,6 +370,40 @@ export default function Guest() {
   }, [isPreview, previewSessionId]);
 
   if (serverDown) {
+    if (!hasConnected) {
+      const waitingName = clientFullName ?? firstName;
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f1114] px-6 text-center text-slate-100">
+          <div className="space-y-6">
+            <div className="relative mx-auto w-fit">
+              <div
+                className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-cyan-400/40 blur-3xl"
+                aria-hidden="true"
+              />
+              <img src="/quantum-qi-logo.png" alt="Quantum Qi™ logo" className="mx-auto w-40 max-w-[60vw]" />
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <h1 className="font-logo text-3xl font-semibold tracking-wider text-text-primary leading-none">
+                <span className="inline-flex items-baseline">
+                  <span>Quantum Qi</span>
+                  <span className="logo-tm">TM</span>
+                </span>
+              </h1>
+              <span className="text-xs font-medium tracking-[0.12em] text-teal-300">by Longevity Wellness</span>
+            </div>
+            <div className="flex flex-col items-center gap-4">
+              <div
+                className="h-12 w-12 animate-spin rounded-full border-4 border-teal-300 border-t-transparent"
+                aria-hidden="true"
+              />
+              <p className="text-lg text-slate-300">
+                {waitingName ? `Preparing ${waitingName}'s experience…` : "Preparing your experience…"}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f1114] px-6 text-center text-slate-100">
         <div className="max-w-md space-y-4">
@@ -390,6 +430,7 @@ export default function Guest() {
       );
     }
     const displayName = clientFullName ?? firstName;
+    const hasActiveSession = lastSessionId.current !== null;
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f1114] px-6 text-center text-slate-100">
         <div className="space-y-4">
@@ -410,9 +451,11 @@ export default function Guest() {
             <span className="text-xs font-medium tracking-[0.12em] text-teal-300">by Longevity Wellness</span>
           </div>
           <p className="text-2xl text-slate-200">
-            {displayName ? `Welcome ${displayName}.` : "Welcome."}
+            {displayName ? `Welcome ${displayName}` : "Welcome"}
           </p>
-          <p className="text-lg text-slate-300">Your wellness journey is in process.</p>
+          <p className="text-lg text-slate-300">
+            {hasActiveSession ? "Your wellness journey is in process" : "Your wellness journey is about to begin"}
+          </p>
         </div>
       </div>
     );

@@ -29,3 +29,7 @@ input { outline: none; }
   top: -2.9em;
   letter-spacing: 0;
 }
+
+.text-xs {
+  font-size: 1.2em;
+}

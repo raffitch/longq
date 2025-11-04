@@ -107,8 +107,8 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
   }, []);
 
   return (
-    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:gap-6 md:items-start">
-      <div className="rounded-[32px] bg-white/5 p-4 backdrop-blur md:p-6">
+    <div className="grid gap-4 items-stretch md:grid-cols-[minmax(0,1fr)_auto] md:gap-6 md:items-stretch">
+      <div className="rounded-[32px] bg-white/5 p-4 backdrop-blur md:h-full md:p-6">
         <div className="flex min-w-0 flex-col gap-4 md:gap-5">
           {pillSections.length ? (
             pillSections
@@ -117,8 +117,8 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
           )}
         </div>
       </div>
-      <div className="rounded-[32px] bg-white/5 p-4 backdrop-blur md:p-6 w-fit justify-self-center md:justify-self-end">
-        <div className="flex items-center justify-center">
+      <div className="rounded-[32px] bg-white/5 p-4 backdrop-blur w-full justify-self-center md:h-full md:w-fit md:justify-self-end md:p-6">
+        <div className="flex h-full w-full items-center justify-center">
           {chartData.length ? (
             <div className="relative h-[268px] w-[271px]">
               <ResponsiveContainer width="100%" height="100%" className="pointer-events-none">
@@ -127,7 +127,7 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
                     data={chartData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={95}
+                    innerRadius={80}
                     outerRadius={100}
                     paddingAngle={2}
                     dataKey="value"
@@ -142,7 +142,7 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 text-center">
                 {icon}
-                <span className="text-3xl font-bold leading-snug text-text-primary">
+                <span className="text-2xl font-normal leading-snug text-text-primary">
                   {formatCategoryLabel(category).map((line, idx, arr) => (
                     <React.Fragment key={`${line}-${idx}`}>
                       {line}
