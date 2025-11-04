@@ -76,6 +76,8 @@ const PREVIEW_VIEWPORT = {
 const DEFAULT_PREVIEW_SCALE = 0.55;
 const FIT_MAX_DIMENSION = 720;
 const MIN_PREVIEW_HEIGHT = 1000;
+const FIT_SCALE_MARGIN = 24;
+const ORIGINAL_WIDTH_BUFFER = 64;
 const darkInputClasses =
   "rounded-lg border border-border-strong bg-neutral-dark px-2.5 py-1.5 text-text-primary shadow-[inset_0_1px_2px_rgba(15,23,42,0.45)] outline-none caret-accent-info focus:ring-2 focus:ring-accent-info/40";
 const cardShellClasses = "rounded-3lg border border-border bg-surface text-text-primary shadow-surface-lg";
@@ -374,9 +376,18 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [editedSex, setEditedSex] = useState<Sex | null>(null);
   const [lastDroppedFiles, setLastDroppedFiles] = useState<DroppedFile[]>([]);
   const [backendDown, setBackendDown] = useState(false);
+  const [backendReady, setBackendReady] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
   const [fitPreview, setFitPreview] = useState(true);
+  const [livePreviewArea, setLivePreviewArea] = useState(() => ({
+    width: FIT_MAX_DIMENSION,
+    height: FIT_MAX_DIMENSION,
+  }));
+  const [stagedPreviewArea, setStagedPreviewArea] = useState(() => ({
+    width: FIT_MAX_DIMENSION,
+    height: FIT_MAX_DIMENSION,
+  }));
   const [presetsEnabled, setPresetsEnabled] = useState(false);
   const thresholdLimit = useThresholdLimitValue();
   const thresholdMax = useThresholdMaxValue();
@@ -385,36 +396,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [showThresholdControls, setShowThresholdControls] = useState(false);
   const viewportWidth = PREVIEW_VIEWPORT.width;
   const viewportHeight = PREVIEW_VIEWPORT.height;
-  const fitScale = useMemo(() => {
-    const baseScale = FIT_MAX_DIMENSION / Math.max(viewportWidth, viewportHeight);
-    return Math.min(baseScale, 1);
-  }, [viewportWidth, viewportHeight]);
-  const previewScale = fitPreview ? fitScale : DEFAULT_PREVIEW_SCALE;
-  const previewContainerStyle = useMemo<React.CSSProperties>(() => {
-    if (fitPreview) {
-      const scaledWidth = Math.max(1, Math.floor(viewportWidth * previewScale));
-      const scaledHeight = Math.max(1, Math.floor(viewportHeight * previewScale));
-      return {
-        width: `${scaledWidth}px`,
-        minWidth: `${scaledWidth}px`,
-        maxWidth: `${scaledWidth}px`,
-        height: `${scaledHeight}px`,
-        minHeight: `${scaledHeight}px`,
-        maxHeight: `${scaledHeight}px`,
-      };
-    }
-    const aspectPercent = (viewportHeight / viewportWidth) * 100;
-    return {
-      paddingBottom: `${aspectPercent}%`,
-      minHeight: `${Math.max(viewportHeight * previewScale, MIN_PREVIEW_HEIGHT)}px`,
-    };
-  }, [fitPreview, viewportHeight, viewportWidth, previewScale]);
-  const scaledFrameStyle = useMemo<React.CSSProperties>(() => ({
-    transform: `scale(${previewScale})`,
-    transformOrigin: "top left",
-    width: `${viewportWidth}px`,
-    height: `${viewportHeight}px`,
-  }), [previewScale, viewportHeight, viewportWidth]);
   const currentPreset = useMemo<PresetKey>(() => {
     if (!presetsEnabled) {
       return DEFAULT_PRESET_KEY;
@@ -587,7 +568,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     return beat !== null && !Number.isNaN(beat) && Date.now() - beat < GUEST_HEARTBEAT_GRACE_MS;
   };
 
-  const markBackendUp = (ctx?: OperationContext) => applyState(setBackendDown, false, ctx);
+  const markBackendUp = (ctx?: OperationContext) => {
+    applyState(setBackendDown, false, ctx);
+    applyState(setBackendReady, true, ctx);
+  };
   const markBackendDown = (err?: unknown, ctx?: OperationContext) => {
     if (err === undefined || isNetworkError(err)) {
       applyState(setBackendDown, true, ctx);
@@ -839,8 +823,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     let disposed = false;
 
     const noteState = (down: boolean) => {
-      if (!disposed) {
-        setBackendDown(down);
+      if (disposed) return;
+      setBackendDown(down);
+      if (!down) {
+        setBackendReady(true);
       }
     };
 
@@ -2007,10 +1993,111 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const showStagedPreviewBlock = Boolean(session && hasStagedData);
   const stagedPreviewVisible = showStagedPreviewBlock && !hasShownOnGuest;
 
+  const fallbackFitScale = useMemo(() => {
+    const baseScale = FIT_MAX_DIMENSION / Math.max(viewportWidth, viewportHeight);
+    return Math.min(baseScale, 1);
+  }, [viewportHeight, viewportWidth]);
+
+  const fitScale = useMemo(() => {
+    const area = stagedPreviewVisible ? stagedPreviewArea : livePreviewArea;
+    const availableWidth = Math.max(0, area.width - FIT_SCALE_MARGIN * 2);
+    const availableHeight = Math.max(0, area.height - FIT_SCALE_MARGIN * 2);
+    if (availableWidth <= 0 || availableHeight <= 0) {
+      return fallbackFitScale;
+    }
+    const computed = Math.min(availableWidth / viewportWidth, availableHeight / viewportHeight, 1);
+    return Number.isFinite(computed) && computed > 0 ? computed : fallbackFitScale;
+  }, [fallbackFitScale, livePreviewArea, stagedPreviewArea, stagedPreviewVisible, viewportHeight, viewportWidth]);
+
+  const originalScale = useMemo(() => {
+    const area = stagedPreviewVisible ? stagedPreviewArea : livePreviewArea;
+    const availableWidth = Math.max(0, area.width - ORIGINAL_WIDTH_BUFFER);
+    if (availableWidth <= 0) {
+      return DEFAULT_PREVIEW_SCALE;
+    }
+    const computed = availableWidth / viewportWidth;
+    if (!Number.isFinite(computed) || computed <= 0) {
+      return DEFAULT_PREVIEW_SCALE;
+    }
+    return Math.min(DEFAULT_PREVIEW_SCALE, computed);
+  }, [livePreviewArea, stagedPreviewArea, stagedPreviewVisible, viewportWidth]);
+
+  const previewScale = fitPreview ? fitScale : originalScale;
+
+  const previewContainerStyle = useMemo<React.CSSProperties>(() => {
+    if (fitPreview) {
+      const scaledWidth = Math.max(1, Math.floor(viewportWidth * previewScale));
+      const scaledHeight = Math.max(1, Math.floor(viewportHeight * previewScale));
+      return {
+        width: `${scaledWidth}px`,
+        minWidth: `${scaledWidth}px`,
+        maxWidth: `${scaledWidth}px`,
+        height: `${scaledHeight}px`,
+        minHeight: `${scaledHeight}px`,
+        maxHeight: `${scaledHeight}px`,
+      };
+    }
+    const aspectPercent = (viewportHeight / viewportWidth) * 100;
+    return {
+      paddingBottom: `${aspectPercent}%`,
+      minHeight: `${Math.max(viewportHeight * previewScale, MIN_PREVIEW_HEIGHT)}px`,
+    };
+  }, [fitPreview, previewScale, viewportHeight, viewportWidth]);
+
+  const scaledFrameStyle = useMemo<React.CSSProperties>(() => ({
+    transform: `scale(${previewScale})`,
+    transformOrigin: "top left",
+    width: `${viewportWidth}px`,
+    height: `${viewportHeight}px`,
+  }), [previewScale, viewportHeight, viewportWidth]);
+
+  useEffect(() => {
+    if (stagedPreviewVisible) return;
+    if (typeof ResizeObserver === "undefined") return;
+    const node = livePreviewContainerRef.current;
+    if (!node) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setLivePreviewArea((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
+    });
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [stagedPreviewVisible]);
+
+  useEffect(() => {
+    if (!stagedPreviewVisible) return;
+    if (typeof ResizeObserver === "undefined") return;
+    const node = stagedPreviewContainerRef.current;
+    if (!node) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setStagedPreviewArea((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
+    });
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [stagedPreviewVisible]);
+
 useEffect(() => {
   if (stagedPreviewVisible) return;
   const container = livePreviewContainerRef.current;
   if (!container) return;
+
+  if (fitPreview) {
+    container.scrollTo({ left: 0, top: 0, behavior: "auto" });
+    return;
+  }
 
   const targetLeft = Math.max(0, (viewportWidth * previewScale - container.clientWidth) / 2);
   const targetTop = Math.max(0, (viewportHeight * previewScale - container.clientHeight) / 2);
@@ -2024,13 +2111,18 @@ useEffect(() => {
     cancelAnimationFrame(frame);
     iframe?.removeEventListener("load", scroll);
   };
-}, [previewScale, viewportHeight, viewportWidth, stagedPreviewVisible]);
+}, [previewScale, viewportHeight, viewportWidth, stagedPreviewVisible, fitPreview]);
 
 useEffect(() => {
   if (stagedPreviewVisible) return;
   const container = livePreviewContainerRef.current;
   const content = livePreviewContentRef.current;
   if (!container || !content) return;
+
+  if (fitPreview) {
+    container.scrollTo({ left: 0, top: 0, behavior: "auto" });
+    return;
+  }
 
   livePreviewUserScrolledRef.current = false;
 
@@ -2074,6 +2166,27 @@ useEffect(() => {
 useEffect(() => {
   livePreviewUserScrolledRef.current = false;
 }, [fitPreview, previewScale, liveMonitorUrl, stagedPreviewVisible]);
+
+  if (!backendReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-center text-text-primary">
+        <div className="space-y-6">
+          <div className="flex justify-center">
+            <div
+              className="h-12 w-12 animate-spin rounded-full border-4 border-teal-300 border-t-transparent"
+              aria-hidden="true"
+            />
+          </div>
+          <div>
+            <div className="text-[18px] font-semibold tracking-[0.16em] text-teal-100 uppercase">
+              Initializing Console
+            </div>
+            <p className="mt-2 text-[14px] text-slate-200">Connecting to the Quantum Qi™ backend…</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (backendDown) {
     return (
@@ -2300,10 +2413,15 @@ useEffect(() => {
               Guest window is closed. Use the session header controls to launch it again.
             </div>
           )}
-          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto pr-2">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col gap-3.5 pr-2",
+              fitPreview ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden",
+            )}
+          >
             <div
               className={cn(
-                "rounded-[10px] border border-[#d1d5db] bg-white shadow-inner transition-all duration-500",
+                "rounded-[10px] border border-[#d1d5db] bg-white shadow-inner",
                 stagedPreviewVisible ? "p-3" : "flex-1 p-0",
               )}
             >
@@ -2311,21 +2429,24 @@ useEffect(() => {
                 <div
                   ref={livePreviewContainerRef}
                   onScroll={() => {
-                    livePreviewUserScrolledRef.current = true;
+                    if (!fitPreview) {
+                      livePreviewUserScrolledRef.current = true;
+                    }
                   }}
                   className={cn(
-                    "relative flex h-full w-full items-start overflow-auto transition-opacity duration-500",
-                    fitPreview ? "justify-center" : "justify-start",
+                    "relative flex h-full w-full items-start",
+                    fitPreview ? "justify-center overflow-hidden" : "justify-start overflow-y-auto overflow-x-hidden",
                   )}
                 >
                   <div
                     ref={livePreviewContentRef}
-                    className={cn("relative", fitPreview ? "inline-block" : "w-full")}
+                    className={cn("relative", fitPreview ? "inline-block" : "w-full max-w-full")}
                     style={previewContainerStyle}
                   >
                     <iframe
                       title="Live Guest Monitor"
                       src={liveMonitorUrl}
+                      scrolling="no"
                       className="absolute inset-0 border-0"
                       style={scaledFrameStyle}
                     />
@@ -2338,27 +2459,36 @@ useEffect(() => {
               )}
             </div>
             {showStagedPreviewBlock && stagedPreviewVisible && (
-              <div className="flex flex-1 flex-col gap-3 rounded-[10px] border border-[#d1d5db] bg-white p-3 shadow-inner transition-all duration-500">
+              <div className="flex flex-1 flex-col gap-3 rounded-[10px] border border-[#d1d5db] bg-white p-3 shadow-inner">
                 <div className="text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
                   Staged Preview
                 </div>
                 <div className="text-[11px] text-[#6b7280]">
                   Review the staged data before revealing it to the guest.
                 </div>
-                <div className="flex-1 overflow-auto rounded-[8px] border border-[#d1d5db]">
+                <div
+                  className={cn(
+                    "flex-1 rounded-[8px] border border-[#d1d5db]",
+                    fitPreview ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden",
+                  )}
+                >
                   {stagedPreviewUrl && (
                     <div
                       ref={stagedPreviewContainerRef}
                       className={cn(
-                        "relative flex h-full w-full items-start overflow-auto",
-                        fitPreview ? "justify-center" : "justify-start",
+                        "relative flex h-full w-full items-start",
+                        fitPreview ? "justify-center overflow-hidden" : "justify-start overflow-y-auto overflow-x-hidden",
                       )}
                     >
-                      <div className={cn("relative", fitPreview ? "inline-block" : "w-full")} style={previewContainerStyle}>
+                      <div
+                        className={cn("relative", fitPreview ? "inline-block" : "w-full max-w-full")}
+                        style={previewContainerStyle}
+                      >
                         <iframe
                           key={`${stagedPreviewSessionId}-${stagedPreviewVersion}`}
                           title="Staged Guest Preview"
                           src={stagedPreviewUrl}
+                          scrolling="no"
                           className="absolute inset-0 border-0"
                           style={scaledFrameStyle}
                         />
