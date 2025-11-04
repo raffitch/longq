@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { getDisplay, getParsedBundle, getSession, type Sex } from "./api";
 
 import GuestDashboard from "./guest/GuestDashboard";
+import "./guest/guest.css";
 import {
   aggregateInsights,
   transformFoodData,
@@ -406,21 +407,21 @@ export default function Guest() {
               />
               <img src="/quantum-qi-logo.png" alt="Quantum Qi™ logo" className="mx-auto w-40 max-w-[60vw]" />
             </div>
-            <div className="flex flex-col items-center gap-1">
-              <h1 className="font-logo text-3xl font-semibold tracking-wider text-text-primary leading-none">
+            <div className="flex flex-col items-center gap-1.5">
+              <h1 className="guest-welcome-title font-logo text-text-primary">
                 <span className="inline-flex items-baseline">
                   <span>Quantum Qi</span>
                   <span className="logo-tm">TM</span>
                 </span>
               </h1>
-              <span className="text-xs font-medium tracking-[0.12em] text-teal-300">by Longevity Wellness</span>
+              <span className="guest-welcome-subtitle">by Longevity Wellness</span>
             </div>
             <div className="flex flex-col items-center gap-4">
               <div
                 className="h-12 w-12 animate-spin rounded-full border-4 border-teal-300 border-t-transparent"
                 aria-hidden="true"
               />
-              <p className="text-lg text-slate-300">
+              <p className="guest-welcome-instructions text-slate-300">
                 {waitingName ? `Preparing ${waitingName}'s experience…` : "Preparing your experience…"}
               </p>
             </div>
@@ -465,19 +466,19 @@ export default function Guest() {
             />
             <img src="/quantum-qi-logo.png" alt="Quantum Qi™ logo" className="mx-auto w-52 max-w-[70vw]" />
           </div>
-          <div className="flex flex-col items-center gap-1">
-            <h1 className="font-logo text-4xl font-semibold tracking-wider text-text-primary leading-none">
+          <div className="flex flex-col items-center gap-1.5">
+            <h1 className="guest-welcome-title font-logo text-text-primary">
               <span className="inline-flex items-baseline">
                 <span>Quantum Qi</span>
                 <span className="logo-tm">TM</span>
               </span>
             </h1>
-            <span className="text-xs font-medium tracking-[0.12em] text-teal-300">by Longevity Wellness</span>
+            <span className="guest-welcome-subtitle">by Longevity Wellness</span>
           </div>
-          <p className="text-2xl text-slate-200">
+          <p className="guest-welcome-message text-slate-200">
             {displayName ? `Welcome ${displayName}` : "Welcome"}
           </p>
-          <p className="text-lg text-slate-300">
+          <p className="guest-welcome-instructions text-slate-300">
             {hasActiveSession ? "Your wellness journey is in process" : "Your wellness journey is about to begin"}
           </p>
         </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./ui/Button";
 import { Chip } from "./ui/Chip";
 import { cn } from "./ui/cn";
@@ -33,6 +33,23 @@ const REPORT_DEFS: { kind: ReportKind; label: string; aliases: string[] }[] = [
   { kind: "toxins", label: "Toxins", aliases: ["toxins"] },
   { kind: "peek", label: "PEEK Report", aliases: ["peek", "peek report", "energy", "energy-map", "energy map"] },
 ];
+
+type PresetKey = "energy-health" | "food" | "health" | "energy" | "custom";
+
+const PRESET_DEFS: Array<{ key: PresetKey; label: string; reports: ReportKind[] | null }> = [
+  { key: "energy-health", label: "Energy & Health", reports: ["peek", "nutrition", "hormones", "toxins", "heavy-metals"] },
+  { key: "food", label: "Food", reports: ["food"] },
+  { key: "health", label: "Health", reports: ["nutrition", "hormones", "toxins", "heavy-metals"] },
+  { key: "energy", label: "Energy", reports: ["peek"] },
+  { key: "custom", label: "Custom", reports: null },
+];
+
+const DEFAULT_PRESET_KEY: PresetKey = "energy-health";
+
+const PRESET_REPORT_SETS: Record<PresetKey, Set<ReportKind>> = PRESET_DEFS.reduce((acc, preset) => {
+  acc[preset.key] = new Set(preset.reports ?? []);
+  return acc;
+}, {} as Record<PresetKey, Set<ReportKind>>);
 
 const LABEL: Record<ReportKind, string> = {
   food: "food",
@@ -89,6 +106,48 @@ function createEmptyErrorMap(): UploadErrorMap {
 
 function createSelectionMap(initial = false): SelectionMap {
   return buildMap<boolean>(initial);
+}
+
+function buildSelectionForPreset(key: PresetKey): SelectionMap {
+  const base = createSelectionMap(false);
+  const reports = PRESET_REPORT_SETS[key];
+  if (!reports) {
+    return base;
+  }
+  reports.forEach((kind) => {
+    base[kind] = true;
+  });
+  return base;
+}
+
+function detectPreset(selection: SelectionMap): PresetKey {
+  for (const preset of PRESET_DEFS) {
+    if (!preset.reports) {
+      continue;
+    }
+    const expected = PRESET_REPORT_SETS[preset.key];
+    let matches = true;
+    for (const def of REPORT_DEFS) {
+      const shouldSelect = expected.has(def.kind);
+      if ((selection[def.kind] ?? false) !== shouldSelect) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return preset.key;
+    }
+  }
+  return "custom";
+}
+
+function selectionsEqual(a: SelectionMap, b: SelectionMap): boolean {
+  for (const def of REPORT_DEFS) {
+    if ((a[def.kind] ?? false) !== (b[def.kind] ?? false)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function currentSessionNames(s: Session): { first: string; last: string } {
@@ -317,7 +376,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [backendDown, setBackendDown] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
-  const [fitPreview, setFitPreview] = useState(false);
+  const [fitPreview, setFitPreview] = useState(true);
+  const [presetsEnabled, setPresetsEnabled] = useState(false);
   const thresholdLimit = useThresholdLimitValue();
   const thresholdMax = useThresholdMaxValue();
   const visibleSeverities = useVisibleSeverities();
@@ -332,8 +392,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const previewScale = fitPreview ? fitScale : DEFAULT_PREVIEW_SCALE;
   const previewContainerStyle = useMemo<React.CSSProperties>(() => {
     if (fitPreview) {
-      const scaledWidth = viewportWidth * previewScale;
-      const scaledHeight = viewportHeight * previewScale;
+      const scaledWidth = Math.max(1, Math.floor(viewportWidth * previewScale));
+      const scaledHeight = Math.max(1, Math.floor(viewportHeight * previewScale));
       return {
         width: `${scaledWidth}px`,
         minWidth: `${scaledWidth}px`,
@@ -352,9 +412,15 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const scaledFrameStyle = useMemo<React.CSSProperties>(() => ({
     transform: `scale(${previewScale})`,
     transformOrigin: "top left",
-    width: `${100 / previewScale}%`,
-    height: `${100 / previewScale}%`,
-  }), [previewScale]);
+    width: `${viewportWidth}px`,
+    height: `${viewportHeight}px`,
+  }), [previewScale, viewportHeight, viewportWidth]);
+  const currentPreset = useMemo<PresetKey>(() => {
+    if (!presetsEnabled) {
+      return DEFAULT_PRESET_KEY;
+    }
+    return detectPreset(selectedReports);
+  }, [presetsEnabled, selectedReports]);
   const previewToggleLabel = fitPreview ? "Switch to original size" : "Switch to fit to screen";
 
 
@@ -410,6 +476,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const autoOpenTimerRef = useRef<number | null>(null);
   const thresholdPanelRef = useRef<HTMLDivElement | null>(null);
   const livePreviewUserScrolledRef = useRef(false);
+  const presetAutoAppliedRef = useRef(false);
+  const presetSessionRef = useRef<number | null>(null);
 
   type OperationContext = { seq: number; signal: AbortSignal };
 
@@ -1138,7 +1206,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     }
   }
 
-  async function parseSelectedReports(ctx?: OperationContext): Promise<boolean> {
+  async function parseSelectedReports(ctx?: OperationContext, selectionOverride?: SelectionMap): Promise<boolean> {
     if (!session) return false;
     const operation = ctx ?? beginOperation();
     if (isUploading) {
@@ -1146,10 +1214,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       return false;
     }
 
+    const selection = selectionOverride ?? selectedReports;
     const targets: Array<{ kind: ReportKind; file: FileOut }> = REPORT_DEFS.flatMap(
       (def) => {
         const file = uploads[def.kind];
-        return selectedReports[def.kind] && file
+        return selection[def.kind] && file
           ? [{ kind: def.kind, file }]
           : [];
       },
@@ -1190,22 +1259,24 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     return success;
   }
 
-  async function onPublish() {
+  async function onPublish(selectionOverride?: SelectionMap, options?: { force?: boolean }) {
     if (!session) return;
+    const selection = selectionOverride ?? selectedReports;
+    const force = options?.force ?? false;
     const operation = beginOperation();
-    if (session.published && !hasPendingChanges) {
+    if (session.published && !force && !hasPendingChanges) {
       applyState(setStatus, "No changes to publish.", operation);
       return;
     }
     applyState(setError, "", operation);
-    const parsed = await parseSelectedReports(operation);
+    const parsed = await parseSelectedReports(operation, selection);
     if (!parsed || !isOperationActive(operation)) {
       return;
     }
     try {
       applyState(setStatus, session.published ? "Updating live session…" : "Publishing…", operation);
       const sessionId = session.id;
-      const result = await publish(sessionId, true, selectedReports);
+      const result = await publish(sessionId, true, selection);
       if (!isOperationActive(operation)) {
         return;
       }
@@ -1230,6 +1301,82 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       markBackendDown(e, operation);
     }
   }
+
+  const applyPresetSelection = useCallback(
+    async (key: PresetKey, options?: { autoPublish?: boolean; silent?: boolean }) => {
+      if (!session) return;
+      const preset = PRESET_DEFS.find((definition) => definition.key === key);
+      if (!preset) return;
+
+      if (!preset.reports) {
+        if (!options?.silent) {
+          setStatus("Custom preset active. Adjust report selections and publish to apply.");
+        }
+        return;
+      }
+
+      const nextSelection = buildSelectionForPreset(key);
+      const selectionChanged = !selectionsEqual(nextSelection, selectedReports);
+
+      if (selectionChanged) {
+        setSelectedReports(nextSelection);
+        setHasPendingChanges(true);
+      }
+
+      const autoPublish = options?.autoPublish ?? true;
+      if (!options?.silent) {
+        const label = preset.label;
+        setStatus(autoPublish ? `${label} preset applied. Updating guest view…` : `${label} preset applied.`);
+      }
+      setError("");
+
+      if (autoPublish) {
+        await onPublish(nextSelection, { force: true });
+      }
+    },
+    [onPublish, selectedReports, session],
+  );
+
+  const handlePresetButton = useCallback(
+    (key: PresetKey) => {
+      if (!presetsEnabled) return;
+      if (key === "custom") {
+        setError("");
+        setStatus("Customize the report checkboxes below, then press Update to apply.");
+        return;
+      }
+      void applyPresetSelection(key, { autoPublish: true });
+    },
+    [applyPresetSelection, presetsEnabled],
+  );
+
+  useEffect(() => {
+    if (!session) {
+      setPresetsEnabled(false);
+      presetAutoAppliedRef.current = false;
+      presetSessionRef.current = null;
+      return;
+    }
+
+    if (presetSessionRef.current !== session.id) {
+      presetSessionRef.current = session.id;
+      presetAutoAppliedRef.current = false;
+    }
+
+    const hasReports = Object.values(uploads).some(Boolean);
+    const shouldEnable = Boolean(session.published && hasReports);
+    setPresetsEnabled(shouldEnable);
+
+    if (!shouldEnable) {
+      presetAutoAppliedRef.current = false;
+      return;
+    }
+
+    if (!presetAutoAppliedRef.current) {
+      presetAutoAppliedRef.current = true;
+      void applyPresetSelection(DEFAULT_PRESET_KEY, { autoPublish: true, silent: true });
+    }
+  }, [applyPresetSelection, session, uploads]);
 
   async function showOnGuest() {
     if (!session) return;
@@ -1576,98 +1723,134 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     };
 
     return (
-      <div className="mt-4 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)]">
-        {renderDropZone()}
-        <div className="rounded-3lg border border-border bg-surface shadow-surface-md">
-          <div className="flex flex-wrap items-center gap-4 px-4 py-3 text-[12px] text-[#4b5563]">
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="text-[13px] font-semibold text-text-primary">Publish Session</div>
-              <div className="text-[11px] text-text-secondary">{publishStatusText}</div>
-            </div>
-            <div className="ml-auto flex items-center gap-3">
-              <Button
-                onClick={onPublish}
-                disabled={disablePublish}
-                variant={publishButtonVariant}
-                className="px-[18px]"
-              >
-                {publishLabel}
-              </Button>
-              <div className="relative" ref={thresholdPanelRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowThresholdControls((prev) => !prev)}
-                  className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-white shadow-surface-md transition-colors duration-150",
-                    showThresholdControls ? "ring-2 ring-accent-info/40" : "hover:border-accent-info/40",
-                  )}
-                  title="Adjust priority display limit"
+      <>
+        <div className="mt-4 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)]">
+          {renderDropZone()}
+          <div className="rounded-3lg border border-border bg-surface shadow-surface-md">
+            <div className="flex flex-wrap items-center gap-4 px-4 py-3 text-[12px] text-[#4b5563]">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="text-[13px] font-semibold text-text-primary">Publish Session</div>
+                <div className="text-[11px] text-text-secondary">{publishStatusText}</div>
+              </div>
+              <div className="ml-auto flex items-center gap-3">
+                <Button
+                  onClick={() => onPublish()}
+                  disabled={disablePublish}
+                  variant={publishButtonVariant}
+                  className="px-[18px]"
+                >
+                  {publishLabel}
+                </Button>
+                <div className="relative" ref={thresholdPanelRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowThresholdControls((prev) => !prev)}
+                    className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-white shadow-surface-md transition-colors duration-150",
+                      showThresholdControls ? "ring-2 ring-accent-info/40" : "hover:border-accent-info/40",
+                    )}
+                    title="Adjust priority display limit"
                   >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
-                    className="h-4 w-4"
-                    aria-hidden="true"
-                  >
-                    <path d="M8,11a3,3,0,1,1,3-3A3,3,0,0,1,8,11ZM8,6a2,2,0,1,0,2,2A2,2,0,0,0,8,6Z" />
-                    <path d="M8.5,16h-1A1.5,1.5,0,0,1,6,14.5v-.85a5.91,5.91,0,0,1-.58-.24l-.6.6A1.54,1.54,0,0,1,2.7,14L2,13.3a1.5,1.5,0,0,1,0-2.12l.6-.6A5.91,5.91,0,0,1,2.35,10H1.5A1.5,1.5,0,0,1,0,8.5v-1A1.5,1.5,0,0,1,1.5,6h.85a5.91,5.91,0,0,1,.24-.58L2,4.82A1.5,1.5,0,0,1,2,2.7L2.7,2A1.54,1.54,0,0,1,4.82,2l.6.6A5.91,5.91,0,0,1,6,2.35V1.5A1.5,1.5,0,0,1,7.5,0h1A1.5,1.5,0,0,1,10,1.5v.85a5.91,5.91,0,0,1,.58.24l.6-.6A1.54,1.54,0,0,1,13.3,2L14,2.7a1.5,1.5,0,0,1,0,2.12l-.6.6a5.91,5.91,0,0,1,.24.58h.85A1.5,1.5,0,0,1,16,7.5v1A1.5,1.5,0,0,1,14.5,10h-.85a5.91,5.91,0,0,1-.24.58l.6.6a1.5,1.5,0,0,1,0,2.12L13.3,14a1.54,1.54,0,0,1-2.12,0l-.6-.6a5.91,5.91,0,0,1-.58.24v.85A1.5,1.5,0,0,1,8.5,16ZM5.23,12.18l.33.18a4.94,4.94,0,0,0,1.07.44l.36.1V14.5a.5.5,0,0,0,.5.5h1a.5.5,0,0,0,.5-.5V12.91l.36-.1a4.94,4.94,0,0,0,1.07-.44l.33-.18,1.12,1.12a.51.51,0,0,0,.71,0l.71-.71a.5.5,0,0,0,0-.71l-1.12-1.12.18-.33a4.94,4.94,0,0,0,.44-1.07l.1-.36H14.5a.5.5,0,0,0,.5-.5v-1a.5.5,0,0,0-.5-.5H12.91l-.1-.36a4.94,4.94,0,0,0-.44-1.07l-.18-.33L13.3,4.11a.5.5,0,0,0,0-.71L12.6,2.7a.51.51,0,0,0-.71,0L10.77,3.82l-.33-.18a4.94,4.94,0,0,0-1.07-.44L9,3.09V1.5A.5.5,0,0,0,8.5,1h-1a.5.5,0,0,0-.5.5V3.09l-.36.1a4.94,4.94,0,0,0-1.07.44l-.33.18L4.11,2.7a.51.51,0,0,0-.71,0L2.7,3.4a.5.5,0,0,0,0,.71L3.82,5.23l-.18.33a4.94,4.94,0,0,0-.44,1.07L3.09,7H1.5a.5.5,0,0,0-.5.5v1a.5.5,0,0,0,.5.5H3.09l.1.36a4.94,4.94,0,0,0,.44,1.07l.18.33L2.7,11.89a.5.5,0,0,0,0,.71l.71.71a.51.51,0,0,0,.71,0Z" />
-                  </svg>
-                </button>
-                {showThresholdControls && (
-                  <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-border bg-surface shadow-surface-md">
-                    <div className="flex flex-col gap-3 p-4 text-[12px] text-text-secondary">
-                      <div className="flex items-center justify-between text-[13px] text-text-primary">
-                        <span>Items per priority band</span>
-                        <span className="font-semibold">{sliderValue}</span>
-                      </div>
-                      <input
-                        type="range"
-                        min={1}
-                        max={sliderMax}
-                        value={sliderValue}
-                        onChange={(event) => setThresholdLimit(Number(event.target.value))}
-                        className="w-full"
-                      />
-                      <div className="flex items-center justify-between">
-                        <span>Min: 1</span>
-                        <span>Max available: {sliderMax}</span>
-                      </div>
-                      <div className="mt-1 border-t border-border pt-3">
-                        <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.4px] text-text-primary">
-                          Visible priority bands
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                      className="h-4 w-4"
+                      aria-hidden="true"
+                    >
+                      <path d="M8,11a3,3,0,1,1,3-3A3,3,0,0,1,8,11ZM8,6a2,2,0,1,0,2,2A2,2,0,0,0,8,6Z" />
+                      <path d="M8.5,16h-1A1.5,1.5,0,0,1,6,14.5v-.85a5.91,5.91,0,0,1-.58-.24l-.6.6A1.54,1.54,0,0,1,2.7,14L2,13.3a1.5,1.5,0,0,1,0-2.12l.6-.6A5.91,5.91,0,0,1,2.35,10H1.5A1.5,1.5,0,0,1,0,8.5v-1A1.5,1.5,0,0,1,1.5,6h.85a5.91,5.91,0,0,1,.24-.58L2,4.82A1.5,1.5,0,0,1,2,2.7L2.7,2A1.54,1.54,0,0,1,4.82,2l.6.6A5.91,5.91,0,0,1,6,2.35V1.5A1.5,1.5,0,0,1,7.5,0h1A1.5,1.5,0,0,1,10,1.5v.85a5.91,5.91,0,0,1,.58.24l.6-.6A1.54,1.54,0,0,1,13.3,2L14,2.7a1.5,1.5,0,0,1,0,2.12l-.6.6a5.91,5.91,0,0,1,.24.58h.85A1.5,1.5,0,0,1,16,7.5v1A1.5,1.5,0,0,1,14.5,10h-.85a5.91,5.91,0,0,1-.24.58l.6.6a1.5,1.5,0,0,1,0,2.12L13.3,14a1.54,1.54,0,0,1-2.12,0l-.6-.6a5.91,5.91,0,0,1-.58.24v.85A1.5,1.5,0,0,1,8.5,16ZM5.23,12.18l.33.18a4.94,4.94,0,0,0,1.07.44l.36.1V14.5a.5.5,0,0,0,.5.5h1a.5.5,0,0,0,.5-.5V12.91l.36-.1a4.94,4.94,0,0,0,1.07-.44l.33-.18,1.12,1.12a.51.51,0,0,0,.71,0l.71-.71a.5.5,0,0,0,0-.71l-1.12-1.12.18-.33a4.94,4.94,0,0,0,.44-1.07l.1-.36H14.5a.5.5,0,0,0,.5-.5v-1a.5.5,0,0,0-.5-.5H12.91l-.1-.36a4.94,4.94,0,0,0-.44-1.07l-.18-.33L13.3,4.11a.5.5,0,0,0,0-.71L12.6,2.7a.51.51,0,0,0-.71,0L10.77,3.82l-.33-.18a4.94,4.94,0,0,0-1.07-.44L9,3.09V1.5A.5.5,0,0,0,8.5,1h-1a.5.5,0,0,0-.5.5V3.09l-.36.1a4.94,4.94,0,0,0-1.07.44l-.33.18L4.11,2.7a.51.51,0,0,0-.71,0L2.7,3.4a.5.5,0,0,0,0,.71L3.82,5.23l-.18.33a4.94,4.94,0,0,0-.44,1.07L3.09,7H1.5a.5.5,0,0,0-.5.5v1a.5.5,0,0,0,.5.5H3.09l.1.36a4.94,4.94,0,0,0,.44,1.07l.18.33L2.7,11.89a.5.5,0,0,0,0,.71l.71.71a.51.51,0,0,0,.71,0Z" />
+                    </svg>
+                  </button>
+                  {showThresholdControls && (
+                    <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-border bg-surface shadow-surface-md">
+                      <div className="flex flex-col gap-3 p-4 text-[12px] text-text-secondary">
+                        <div className="flex items-center justify-between text-[13px] text-text-primary">
+                          <span>Items per priority band</span>
+                          <span className="font-semibold">{sliderValue}</span>
                         </div>
-                        <div className="flex flex-col gap-2">
-                          {GENERAL_SEVERITY_ORDER.map((severity) => {
-                            const meta = GENERAL_SEVERITY_META[severity];
-                            const checked = visibleSeveritiesSet.has(severity);
-                            const disable = checked && visibleSeveritiesSet.size <= 1;
-                            return (
-                              <label key={severity} className="flex items-center gap-3 text-[12px] text-text-secondary">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  disabled={disable}
-                                  onChange={(event) => handleToggleSeverity(severity, event.target.checked)}
-                                  className="h-3.5 w-3.5 accent-accent-info"
-                                />
-                                <span className="flex flex-col">
-                                  <span className="text-text-primary">{meta.label}</span>
-                                  <span className="text-[11px] text-text-secondary/70">{meta.range}</span>
-                                </span>
-                              </label>
-                            );
-                          })}
+                        <input
+                          type="range"
+                          min={1}
+                          max={sliderMax}
+                          value={sliderValue}
+                          onChange={(event) => setThresholdLimit(Number(event.target.value))}
+                          className="w-full"
+                        />
+                        <div className="flex items-center justify-between">
+                          <span>Min: 1</span>
+                          <span>Max available: {sliderMax}</span>
+                        </div>
+                        <div className="mt-1 border-t border-border pt-3">
+                          <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.4px] text-text-primary">
+                            Visible priority bands
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {GENERAL_SEVERITY_ORDER.map((severity) => {
+                              const meta = GENERAL_SEVERITY_META[severity];
+                              const checked = visibleSeveritiesSet.has(severity);
+                              const disable = checked && visibleSeveritiesSet.size <= 1;
+                              return (
+                                <label key={severity} className="flex items-center gap-3 text-[12px] text-text-secondary">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={disable}
+                                    onChange={(event) => handleToggleSeverity(severity, event.target.checked)}
+                                    className="h-3.5 w-3.5 accent-accent-info"
+                                  />
+                                  <span className="flex flex-col">
+                                    <span className="text-text-primary">{meta.label}</span>
+                                    <span className="text-[11px] text-text-secondary/70">{meta.range}</span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+        <div className="mt-3 rounded-3lg border border-border bg-surface px-4 py-3 shadow-surface-md">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-[#4b5563]">
+            <div className="text-[13px] font-semibold text-text-primary">Display Preset</div>
+            <div className="flex flex-wrap items-center gap-2">
+              {PRESET_DEFS.map((preset) => {
+                const isActive = presetsEnabled && currentPreset === preset.key;
+                return (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    onClick={() => handlePresetButton(preset.key)}
+                    disabled={!presetsEnabled}
+                    aria-pressed={isActive}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.6px] transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0ea5e9]",
+                      !presetsEnabled
+                        ? "cursor-not-allowed border-[#d1d5db] bg-[#f3f4f6] text-[#9ca3af]"
+                        : isActive
+                        ? "border-[#0ea5e9] bg-[#0ea5e9]/15 text-[#0ea5e9]"
+                        : "border-[#d1d5db] bg-white text-[#374151] hover:border-[#0ea5e9] hover:text-[#0ea5e9]",
+                    )}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            {!presetsEnabled && (
+              <div className="ml-auto text-[11px] text-text-secondary">
+                Presets unlock after publishing reports.
+              </div>
+            )}
+          </div>
+        </div>
+      </>
     );
   };
 
@@ -1825,23 +2008,23 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const stagedPreviewVisible = showStagedPreviewBlock && !hasShownOnGuest;
 
 useEffect(() => {
-  const centerScroll = (node: HTMLDivElement | null) => {
-    if (!node) return;
-    const id = requestAnimationFrame(() => {
-      const horizontal = Math.max(0, (node.scrollWidth - node.clientWidth) / 2);
-      const vertical = Math.max(0, (node.scrollHeight - node.clientHeight) / 2);
-      node.scrollLeft = horizontal;
-      node.scrollTop = vertical;
-    });
-    return () => cancelAnimationFrame(id);
-  };
-  const cancelLive = !stagedPreviewVisible ? centerScroll(livePreviewContainerRef.current) : undefined;
-  const cancelStaged = stagedPreviewVisible ? centerScroll(stagedPreviewContainerRef.current) : undefined;
+  if (stagedPreviewVisible) return;
+  const container = livePreviewContainerRef.current;
+  if (!container) return;
+
+  const targetLeft = Math.max(0, (viewportWidth * previewScale - container.clientWidth) / 2);
+  const targetTop = Math.max(0, (viewportHeight * previewScale - container.clientHeight) / 2);
+  const scroll = () => container.scrollTo({ left: targetLeft, top: targetTop, behavior: "auto" });
+
+  const frame = requestAnimationFrame(scroll);
+  const iframe = container.querySelector("iframe");
+  iframe?.addEventListener("load", scroll);
+
   return () => {
-    cancelLive?.();
-    cancelStaged?.();
+    cancelAnimationFrame(frame);
+    iframe?.removeEventListener("load", scroll);
   };
-}, [stagedPreviewVisible, showStagedPreviewBlock, hasShownOnGuest]);
+}, [previewScale, viewportHeight, viewportWidth, stagedPreviewVisible]);
 
 useEffect(() => {
   if (stagedPreviewVisible) return;
