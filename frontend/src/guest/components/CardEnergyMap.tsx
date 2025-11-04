@@ -352,10 +352,11 @@ const padmasanaSliderMetrics = useMemo(
         }
       : undefined;
 
+
   return (
     <div className="flex h-full flex-col gap-6 rounded-2xl bg-bg-card px-8 py-9 shadow-card">
-      <div className="grid gap-5 md:grid-cols-4 md:gap-6">
-        <div className="anthropos-card flex h-full">
+      <div className="grid gap-5 md:grid-cols-4 md:grid-rows-[auto_minmax(0,1fr)] md:gap-6 min-h-0">
+        <div className="anthropos-card flex h-full md:row-span-2">
           <div
             className="anthropos-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-4 py-6 md:self-stretch"
             style={anthroposSilouhetteStyle}
@@ -373,7 +374,7 @@ const padmasanaSliderMetrics = useMemo(
           </div>
         </div>
 
-        <div className="anthropos-sliders h-full">
+        <div className="anthropos-sliders h-full md:row-span-2">
           <div
             ref={anthroposSlidersRef}
             className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
@@ -418,7 +419,7 @@ const padmasanaSliderMetrics = useMemo(
           </div>
         </div>
 
-        <div className="padmasana-card flex h-full">
+        <div className="padmasana-card flex h-full md:col-start-3">
           <div
             className="padmasana-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-3 py-6 md:self-stretch"
             style={padmasanaSilouhetteStyle}
@@ -427,7 +428,7 @@ const padmasanaSliderMetrics = useMemo(
               viewBox={VIEWBOX.chakra}
               xmlns="http://www.w3.org/2000/svg"
               preserveAspectRatio="xMidYMid meet"
-              className="h-auto w-full max-w-[260px] overflow-visible sm:max-w-[280px] md:h-full md:w-auto md:max-h-full"
+              className="h-auto w-full overflow-visible md:h-full md:w-full md:max-h-full"
               role="img"
               aria-label="Padmasana silouhette"
             >
@@ -491,7 +492,7 @@ const padmasanaSliderMetrics = useMemo(
           </div>
         </div>
 
-        <div className="padmasana-sliders h-full">
+        <div className="padmasana-sliders h-full md:col-start-4">
           <div
             ref={padmasanaSlidersRef}
             className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
@@ -532,6 +533,28 @@ const padmasanaSliderMetrics = useMemo(
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden md:block md:col-start-3 md:row-start-2">
+          <div className="rounded-2xl bg-white/5 p-6 backdrop-blur h-full">
+            <div className="flex flex-col gap-3">
+              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">Inflammatory Score</span>
+              <div className="flex h-14 items-center justify-center rounded-[30px] bg-white/10 text-text-secondary">
+                <span className="text-sm uppercase tracking-wide">Coming soon</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden md:block md:col-start-4 md:row-start-2">
+           <div className="rounded-2xl bg-white/5 p-6 backdrop-blur h-full">
+            <div className="flex flex-col gap-3">
+              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">Immunal Defense</span>
+              <div className="flex h-14 items-center justify-center rounded-[30px] bg-white/10 text-text-secondary">
+                <span className="text-sm uppercase tracking-wide">Coming soon</span>
+              </div>
             </div>
           </div>
         </div>
