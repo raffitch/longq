@@ -304,6 +304,9 @@ export default function CardEnergyMap({
       if (a.hasValue !== b.hasValue) {
         return a.hasValue ? -1 : 1;
       }
+      if (a.hasValue && b.hasValue && a.value !== b.value) {
+        return b.value - a.value;
+      }
       const orderA = ORGAN_ORDER_INDEX.get(a.id) ?? Number.MAX_SAFE_INTEGER;
       const orderB = ORGAN_ORDER_INDEX.get(b.id) ?? Number.MAX_SAFE_INTEGER;
       if (orderA !== orderB) {
@@ -351,184 +354,184 @@ const padmasanaSliderMetrics = useMemo(
 
   return (
     <div className="flex h-full flex-col gap-6 rounded-2xl bg-bg-card px-8 py-9 shadow-card">
-      <div className="flex flex-col gap-8">
-        <div className="flex flex-col gap-5 md:flex-row md:items-stretch md:gap-8">
-          <div className="anthropos-card flex w-full md:flex-1">
-            <div
-              className="anthropos-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
-              style={anthroposSilouhetteStyle}
+      <div className="flex flex-col gap-5 md:flex-row md:flex-wrap md:gap-6">
+        <div className="anthropos-card flex h-full">
+          <div
+            className="anthropos-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-4 py-6 md:self-stretch"
+            style={anthroposSilouhetteStyle}
+          >
+            <svg
+              viewBox={VIEWBOX.body}
+              xmlns="http://www.w3.org/2000/svg"
+              preserveAspectRatio="xMidYMid meet"
+              className="h-auto w-full max-w-[280px] overflow-visible sm:max-w-[300px] md:h-full md:w-auto md:max-h-full"
+              role="img"
+              aria-label="Anthropos silouhette"
             >
-              <svg
-                viewBox={VIEWBOX.body}
-                xmlns="http://www.w3.org/2000/svg"
-                preserveAspectRatio="xMidYMid meet"
-                className="h-auto w-full max-w-[320px] overflow-visible sm:max-w-[360px] md:h-full md:w-auto md:max-h-full"
-                role="img"
-                aria-label="Anthropos silouhette"
-              >
-                {layerMetrics.map((layer) => layer.element)}
-              </svg>
-            </div>
+              {layerMetrics.map((layer) => layer.element)}
+            </svg>
           </div>
+        </div>
 
-          <div className="anthropos-sliders w-full md:w-[240px] lg:w-[280px]">
-            <div
-              ref={anthroposSlidersRef}
-              className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">{resolvedSectionTitle}</span>
-                <span className="text-sm text-text-tertiary">Value</span>
-              </div>
+        <div className="anthropos-sliders h-full">
+          <div
+            ref={anthroposSlidersRef}
+            className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">{resolvedSectionTitle}</span>
+              <span className="text-sm text-text-tertiary">Value</span>
+            </div>
 
-              <div className="flex flex-col gap-2.5">
-                {anthroposSliderMetrics.map((metric) => (
-                  <div key={`anthropos-slider-${metric.id}`} className="anthropos-slider flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium uppercase tracking-wide" style={{ color: metric.color }}>
-                        {metric.name}
+            <div className="flex flex-col gap-2.5">
+              {anthroposSliderMetrics.map((metric) => (
+                <div key={`anthropos-slider-${metric.id}`} className="anthropos-slider flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium uppercase tracking-wide" style={{ color: metric.color }}>
+                      {metric.name}
+                    </span>
+                    <div className="flex items-baseline gap-2 text-right">
+                      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: metric.color }}>
+                        {metric.priorityLabel}
                       </span>
-                      <div className="flex items-baseline gap-2 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: metric.color }}>
-                          {metric.priorityLabel}
-                        </span>
-                        <span className="text-sm font-semibold" style={{ color: metric.color }}>
-                          {metric.hasValue ? metric.value : "—"}
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      role="img"
-                      aria-label={`${metric.name}: ${metric.hasValue ? metric.value : "not provided"} (${metric.priorityLabel})`}
-                      className="anthropos-slider-track relative h-2 w-full overflow-hidden rounded-full bg-white/10"
-                    >
-                      <div
-                        className="anthropos-slider-fill absolute inset-y-0 left-0 rounded-full"
-                        style={{
-                          width: `${metric.hasValue ? metric.value : 0}%`,
-                          backgroundColor: metric.hasValue ? metric.color : "#ffffff33",
-                        }}
-                      />
+                      <span className="text-sm font-semibold" style={{ color: metric.color }}>
+                        {metric.hasValue ? metric.value : "—"}
+                      </span>
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div
+                    role="img"
+                    aria-label={`${metric.name}: ${metric.hasValue ? metric.value : "not provided"} (${metric.priorityLabel})`}
+                    className="anthropos-slider-track relative h-2 w-full overflow-hidden rounded-full bg-white/10"
+                  >
+                    <div
+                      className="anthropos-slider-fill absolute inset-y-0 left-0 rounded-full"
+                      style={{
+                        width: `${metric.hasValue ? metric.value : 0}%`,
+                        backgroundColor: metric.hasValue ? metric.color : "#ffffff33",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="flex flex-col gap-5 md:flex-row md:items-stretch md:gap-8">
-          <div className="padmasana-card flex w-full md:flex-1">
-            <div
-              className="padmasana-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
-              style={padmasanaSilouhetteStyle}
+        <div className="padmasana-card flex h-full">
+          <div
+            className="padmasana-silouhette flex w-full items-center justify-center rounded-2xl bg-white/5 px-4 py-6 md:self-stretch"
+            style={padmasanaSilouhetteStyle}
+          >
+            <svg
+              viewBox={VIEWBOX.chakra}
+              xmlns="http://www.w3.org/2000/svg"
+              preserveAspectRatio="xMidYMid meet"
+              className="h-auto w-full max-w-[280px] overflow-visible sm:max-w-[300px] md:h-full md:w-auto md:max-h-full"
+              role="img"
+              aria-label="Padmasana silouhette"
             >
-              <svg
-                viewBox={VIEWBOX.chakra}
-                xmlns="http://www.w3.org/2000/svg"
-                preserveAspectRatio="xMidYMid meet"
-                className="h-auto w-full max-w-[320px] overflow-visible sm:max-w-[360px] md:h-full md:w-auto md:max-h-full"
-                role="img"
-                aria-label="Padmasana silouhette"
-              >
-                <defs>
-                  <filter id="chakra-glow-blur" x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="6" />
-                  </filter>
-                </defs>
-                {React.cloneElement(PADMASANA_OUTLINE, {
-                  key: "padmasana-outline",
-                  stroke: STRUCTURE_COLOR,
-                  fill: "none",
-                  opacity: 1,
-                })}
-                {padmasanaSliderMetrics.map((chakra) => {
-                  const baseColor = chakra.baseColor ?? chakra.color;
-                  const outlineColor = chakra.color;
-                  const glowRadius = CHAKRA_RADIUS * 2.1;
-                  const normalized = chakra.hasValue ? chakra.value / 100 : 0;
-                  const intensity = chakra.hasValue ? Math.max(0.35, normalized) : 0.2;
-                  const glowOpacity = chakra.hasValue ? 0.18 + intensity * 0.32 : 0.12;
-                  const fillOpacity = chakra.hasValue ? 0.85 : 0.35;
-                  const strokeOpacity = chakra.hasValue ? 0.82 : 0.4;
-                  return (
-                    <g key={chakra.id} id={chakra.id}>
-                      <title>{`${chakra.name}: ${chakra.hasValue ? chakra.value : "not provided"} (${chakra.priorityLabel})`}</title>
-                      <circle
-                        cx={chakra.cx}
-                        cy={chakra.cy}
-                        r={glowRadius}
-                        fill={outlineColor}
-                        opacity={glowOpacity}
-                        filter="url(#chakra-glow-blur)"
-                        aria-hidden="true"
-                      />
-                      <circle
-                        cx={chakra.cx}
-                        cy={chakra.cy}
-                        r={CHAKRA_RADIUS}
-                        fill={baseColor}
-                        opacity={fillOpacity}
-                        aria-label={`${chakra.name} activation`}
-                      />
-                      <circle
-                        cx={chakra.cx}
-                        cy={chakra.cy}
-                        r={CHAKRA_RADIUS + 3}
-                        fill="none"
-                        stroke={outlineColor}
-                        strokeWidth={4}
-                        opacity={strokeOpacity}
-                      />
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
+              <defs>
+                <filter id="chakra-glow-blur" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="6" />
+                </filter>
+              </defs>
+              {React.cloneElement(PADMASANA_OUTLINE, {
+                key: "padmasana-outline",
+                stroke: STRUCTURE_COLOR,
+                fill: "none",
+                opacity: 1,
+              })}
+              {padmasanaSliderMetrics.map((chakra) => {
+                const baseColor = chakra.baseColor ?? chakra.color;
+                const outlineColor = chakra.color;
+                const glowRadius = CHAKRA_RADIUS * 2.1;
+                const normalized = chakra.hasValue ? chakra.value / 100 : 0;
+                const intensity = chakra.hasValue ? Math.max(0.35, normalized) : 0.2;
+                const glowOpacity = chakra.hasValue ? 0.18 + intensity * 0.32 : 0.12;
+                const fillOpacity = chakra.hasValue ? 0.85 : 0.35;
+                const strokeOpacity = chakra.hasValue ? 0.82 : 0.4;
+                const isNeutral = chakra.hasValue && chakra.priorityLabel.toLowerCase() === "neutral";
+                const outlineStrokeWidth = chakra.hasValue && !isNeutral ? 12 : 4;
+                const baseInnerRadius = CHAKRA_RADIUS + 3 - 2; // base radius minus half of default stroke
+                const outlineRadius = baseInnerRadius + outlineStrokeWidth / 2;
+                return (
+                  <g key={chakra.id} id={chakra.id}>
+                    <title>{`${chakra.name}: ${chakra.hasValue ? chakra.value : "not provided"} (${chakra.priorityLabel})`}</title>
+                    <circle
+                      cx={chakra.cx}
+                      cy={chakra.cy}
+                      r={glowRadius}
+                      fill={outlineColor}
+                      opacity={glowOpacity}
+                      filter="url(#chakra-glow-blur)"
+                      aria-hidden="true"
+                    />
+                    <circle
+                      cx={chakra.cx}
+                      cy={chakra.cy}
+                      r={CHAKRA_RADIUS}
+                      fill={baseColor}
+                      opacity={fillOpacity}
+                      aria-label={`${chakra.name} activation`}
+                    />
+                    <circle
+                      cx={chakra.cx}
+                      cy={chakra.cy}
+                      r={outlineRadius}
+                      fill="none"
+                      stroke={outlineColor}
+                      strokeWidth={outlineStrokeWidth}
+                      opacity={strokeOpacity}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
           </div>
+        </div>
 
-          <div className="padmasana-sliders w-full md:w-[240px] lg:w-[280px]">
-            <div
-              ref={padmasanaSlidersRef}
-              className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">Chakras</span>
-                <span className="text-sm text-text-tertiary">Value</span>
-              </div>
+        <div className="padmasana-sliders h-full">
+          <div
+            ref={padmasanaSlidersRef}
+            className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">Chakras</span>
+              <span className="text-sm text-text-tertiary">Value</span>
+            </div>
 
-              <div className="flex flex-col gap-2">
-                {padmasanaSliderMetrics.map((chakra) => (
-                  <div key={`padmasana-slider-${chakra.id}`} className="padmasana-slider flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium uppercase tracking-wide" style={{ color: chakra.color }}>
-                        {chakra.name}
+            <div className="flex flex-col gap-2">
+              {padmasanaSliderMetrics.map((chakra) => (
+                <div key={`padmasana-slider-${chakra.id}`} className="padmasana-slider flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium uppercase tracking-wide" style={{ color: chakra.color }}>
+                      {chakra.name}
+                    </span>
+                    <div className="flex items-baseline gap-2 text-right">
+                      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: chakra.color }}>
+                        {chakra.priorityLabel}
                       </span>
-                      <div className="flex items-baseline gap-2 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: chakra.color }}>
-                          {chakra.priorityLabel}
-                        </span>
-                        <span className="text-sm font-semibold" style={{ color: chakra.color }}>
-                          {chakra.hasValue ? chakra.value : "—"}
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      role="img"
-                      aria-label={`${chakra.name}: ${chakra.hasValue ? chakra.value : "not provided"} (${chakra.priorityLabel})`}
-                      className="padmasana-slider-track relative h-2 w-full overflow-hidden rounded-full bg-white/10"
-                    >
-                      <div
-                        className="padmasana-slider-fill absolute inset-y-0 left-0 rounded-full"
-                        style={{
-                          width: `${chakra.hasValue ? chakra.value : 0}%`,
-                          backgroundColor: chakra.hasValue ? chakra.color : "#ffffff33",
-                        }}
-                      />
+                      <span className="text-sm font-semibold" style={{ color: chakra.color }}>
+                        {chakra.hasValue ? chakra.value : "—"}
+                      </span>
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div
+                    role="img"
+                    aria-label={`${chakra.name}: ${chakra.hasValue ? chakra.value : "not provided"} (${chakra.priorityLabel})`}
+                    className="padmasana-slider-track relative h-2 w-full overflow-hidden rounded-full bg-white/10"
+                  >
+                    <div
+                      className="padmasana-slider-fill absolute inset-y-0 left-0 rounded-full"
+                      style={{
+                        width: `${chakra.hasValue ? chakra.value : 0}%`,
+                        backgroundColor: chakra.hasValue ? chakra.color : "#ffffff33",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

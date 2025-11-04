@@ -38,14 +38,20 @@ const SEVERITY_TEXT: Record<FoodSeverity, string> = {
   low: "text-priority-low",
 };
 
-const SEVERITY_LABELS: Record<FoodSeverity, string> = {
-  high: "High Reaction",
-  moderate: "Moderate Reaction",
-  medium: "Medium Reaction",
-  low: "Low Reaction",
+const DISPLAY_ORDER: FoodSeverity[] = ["high", "moderate", "medium", "low"];
+
+export const FOOD_SEVERITY_TO_GENERAL: Record<FoodSeverity, GeneralSeverity> = {
+  high: "high",
+  moderate: "moderate",
+  medium: "normal",
+  low: "low",
 };
 
-const DISPLAY_ORDER: FoodSeverity[] = ["high", "moderate", "medium", "low"];
+export const FOOD_REACTION_LEGEND = DISPLAY_ORDER.map((severity) => ({
+  severity,
+  label: severity.charAt(0).toUpperCase() + severity.slice(1),
+  color: SEVERITY_COLORS[severity],
+}));
 
 const formatCategoryLabel = (label: string): string[] => {
   const canonical = label.toLowerCase();
@@ -63,12 +69,6 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
   const visibleSeverities = useVisibleSeverities();
   const visibleSet = new Set(visibleSeverities);
 
-  const severityMap: Record<FoodSeverity, GeneralSeverity> = {
-    high: "high",
-    moderate: "moderate",
-    medium: "normal",
-    low: "low",
-  };
   const groupedItems = items.reduce<Record<FoodSeverity, FoodItem[]>>((acc, item) => {
     if (!acc[item.severity]) {
       acc[item.severity] = [];
@@ -83,66 +83,79 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
     color: SEVERITY_COLORS[severity],
   })).filter((entry) => entry.value > 0);
 
-  return (
-    <div className="flex items-center gap-12 rounded-[32px] bg-white/5 p-6 backdrop-blur md:gap-16 md:p-8">
-      <div className="relative flex h-[268px] w-[271px] flex-shrink-0 items-center justify-center">
-        <ResponsiveContainer width="100%" height="100%" className="pointer-events-none">
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-                innerRadius={95}
-                outerRadius={100}
-                paddingAngle={2}
-                dataKey="value"
-                stroke="none"
-                isAnimationActive={false}
-              >
-                {chartData.map((entry) => (
-                  <Cell key={entry.name} fill={entry.color} opacity={0.9} />
-                ))}
-              </Pie>
-            </PieChart>
-        </ResponsiveContainer>
+  const pillSections = DISPLAY_ORDER.reduce<React.ReactElement[]>((acc, severity) => {
+    const severityItems = groupedItems[severity];
+    const general = FOOD_SEVERITY_TO_GENERAL[severity];
+    if (!severityItems.length || !visibleSet.has(general)) {
+      return acc;
+    }
+    acc.push(
+      <div key={severity} className="flex flex-wrap gap-3 md:gap-4">
+        {severityItems.slice(0, limit).map((item) => (
+          <div
+            key={`${item.name}-${item.score}`}
+            className={`flex h-14 items-center rounded-[30px] px-4 md:px-6 ${SEVERITY_BG[severity]}`}
+          >
+            <span className={`whitespace-nowrap text-left text-xl font-normal md:text-[28px] ${SEVERITY_TEXT[severity]}`}>
+              {item.name} {Math.round(item.score)}
+            </span>
+          </div>
+        ))}
+      </div>,
+    );
+    return acc;
+  }, []);
 
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 text-center">
-          {icon}
-          <span className="text-3xl font-bold leading-snug text-text-primary">
-            {formatCategoryLabel(category).map((line, idx, arr) => (
-              <React.Fragment key={`${line}-${idx}`}>
-                {line}
-                {idx < arr.length - 1 && <br />}
-              </React.Fragment>
-            ))}
-          </span>
+  return (
+    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:gap-6 md:items-start">
+      <div className="rounded-[32px] bg-white/5 p-4 backdrop-blur md:p-6">
+        <div className="flex min-w-0 flex-col gap-4 md:gap-5">
+          {pillSections.length ? (
+            pillSections
+          ) : (
+            <span className="text-sm text-text-secondary">No visible items.</span>
+          )}
         </div>
       </div>
-
-      <div className="flex min-w-0 flex-1 flex-col gap-6 md:gap-8">
-        {DISPLAY_ORDER.map((severity) => {
-          const severityItems = groupedItems[severity];
-          const general = severityMap[severity];
-          if (!severityItems.length || !visibleSet.has(general)) return null;
-
-          return (
-            <div key={severity} className="flex flex-col gap-4 md:gap-6">
-              <h4 className="text-2xl font-normal text-white/60 md:text-[28px]">{SEVERITY_LABELS[severity]}</h4>
-          <div className="flex flex-wrap items-center gap-4 md:gap-6">
-            {severityItems.slice(0, limit).map((item) => (
-              <div
-                key={`${item.name}-${item.score}`}
-                className={`flex h-14 items-center justify-center rounded-[30px] px-4 md:px-6 ${SEVERITY_BG[severity]}`}
-              >
-                <span className={`whitespace-nowrap text-xl font-normal md:text-[28px] ${SEVERITY_TEXT[severity]}`}>
-                      {item.name} {Math.round(item.score)}
-                    </span>
-                  </div>
-                ))}
+      <div className="rounded-[32px] bg-white/5 p-4 backdrop-blur md:p-6 w-fit justify-self-center md:justify-self-end">
+        <div className="flex items-center justify-center">
+          {chartData.length ? (
+            <div className="relative h-[268px] w-[271px]">
+              <ResponsiveContainer width="100%" height="100%" className="pointer-events-none">
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={95}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                    stroke="none"
+                    isAnimationActive={false}
+                  >
+                    {chartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} opacity={0.9} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 text-center">
+                {icon}
+                <span className="text-3xl font-bold leading-snug text-text-primary">
+                  {formatCategoryLabel(category).map((line, idx, arr) => (
+                    <React.Fragment key={`${line}-${idx}`}>
+                      {line}
+                      {idx < arr.length - 1 && <br />}
+                    </React.Fragment>
+                  ))}
+                </span>
               </div>
             </div>
-          );
-        })}
+          ) : (
+            <span className="text-sm text-text-secondary">No data available.</span>
+          )}
+        </div>
       </div>
     </div>
   );

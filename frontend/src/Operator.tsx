@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./ui/Button";
 import { Chip } from "./ui/Chip";
 import { cn } from "./ui/cn";
@@ -51,23 +51,14 @@ type ParsedMap = Record<ReportKind, boolean>;
 const GUEST_HEARTBEAT_KEY = "longevityq_guest_heartbeat";
 const GUEST_HEARTBEAT_GRACE_MS = 8000;
 const AUTO_OPEN_GRACE_MS = 5000;
-const PREVIEW_SCALE = 0.55;
-const PREVIEW_WIDTH = 5120;
-const PREVIEW_HEIGHT = 1440;
-const PREVIEW_ASPECT = (PREVIEW_HEIGHT / PREVIEW_WIDTH) * 100;
+const PREVIEW_VIEWPORT = {
+  width: 1440,
+  height: 5120,
+  label: "9:32 • 1440 × 5120",
+} as const;
+const DEFAULT_PREVIEW_SCALE = 0.55;
+const FIT_MAX_DIMENSION = 720;
 const MIN_PREVIEW_HEIGHT = 1000;
-const scaledFrameStyle: React.CSSProperties = {
-  transform: `scale(${PREVIEW_SCALE})`,
-  transformOrigin: "top left",
-  width: `${100 / PREVIEW_SCALE}%`,
-  height: `${100 / PREVIEW_SCALE}%`,
-};
-
-const previewContainerStyle: React.CSSProperties = {
-  paddingBottom: `${PREVIEW_ASPECT}%`,
-  minHeight: `${Math.max(PREVIEW_HEIGHT * PREVIEW_SCALE, MIN_PREVIEW_HEIGHT)}px`,
-};
-
 const darkInputClasses =
   "rounded-lg border border-border-strong bg-neutral-dark px-2.5 py-1.5 text-text-primary shadow-[inset_0_1px_2px_rgba(15,23,42,0.45)] outline-none caret-accent-info focus:ring-2 focus:ring-accent-info/40";
 const cardShellClasses = "rounded-3lg border border-border bg-surface text-text-primary shadow-surface-lg";
@@ -326,11 +317,45 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [backendDown, setBackendDown] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
+  const [fitPreview, setFitPreview] = useState(false);
   const thresholdLimit = useThresholdLimitValue();
   const thresholdMax = useThresholdMaxValue();
   const visibleSeverities = useVisibleSeverities();
   const visibleSeveritiesSet = new Set<GeneralSeverity>(visibleSeverities as GeneralSeverity[]);
   const [showThresholdControls, setShowThresholdControls] = useState(false);
+  const viewportWidth = PREVIEW_VIEWPORT.width;
+  const viewportHeight = PREVIEW_VIEWPORT.height;
+  const fitScale = useMemo(() => {
+    const baseScale = FIT_MAX_DIMENSION / Math.max(viewportWidth, viewportHeight);
+    return Math.min(baseScale, 1);
+  }, [viewportWidth, viewportHeight]);
+  const previewScale = fitPreview ? fitScale : DEFAULT_PREVIEW_SCALE;
+  const previewContainerStyle = useMemo<React.CSSProperties>(() => {
+    if (fitPreview) {
+      const scaledWidth = viewportWidth * previewScale;
+      const scaledHeight = viewportHeight * previewScale;
+      return {
+        width: `${scaledWidth}px`,
+        minWidth: `${scaledWidth}px`,
+        maxWidth: `${scaledWidth}px`,
+        height: `${scaledHeight}px`,
+        minHeight: `${scaledHeight}px`,
+        maxHeight: `${scaledHeight}px`,
+      };
+    }
+    const aspectPercent = (viewportHeight / viewportWidth) * 100;
+    return {
+      paddingBottom: `${aspectPercent}%`,
+      minHeight: `${Math.max(viewportHeight * previewScale, MIN_PREVIEW_HEIGHT)}px`,
+    };
+  }, [fitPreview, viewportHeight, viewportWidth, previewScale]);
+  const scaledFrameStyle = useMemo<React.CSSProperties>(() => ({
+    transform: `scale(${previewScale})`,
+    transformOrigin: "top left",
+    width: `${100 / previewScale}%`,
+    height: `${100 / previewScale}%`,
+  }), [previewScale]);
+  const previewToggleLabel = fitPreview ? "Switch to original size" : "Switch to fit to screen";
 
 
   useEffect(() => {
@@ -1571,23 +1596,20 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   type="button"
                   onClick={() => setShowThresholdControls((prev) => !prev)}
                   className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-text-primary shadow-surface-md transition-colors duration-150",
+                    "flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-white shadow-surface-md transition-colors duration-150",
                     showThresholdControls ? "ring-2 ring-accent-info/40" : "hover:border-accent-info/40",
                   )}
                   title="Adjust priority display limit"
                   >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
+                    viewBox="0 0 16 16"
                     fill="currentColor"
                     className="h-4 w-4"
                     aria-hidden="true"
                   >
-                    <path
-                      fillRule="evenodd"
-                      d="M11.983 1.517a1 1 0 0 1 1.034.229l1.29 1.29a1 1 0 0 1 .21 1.09l-.42 1.05a7.52 7.52 0 0 1 1.436.83l1.047-.42a1 1 0 0 1 1.09.21l1.29 1.29a1 1 0 0 1 .229 1.034l-.42 1.046a7.53 7.53 0 0 1 0 1.661l.42 1.046a1 1 0 0 1-.229 1.034l-1.29 1.29a1 1 0 0 1-1.09.21l-1.047-.42a7.52 7.52 0 0 1-1.436.83l.42 1.05a1 1 0 0 1-.21 1.09l-1.29 1.29a1 1 0 0 1-1.034.229l-1.046-.42a7.52 7.52 0 0 1-1.661 0l-1.046.42a1 1 0 0 1-1.034-.229l-1.29-1.29a1 1 0 0 1-.21-1.09l.42-1.05a7.52 7.52 0 0 1-.83-1.436l-1.05.42a1 1 0 0 1-1.09-.21l-1.29-1.29a1 1 0 0 1-.229-1.034l.42-1.046a7.53 7.53 0 0 1 0-1.661l-.42-1.046a1 1 0 0 1 .229-1.034l1.29-1.29a1 1 0 0 1 1.09-.21l1.05.42a7.52 7.52 0 0 1 .83-1.436l-0.42-1.05a1 1 0 0 1 .21-1.09l1.29-1.29a1 1 0 0 1 1.034-.229l1.046.42a7.52 7.52 0 0 1 1.661 0l1.046-.42Zm-1.983 7.483a3 3 0 1 0 6 0 3 3 0 0 0-6 0Z"
-                      clipRule="evenodd"
-                    />
+                    <path d="M8,11a3,3,0,1,1,3-3A3,3,0,0,1,8,11ZM8,6a2,2,0,1,0,2,2A2,2,0,0,0,8,6Z" />
+                    <path d="M8.5,16h-1A1.5,1.5,0,0,1,6,14.5v-.85a5.91,5.91,0,0,1-.58-.24l-.6.6A1.54,1.54,0,0,1,2.7,14L2,13.3a1.5,1.5,0,0,1,0-2.12l.6-.6A5.91,5.91,0,0,1,2.35,10H1.5A1.5,1.5,0,0,1,0,8.5v-1A1.5,1.5,0,0,1,1.5,6h.85a5.91,5.91,0,0,1,.24-.58L2,4.82A1.5,1.5,0,0,1,2,2.7L2.7,2A1.54,1.54,0,0,1,4.82,2l.6.6A5.91,5.91,0,0,1,6,2.35V1.5A1.5,1.5,0,0,1,7.5,0h1A1.5,1.5,0,0,1,10,1.5v.85a5.91,5.91,0,0,1,.58.24l.6-.6A1.54,1.54,0,0,1,13.3,2L14,2.7a1.5,1.5,0,0,1,0,2.12l-.6.6a5.91,5.91,0,0,1,.24.58h.85A1.5,1.5,0,0,1,16,7.5v1A1.5,1.5,0,0,1,14.5,10h-.85a5.91,5.91,0,0,1-.24.58l.6.6a1.5,1.5,0,0,1,0,2.12L13.3,14a1.54,1.54,0,0,1-2.12,0l-.6-.6a5.91,5.91,0,0,1-.58.24v.85A1.5,1.5,0,0,1,8.5,16ZM5.23,12.18l.33.18a4.94,4.94,0,0,0,1.07.44l.36.1V14.5a.5.5,0,0,0,.5.5h1a.5.5,0,0,0,.5-.5V12.91l.36-.1a4.94,4.94,0,0,0,1.07-.44l.33-.18,1.12,1.12a.51.51,0,0,0,.71,0l.71-.71a.5.5,0,0,0,0-.71l-1.12-1.12.18-.33a4.94,4.94,0,0,0,.44-1.07l.1-.36H14.5a.5.5,0,0,0,.5-.5v-1a.5.5,0,0,0-.5-.5H12.91l-.1-.36a4.94,4.94,0,0,0-.44-1.07l-.18-.33L13.3,4.11a.5.5,0,0,0,0-.71L12.6,2.7a.51.51,0,0,0-.71,0L10.77,3.82l-.33-.18a4.94,4.94,0,0,0-1.07-.44L9,3.09V1.5A.5.5,0,0,0,8.5,1h-1a.5.5,0,0,0-.5.5V3.09l-.36.1a4.94,4.94,0,0,0-1.07.44l-.33.18L4.11,2.7a.51.51,0,0,0-.71,0L2.7,3.4a.5.5,0,0,0,0,.71L3.82,5.23l-.18.33a4.94,4.94,0,0,0-.44,1.07L3.09,7H1.5a.5.5,0,0,0-.5.5v1a.5.5,0,0,0,.5.5H3.09l.1.36a4.94,4.94,0,0,0,.44,1.07l.18.33L2.7,11.89a.5.5,0,0,0,0,.71l.71.71a.51.51,0,0,0,.71,0Z" />
                   </svg>
                 </button>
                 {showThresholdControls && (
@@ -1995,20 +2017,48 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
       <div className="sticky top-4 flex min-w-[300px] flex-1 self-stretch">
         <div className="flex h-[calc(100vh-32px)] min-h-[520px] flex-1 flex-col gap-4 rounded-3lg border border-[#e5e7eb] bg-white p-4">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
-              <span className="flex h-2.5 w-2.5 items-center justify-center">
-                <span className="h-2.5 w-2.5 rounded-full bg-accent" />
-              </span>
-              <span>Live Monitor</span>
-              <span className="text-[#d1d5e0]">|</span>
-              <span className="font-medium normal-case text-[11px] text-[#6b7280]">
-                Message Displayed:&nbsp;
-                <span className="text-[#111827]">{liveMonitorMessage}</span>
-              </span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
+                <span className="flex h-2.5 w-2.5 items-center justify-center">
+                  <span className="h-2.5 w-2.5 rounded-full bg-accent" />
+                </span>
+                <span>Live Monitor</span>
+                <span className="text-[#d1d5e0]">|</span>
+                <span className="font-medium normal-case text-[11px] text-[#6b7280]">
+                  Message Displayed:&nbsp;
+                  <span className="text-[#111827]">{liveMonitorMessage}</span>
+                </span>
+              </div>
+              <div className="text-[11px] text-[#6b7280]">
+                Mirrors the active guest display.
+              </div>
             </div>
-            <div className="text-[11px] text-[#6b7280]">
-              Mirrors the active guest display.
+            <div className="flex flex-col items-end gap-1 text-right">
+              <button
+                type="button"
+                aria-pressed={fitPreview}
+                aria-label={previewToggleLabel}
+                title={previewToggleLabel}
+                onClick={() => setFitPreview((current) => !current)}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.6px] transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0ea5e9]",
+                  fitPreview
+                    ? "border-[#0ea5e9] bg-[#0ea5e9]/15 text-[#0ea5e9]"
+                    : "border-[#d1d5db] bg-white text-[#374151] hover:border-[#0ea5e9] hover:text-[#0ea5e9]",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-2.5 w-2.5 items-center justify-center rounded-full border",
+                    fitPreview ? "border-[#0ea5e9] bg-[#0ea5e9]" : "border-[#9ca3af] bg-transparent",
+                  )}
+                />
+                {fitPreview ? "Original Size" : "Fit to Screen"}
+              </button>
+              <span className="text-[10px] text-[#6b7280]">
+                {fitPreview ? "Full frame preview (scaled to fit)." : "Operator preview scale applied."}
+              </span>
             </div>
           </div>
           {!guestWindowOpen && (
@@ -2026,10 +2076,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               {!stagedPreviewVisible ? (
                 <div
                   ref={livePreviewContainerRef}
-                  className="relative h-full w-full overflow-hidden transition-opacity duration-500"
-                  style={{ overflowX: "auto", overflowY: "hidden" }}
+                  className={cn(
+                    "relative flex h-full w-full items-start overflow-auto transition-opacity duration-500",
+                    fitPreview ? "justify-center" : "justify-start",
+                  )}
                 >
-                  <div className="relative w-full" style={previewContainerStyle}>
+                  <div className={cn("relative", fitPreview ? "inline-block" : "w-full")} style={previewContainerStyle}>
                     <iframe
                       title="Live Guest Monitor"
                       src={liveMonitorUrl}
@@ -2056,9 +2108,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   {stagedPreviewUrl && (
                     <div
                       ref={stagedPreviewContainerRef}
-                      className="relative h-full w-full overflow-auto"
+                      className={cn(
+                        "relative flex h-full w-full items-start overflow-auto",
+                        fitPreview ? "justify-center" : "justify-start",
+                      )}
                     >
-                      <div className="relative w-full" style={previewContainerStyle}>
+                      <div className={cn("relative", fitPreview ? "inline-block" : "w-full")} style={previewContainerStyle}>
                         <iframe
                           key={`${stagedPreviewSessionId}-${stagedPreviewVersion}`}
                           title="Staged Guest Preview"
