@@ -10,6 +10,7 @@ export { default as OverallScoreCard } from "./OverallScoreCard";
 export { default as ToxinsInsightsCard } from "./ToxinsInsightsCard";
 
 export { PEAK_PRIORITY_TIERS } from "./CardEnergyMap";
+export { FOOD_REACTION_LEGEND, FOOD_SEVERITY_TO_GENERAL } from "./FoodCategoryCard";
 
 export type { EnergyStatus, PeekPriorityTier } from "./CardEnergyMap";
 export type { KPIStatus } from "./CardKPI";

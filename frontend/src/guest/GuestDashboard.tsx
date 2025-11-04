@@ -3,6 +3,8 @@ import type { Sex } from "../api";
 import {
   CardEnergyMap,
   FoodCategoryCard,
+  FOOD_REACTION_LEGEND,
+  FOOD_SEVERITY_TO_GENERAL,
   HeavyMetalsCard,
   HormonesCard,
   NutritionInsightCard,
@@ -13,6 +15,7 @@ import {
 import { BiohazardIcon, DairyIcon, EggsIcon, FruitsIcon, GrainIcon, MeatIcon, SeafoodIcon } from "./icons";
 import type { AggregatedInsights, PriorityCounts } from "./dataTransform";
 import { GENERAL_SEVERITY_META, GENERAL_SEVERITY_ORDER } from "../shared/priority";
+import { useVisibleSeverities } from "../hooks/useThresholdSettings";
 
 interface GuestDashboardProps {
   clientFullName: string | null;
@@ -50,6 +53,23 @@ const sproutIcon = (
       strokeLinejoin="round"
     />
   </svg>
+);
+
+interface LegendRowProps {
+  title: string;
+  backgroundClass?: string;
+  children: React.ReactNode;
+}
+
+const LegendRow: React.FC<LegendRowProps> = ({ title, backgroundClass = "bg-bg-card", children }) => (
+  <div className={`flex flex-col gap-4 rounded-2xl ${backgroundClass} p-6 md:gap-6 lg:gap-8`}>
+    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <span className="whitespace-nowrap text-2xl font-normal text-text-primary md:text-3xl">{title}</span>
+      <div className="flex w-full flex-wrap items-center justify-end gap-4 text-text-primary md:gap-6 lg:gap-8">
+        {children}
+      </div>
+    </div>
+  </div>
 );
 
 const getCategoryIcon = (name: string): React.ReactNode => {
@@ -96,13 +116,22 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
   const showHormones = hormones.length > 0;
   const showToxins = toxins.length > 0;
 
-  const sections: Array<{ name: string; items: FoodItem[] }> = categories.filter((section) => section.items.length > 0);
-  const showPriorityLegend =
-    sections.length > 0 || showNutrition || showHeavyMetals || showHormones || showToxins;
+  const visibleSeverities = useVisibleSeverities();
+  const visibleSeveritySet = new Set(visibleSeverities);
+
+  const foodSections: Array<{ name: string; items: FoodItem[] }> = categories.filter(
+    (section) => section.items.length > 0,
+  );
+  const visibleFoodSections = foodSections.filter((section) =>
+    section.items.some((item) => visibleSeveritySet.has(FOOD_SEVERITY_TO_GENERAL[item.severity])),
+  );
 
   const organCount = energyMap?.organs ? Object.keys(energyMap.organs).length : 0;
   const chakraCount = energyMap?.chakras ? Object.keys(energyMap.chakras).length : 0;
   const hasEnergyMap = organCount > 0 || chakraCount > 0;
+  const showFoodSection = visibleFoodSections.length > 0;
+  const showBioEnergeticStatusLegend =
+    hasEnergyMap || showNutrition || showHeavyMetals || showHormones || showToxins;
 
   return (
     <div className="min-h-screen bg-[#0b0d10] text-text-primary">
@@ -151,68 +180,95 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
         </header>
         {hasEnergyMap && (
           <>
-            <section aria-labelledby="key-highlights">
-              <div className="flex flex-col gap-6">
-                <h2 id="key-highlights" className="text-4xl font-bold md:text-5xl lg:text-6xl">
-                  PEEK Report
-                </h2>
-                <div className="flex flex-col gap-6">
-                  <div className="flex flex-wrap gap-4 rounded-2xl bg-white/5 p-6 md:gap-6 lg:gap-8">
-                    {PEAK_PRIORITY_TIERS.map((tier) => (
-                      <div key={tier.label} className="flex items-center gap-3">
-                        <span className="h-7 w-7 rounded-full" style={{ background: tier.color }} aria-hidden="true" />
-                        <span className="text-xl md:text-2xl lg:text-[28px]">{tier.label}</span>
-                      </div>
-                    ))}
+        <section aria-labelledby="key-highlights">
+          <div className="flex flex-col gap-6">
+            <h2 id="key-highlights" className="text-4xl font-bold md:text-5xl lg:text-6xl">
+              PEEK Report
+            </h2>
+            <div className="flex flex-col gap-6">
+              <LegendRow title="Bio-Energetic Resonance" backgroundClass="bg-white/5">
+                {PEAK_PRIORITY_TIERS.map((tier) => (
+                  <div key={tier.label} className="flex items-center gap-3">
+                    <span className="h-7 w-7 rounded-full" style={{ background: tier.color }} aria-hidden="true" />
+                    <span className="whitespace-nowrap text-xl font-normal md:text-2xl lg:text-[28px]">
+                      {tier.label}
+                    </span>
                   </div>
-                  <CardEnergyMap
-                    status={computeEnergyStatus(priorityCounts)}
-                    sex={sex}
-                    organValues={energyMap?.organs}
-                    chakraValues={energyMap?.chakras}
-                  />
-                </div>
-              </div>
-            </section>
-            {showPriorityLegend && (
-              <>
-                <div className="h-px w-full bg-white/20" aria-hidden="true" />
-                <div className="flex flex-wrap gap-4 rounded-2xl bg-bg-card p-6 md:gap-6 lg:gap-8">
-                  {GENERAL_SEVERITY_ORDER.map((severity) => {
-                    const meta = GENERAL_SEVERITY_META[severity];
-                    return (
-                      <div key={severity} className="flex items-center gap-3">
-                        <span
-                          className="h-7 w-7 rounded-full"
-                          style={{ background: meta.color }}
-                          aria-hidden="true"
-                        />
-                        <div className="flex flex-col text-text-primary">
-                          <span className="text-xl md:text-2xl lg:text-[28px]">{meta.label}</span>
-                          <span className="text-sm text-text-secondary/70">{meta.range}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </>
-        )}
+                ))}
+              </LegendRow>
+              <CardEnergyMap
+                status={computeEnergyStatus(priorityCounts)}
+                sex={sex}
+                organValues={energyMap?.organs}
+                chakraValues={energyMap?.chakras}
+              />
+            </div>
+          </div>
+        </section>
+      </>
+    )}
 
-        {sections.length > 0 && (
+        {showFoodSection && (
           <>
             <div className="h-px w-full bg-white/20" aria-hidden="true" />
             <section aria-labelledby="food-categories" className="flex flex-col gap-6">
               <h2 id="food-categories" className="text-4xl font-bold md:text-5xl lg:text-6xl">
                 Food Categories
               </h2>
-              <div className="flex flex-col gap-6">
-                {sections.map((section) => (
-                  <FoodCategoryCard key={section.name} category={section.name} icon={getCategoryIcon(section.name)} items={section.items} />
+              <LegendRow title="Reaction Priority">
+                {FOOD_REACTION_LEGEND.filter((entry) =>
+                  visibleSeveritySet.has(FOOD_SEVERITY_TO_GENERAL[entry.severity]),
+                ).map((entry) => (
+                  <div key={entry.severity} className="flex items-center gap-3">
+                    <span className="h-7 w-7 rounded-full" style={{ background: entry.color }} aria-hidden="true" />
+                    <span className="whitespace-nowrap text-xl font-normal md:text-2xl lg:text-[28px]">
+                      {entry.label}
+                    </span>
+                  </div>
                 ))}
+              </LegendRow>
+              <div className="flex flex-col gap-6">
+                {visibleFoodSections.map((section) => {
+                  const card = (
+                    <FoodCategoryCard
+                      key={section.name}
+                      category={section.name}
+                      icon={getCategoryIcon(section.name)}
+                      items={section.items}
+                    />
+                  );
+                  return card;
+                })}
               </div>
             </section>
+          </>
+        )}
+
+        {showBioEnergeticStatusLegend && (
+          <>
+            <div className="h-px w-full bg-white/20" aria-hidden="true" />
+            <LegendRow title="Bio-Energetic Status">
+              {GENERAL_SEVERITY_ORDER.filter((severity) => visibleSeveritySet.has(severity)).map((severity) => {
+                const meta = GENERAL_SEVERITY_META[severity];
+                return (
+                  <div key={severity} className="flex items-center gap-3">
+                    <span
+                      className="h-7 w-7 rounded-full"
+                      style={{ background: meta.color }}
+                      aria-hidden="true"
+                    />
+                    <div className="flex flex-col text-text-primary">
+                      <span className="whitespace-nowrap text-xl font-normal md:text-2xl lg:text-[28px]">
+                        {meta.label}
+                      </span>
+                      <span className="whitespace-nowrap text-sm font-normal text-text-secondary/70">
+                        {meta.range}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </LegendRow>
           </>
         )}
 
