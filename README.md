@@ -11,10 +11,10 @@ This document walks through the project layout, local setup, and day-to-day work
 The fastest way to spin up Quantum Qi™ locally:
 
 ```bash
-./scripts/dev.sh
+./scripts/devlaunch.sh
 ```
 
-The script checks dependencies, frees the default ports, starts FastAPI + Vite, and opens both the operator (`/operator`) and guest (`/guest`) screens in new browser windows. Tweak ports/hosts by exporting these vars before running:
+The script checks dependencies, frees the default ports, installs anything that is missing, starts FastAPI + Vite, and opens both the operator (`/operator`) and guest (`/guest`) screens in new browser windows. Tweak ports/hosts by exporting these vars before running:
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -23,7 +23,17 @@ The script checks dependencies, frees the default ports, starts FastAPI + Vite, 
 | `BACKEND_PORT` | `8000` | Port for the FastAPI backend. |
 | `IDLE_SHUTDOWN_DELAY` | `5` | Backend idle shutdown debounce (seconds). |
 
-Prereqs: `backend/.venv` with dependencies installed and `frontend/node_modules` present. The script exits with guidance if those are missing.
+> **Heads up:** `devlaunch.sh` bootstraps virtualenvs and `node_modules` automatically if they are absent. The first run after a cleanup will take noticeably longer while dependencies install.
+
+Prereqs: Python 3.11+ and Node.js 18+ in your `PATH`. The script exits with guidance if they are missing.
+
+Need a clean slate? Use:
+
+```bash
+./scripts/cleanrepo.sh
+```
+
+This removes **all** build artifacts, virtualenvs, `node_modules`, and session data under `data/`. It is destructive—run it only when you intentionally want to reinstall everything.
 
 Prefer a manual setup or want more context? Read on.
 
@@ -55,10 +65,14 @@ Prefer a manual setup or want more context? Read on.
 
 ## Local setup (manual)
 
+If you prefer to manage each service yourself instead of `scripts/devlaunch.sh`, follow the steps below.
+
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12 (recommended)
 - Node.js 18+ and npm
+
+> `scripts/devlaunch.sh` automatically prefers `python3.12`. On macOS it will attempt to install `python@3.12` via Homebrew if it is missing. To override the interpreter, export `LONGQ_PYTHON=/path/to/python` before running the script.
 
 ### Backend (FastAPI)
 
@@ -71,6 +85,16 @@ pip install -r requirements.txt
 # Optional: set .env values (see below)
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
+
+Dependencies are pinned in `requirements.txt`. When you need to upgrade:
+
+```bash
+pip install pip-tools
+pip-compile requirements.in --output-file requirements.txt
+pip install -r requirements.txt
+```
+
+> PyMuPDF currently publishes wheels for Python ≤ 3.12. Using 3.13 or newer will force a source build that requires manual TLS configuration. Stick to Python 3.12 unless you are prepared to compile MuPDF yourself.
 
 Key paths:
 - SQLite database lives under `data/` (`sqlite:///./data/app.db` by default).
@@ -128,6 +152,10 @@ What the launcher does:
 7. On quit it sends `SIGTERM` (or uses `tree-kill` if available) to stop the backend and shuts down the static server.
 
 > **Note:** The repo does not ship pre-installed Electron binaries. Run `npm install` inside `electron/` when you have network access.
+
+### Dependency hygiene helper
+
+Run `./scripts/check-deps.sh` to see which Python or Node packages are outdated across the backend, frontend, and Electron projects.
 
 #### Packaging
 

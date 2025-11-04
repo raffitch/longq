@@ -2,6 +2,7 @@ const LIMIT_KEY = "longevityq_threshold_limit";
 const LIMIT_VERSION_KEY = "longevityq_threshold_limit_version";
 const MAX_KEY = "longevityq_threshold_limit_max";
 const VISIBLE_KEY = "longevityq_threshold_visible";
+const VISIBLE_VERSION_KEY = "longevityq_threshold_visible_version";
 
 const LIMIT_EVENT = "longevityq-threshold-limit-change";
 const MAX_EVENT = "longevityq-threshold-max-change";
@@ -15,8 +16,9 @@ type VisibleValue = (typeof CANON_VISIBLE_ORDER)[number];
 type VisibleArray = readonly VisibleValue[];
 
 const CURRENT_LIMIT_VERSION = "2";
+const CURRENT_VISIBLE_VERSION = "1";
 
-const DEFAULT_VISIBLE = Object.freeze(["very high", "high", "moderate"] as const) as VisibleArray;
+const DEFAULT_VISIBLE = Object.freeze(["very high", "high", "moderate", "normal", "low", "very low"] as const) as VisibleArray;
 
 const getWindow = () => (typeof window === "undefined" ? null : window);
 
@@ -124,6 +126,21 @@ const readVisibleFromStorage = (): VisibleArray => {
 const ensureVisibleHydrated = () => {
   if (visibleHydrated) return;
   visibleHydrated = true;
+  const win = getWindow();
+  if (win) {
+    try {
+      const storedVersion = win.localStorage.getItem(VISIBLE_VERSION_KEY);
+      if (storedVersion !== CURRENT_VISIBLE_VERSION) {
+        cachedVisible = DEFAULT_VISIBLE;
+        win.localStorage.setItem(VISIBLE_KEY, JSON.stringify(Array.from(DEFAULT_VISIBLE)));
+        win.localStorage.setItem(VISIBLE_VERSION_KEY, CURRENT_VISIBLE_VERSION);
+        return;
+      }
+    } catch {
+      cachedVisible = DEFAULT_VISIBLE;
+      return;
+    }
+  }
   cachedVisible = readVisibleFromStorage();
 };
 
@@ -250,6 +267,7 @@ export const setVisibleSeverities = (values: string[]) => {
   cachedVisible = effective;
   try {
     win.localStorage.setItem(VISIBLE_KEY, JSON.stringify(effective));
+    win.localStorage.setItem(VISIBLE_VERSION_KEY, CURRENT_VISIBLE_VERSION);
   } catch {
     /* ignore storage quota issues */
   }

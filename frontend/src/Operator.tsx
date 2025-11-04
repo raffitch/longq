@@ -315,7 +315,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [editedSex, setEditedSex] = useState<Sex | null>(null);
   const [lastDroppedFiles, setLastDroppedFiles] = useState<DroppedFile[]>([]);
   const [backendDown, setBackendDown] = useState(false);
-  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
   const [fitPreview, setFitPreview] = useState(false);
@@ -410,6 +409,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const autoOpenAttemptedRef = useRef(false);
   const autoOpenTimerRef = useRef<number | null>(null);
   const thresholdPanelRef = useRef<HTMLDivElement | null>(null);
+  const livePreviewUserScrolledRef = useRef(false);
 
   type OperationContext = { seq: number; signal: AbortSignal };
 
@@ -519,10 +519,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     return beat !== null && !Number.isNaN(beat) && Date.now() - beat < GUEST_HEARTBEAT_GRACE_MS;
   };
 
-  const markBackendUp = (ctx?: OperationContext) => {
-    applyState(setBackendDown, false, ctx);
-    applyState(setHasConnectedOnce, true, ctx);
-  };
+  const markBackendUp = (ctx?: OperationContext) => applyState(setBackendDown, false, ctx);
   const markBackendDown = (err?: unknown, ctx?: OperationContext) => {
     if (err === undefined || isNetworkError(err)) {
       applyState(setBackendDown, true, ctx);
@@ -630,6 +627,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [guestWindowOpen, setGuestWindowOpen] = useState<boolean>(() => guestHeartbeatAlive());
 
   const livePreviewContainerRef = useRef<HTMLDivElement | null>(null);
+  const livePreviewContentRef = useRef<HTMLDivElement | null>(null);
   const stagedPreviewContainerRef = useRef<HTMLDivElement | null>(null);
 
   const displayFullName =
@@ -775,9 +773,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     const noteState = (down: boolean) => {
       if (!disposed) {
         setBackendDown(down);
-        if (!down) {
-          setHasConnectedOnce(true);
-        }
       }
     };
 
@@ -1829,44 +1824,75 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const showStagedPreviewBlock = Boolean(session && hasStagedData);
   const stagedPreviewVisible = showStagedPreviewBlock && !hasShownOnGuest;
 
-  useEffect(() => {
-    const centerScroll = (node: HTMLDivElement | null) => {
-      if (!node) return;
-      const id = requestAnimationFrame(() => {
-        const horizontal = Math.max(0, (node.scrollWidth - node.clientWidth) / 2);
-        const vertical = Math.max(0, (node.scrollHeight - node.clientHeight) / 2);
-        node.scrollLeft = horizontal;
-        node.scrollTop = vertical;
-      });
-      return () => cancelAnimationFrame(id);
-    };
-    const cancelLive = !stagedPreviewVisible ? centerScroll(livePreviewContainerRef.current) : undefined;
-    const cancelStaged = stagedPreviewVisible ? centerScroll(stagedPreviewContainerRef.current) : undefined;
-    return () => {
-      cancelLive?.();
-      cancelStaged?.();
-    };
-  }, [stagedPreviewVisible, showStagedPreviewBlock, hasShownOnGuest]);
+useEffect(() => {
+  const centerScroll = (node: HTMLDivElement | null) => {
+    if (!node) return;
+    const id = requestAnimationFrame(() => {
+      const horizontal = Math.max(0, (node.scrollWidth - node.clientWidth) / 2);
+      const vertical = Math.max(0, (node.scrollHeight - node.clientHeight) / 2);
+      node.scrollLeft = horizontal;
+      node.scrollTop = vertical;
+    });
+    return () => cancelAnimationFrame(id);
+  };
+  const cancelLive = !stagedPreviewVisible ? centerScroll(livePreviewContainerRef.current) : undefined;
+  const cancelStaged = stagedPreviewVisible ? centerScroll(stagedPreviewContainerRef.current) : undefined;
+  return () => {
+    cancelLive?.();
+    cancelStaged?.();
+  };
+}, [stagedPreviewVisible, showStagedPreviewBlock, hasShownOnGuest]);
+
+useEffect(() => {
+  if (stagedPreviewVisible) return;
+  const container = livePreviewContainerRef.current;
+  const content = livePreviewContentRef.current;
+  if (!container || !content) return;
+
+  livePreviewUserScrolledRef.current = false;
+
+  const center = (force = false) => {
+    if (!force && livePreviewUserScrolledRef.current) return;
+    const scaledWidth = viewportWidth * previewScale;
+    const scaledHeight = viewportHeight * previewScale;
+    const targetLeft = Math.max(0, scaledWidth / 2 - container.clientWidth / 2);
+    const targetTop = Math.max(0, scaledHeight / 2 - container.clientHeight / 2);
+    container.scrollTo({ left: targetLeft, top: targetTop, behavior: "auto" });
+  };
+
+  const schedule = (force = false) => {
+    const delays = [0, 120, 320, 640, 1000, 1600];
+    delays.forEach((delay) => window.setTimeout(() => center(force), delay));
+  };
+
+  schedule(true);
+
+  const iframe = content.querySelector("iframe");
+  const handleLoad = () => {
+    livePreviewUserScrolledRef.current = false;
+    schedule(true);
+  };
+  iframe?.addEventListener("load", handleLoad);
+
+  const observers: ResizeObserver[] = [];
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => center(false));
+    ro.observe(container);
+    ro.observe(content);
+    observers.push(ro);
+  }
+
+  return () => {
+    iframe?.removeEventListener("load", handleLoad);
+    observers.forEach((ro) => ro.disconnect());
+  };
+}, [previewScale, fitPreview, liveMonitorUrl, stagedPreviewVisible, viewportHeight, viewportWidth]);
+
+useEffect(() => {
+  livePreviewUserScrolledRef.current = false;
+}, [fitPreview, previewScale, liveMonitorUrl, stagedPreviewVisible]);
 
   if (backendDown) {
-    if (!hasConnectedOnce) {
-      return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-logo-background px-6 text-center text-text-primary">
-          <div className="space-y-6">
-            <div className="font-logo text-[26px] font-semibold uppercase tracking-[0.2em] text-teal-100">
-              Quantum Qi Operator Console
-            </div>
-            <div className="flex flex-col items-center gap-4 text-text-secondary">
-              <div
-                className="h-12 w-12 animate-spin rounded-full border-4 border-teal-300 border-t-transparent"
-                aria-hidden="true"
-              />
-              <p className="text-sm text-teal-100/80">Starting local services…</p>
-            </div>
-          </div>
-        </div>
-      );
-    }
     return (
       <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-center text-text-primary">
         <div className="space-y-4">
@@ -1890,7 +1916,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     >
       <div className={cn("flex min-w-[320px] max-w-[760px] flex-1 flex-col", session ? "" : "min-h-[calc(100vh-64px)]")}> 
         <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-1">
             <h1 className="text-text-primary">
               <span className="font-logo block text-[28px] font-semibold leading-none">
                 <span className="inline-flex items-baseline">
@@ -1898,13 +1924,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   <span className="logo-tm">TM</span>
                 </span>
               </span>
+              <span className="mt-1 block text-[18px] font-normal tracking-[0.18em] text-teal-100 uppercase">
+                Operator Console
+              </span>
             </h1>
-            <span className="pl-1 text-[14px] font-medium tracking-[0.18em] text-teal-300">
-              by Longevity Wellness
-            </span>
-            <span className="text-[18px] font-normal uppercase tracking-[0.18em] text-teal-100">
-              Operator Console
-            </span>
           </div>
           {session && (
             <Button onClick={resetSession} variant="danger" size="sm" className="px-3">
@@ -2104,12 +2127,19 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               {!stagedPreviewVisible ? (
                 <div
                   ref={livePreviewContainerRef}
+                  onScroll={() => {
+                    livePreviewUserScrolledRef.current = true;
+                  }}
                   className={cn(
                     "relative flex h-full w-full items-start overflow-auto transition-opacity duration-500",
                     fitPreview ? "justify-center" : "justify-start",
                   )}
                 >
-                  <div className={cn("relative", fitPreview ? "inline-block" : "w-full")} style={previewContainerStyle}>
+                  <div
+                    ref={livePreviewContentRef}
+                    className={cn("relative", fitPreview ? "inline-block" : "w-full")}
+                    style={previewContainerStyle}
+                  >
                     <iframe
                       title="Live Guest Monitor"
                       src={liveMonitorUrl}

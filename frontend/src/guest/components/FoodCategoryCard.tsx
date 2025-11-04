@@ -1,7 +1,7 @@
 import React from "react";
 import { useThresholdLimitValue, useVisibleSeverities } from "../../hooks/useThresholdSettings";
 import type { GeneralSeverity } from "../../shared/priority";
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { Cell, Pie, PieChart } from "recharts";
 
 export type FoodSeverity = "high" | "moderate" | "medium" | "low";
 
@@ -106,9 +106,11 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
     return acc;
   }, []);
 
+  const PIE_SIZE = 240;
+
   return (
     <div className="grid gap-4 items-stretch md:grid-cols-[minmax(0,1fr)_auto] md:gap-6 md:items-stretch">
-      <div className="rounded-[32px] bg-white/5 p-4 backdrop-blur md:h-full md:p-6">
+      <div className="rounded-[32px] bg-bg-card p-4 shadow-card md:min-h-[260px] md:h-full md:p-6">
         <div className="flex min-w-0 flex-col gap-4 md:gap-5">
           {pillSections.length ? (
             pillSections
@@ -117,29 +119,27 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
           )}
         </div>
       </div>
-      <div className="rounded-[32px] bg-white/5 p-4 backdrop-blur w-full justify-self-center md:h-full md:w-fit md:justify-self-end md:p-6">
+      <div className="rounded-[32px] bg-bg-card p-4 shadow-card w-full justify-self-center md:min-h-[260px] md:h-full md:w-full md:justify-self-end md:p-6">
         <div className="flex h-full w-full items-center justify-center">
           {chartData.length ? (
-            <div className="relative h-[268px] w-[271px]">
-              <ResponsiveContainer width="100%" height="100%" className="pointer-events-none">
-                <PieChart>
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={80}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="value"
-                    stroke="none"
-                    isAnimationActive={false}
-                  >
-                    {chartData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} opacity={0.9} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="relative" style={{ width: PIE_SIZE, height: PIE_SIZE }}>
+              <PieChart width={PIE_SIZE} height={PIE_SIZE} className="pointer-events-none">
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={PIE_SIZE * 0.34}
+                  outerRadius={PIE_SIZE * 0.42}
+                  paddingAngle={2}
+                  dataKey="value"
+                  stroke="none"
+                  isAnimationActive={false}
+                >
+                  {chartData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} opacity={0.9} />
+                  ))}
+                </Pie>
+              </PieChart>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 text-center">
                 {icon}
                 <span className="text-2xl font-normal leading-snug text-text-primary">

@@ -288,6 +288,30 @@ export default function Guest() {
   }, [base, isPreview]);
 
   useEffect(() => {
+    if (!isMonitor) {
+      return;
+    }
+
+    const scrollToCenter = () => {
+      const doc = document.documentElement;
+      const target = Math.max(0, (doc.scrollHeight - window.innerHeight) / 2);
+      window.scrollTo({ top: target, behavior: "auto" });
+    };
+
+    scrollToCenter();
+    const delays = [100, 400, 800, 1600, 2400];
+    const ids = delays.map((delay) => window.setTimeout(scrollToCenter, delay));
+    window.addEventListener("resize", scrollToCenter);
+    window.addEventListener("load", scrollToCenter);
+
+    return () => {
+      ids.forEach((id) => window.clearTimeout(id));
+      window.removeEventListener("resize", scrollToCenter);
+      window.removeEventListener("load", scrollToCenter);
+    };
+  }, [isMonitor, aggregated]);
+
+  useEffect(() => {
     if (!isPreview || previewSessionId === null) {
       return;
     }
