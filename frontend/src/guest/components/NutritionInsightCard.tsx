@@ -22,14 +22,15 @@ interface NutritionInsightCardProps {
 }
 
 const NutritionInsightCard: React.FC<NutritionInsightCardProps> = ({ data }) => {
+  const limit = useThresholdLimitValue();
+  const visibleSeverities = useVisibleSeverities();
+  const visibleSet = new Set(visibleSeverities);
+
   if (!data || !data.nutrients.length) {
     return <div className="rounded-2xl bg-bg-card p-8 text-text-secondary">No nutrition data available.</div>;
   }
 
   const hasTitle = Boolean(data.note);
-  const limit = useThresholdLimitValue();
-  const visibleSeverities = useVisibleSeverities();
-  const visibleSet = new Set(visibleSeverities);
 
   const grouped = GENERAL_SEVERITY_ORDER.reduce<Record<GeneralSeverity, NutrientItem[]>>(
     (acc, severity) => {

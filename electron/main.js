@@ -1,10 +1,12 @@
-const { app, BrowserWindow, Menu, dialog } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const net = require('net');
 const { spawn } = require('child_process');
 const { createStaticServer } = require('./serve');
+const { randomUUID } = require('node:crypto');
+const preloadPath = path.join(__dirname, 'preload.js');
 
 let backendProcess = null;
 let staticServer = null;
@@ -12,11 +14,16 @@ let staticPort = null;
 let operatorWindow = null;
 let guestWindow = null;
 let backendLogPath = null;
+let isAppQuitting = false;
 let backendPort = Number(process.env.LONGQ_BACKEND_PORT || 0);
 const DEFAULT_BACKEND_PORT = 8000;
 const UI_PORT = Number(process.env.LONGQ_UI_PORT || 5173);
 const HEALTH_TIMEOUT_MS = 200;
 const HEALTH_RETRIES = 80;
+const MAX_BACKEND_LOG_BYTES = 4 * 1024 * 1024;
+const MAX_DIAGNOSTIC_EVENTS = 32;
+const diagnosticEventHistory = [];
+let trimPending = false;
 
 function resolveRepoRoot() {
   const candidates = [
@@ -323,6 +330,53 @@ function readLogTail(filePath, maxBytes = 4000) {
   }
 }
 
+function maybeTrimBackendLog() {
+  if (!backendLogPath) {
+    return;
+  }
+  try {
+    const stats = fs.statSync(backendLogPath);
+    if (stats.size <= MAX_BACKEND_LOG_BYTES) {
+      return;
+    }
+    const buffer = Buffer.alloc(MAX_BACKEND_LOG_BYTES);
+    const fd = fs.openSync(backendLogPath, 'r');
+    fs.readSync(fd, buffer, 0, MAX_BACKEND_LOG_BYTES, stats.size - MAX_BACKEND_LOG_BYTES);
+    fs.closeSync(fd);
+    fs.writeFileSync(backendLogPath, buffer);
+    console.log('[longq] trimmed backend log to', MAX_BACKEND_LOG_BYTES, 'bytes');
+  } catch (err) {
+    console.warn('[longq] failed to trim backend log file', err);
+  }
+}
+
+function scheduleLogTrim() {
+  if (trimPending) {
+    return;
+  }
+  trimPending = true;
+  setTimeout(() => {
+    trimPending = false;
+    maybeTrimBackendLog();
+  }, 300);
+}
+
+function broadcastDiagnosticsEvent(event) {
+  if (operatorWindow && !operatorWindow.isDestroyed()) {
+    operatorWindow.webContents.send('diagnostics:event', event);
+  }
+}
+
+function recordDiagnosticEvent(event) {
+  diagnosticEventHistory.push(event);
+  if (diagnosticEventHistory.length > MAX_DIAGNOSTIC_EVENTS) {
+    diagnosticEventHistory.shift();
+  }
+  broadcastDiagnosticsEvent(event);
+}
+
+ipcMain.handle('diagnostics:get-history', () => diagnosticEventHistory);
+
 function setupMenu() {
   const template = [
     {
@@ -361,6 +415,9 @@ function launchBackend(root, port) {
       BACKEND_PORT: String(port),
       PYTHONPATH: buildPythonPath(process.env.PYTHONPATH),
     };
+    const allowedOrigins = computeAllowedOrigins();
+    env.ALLOWED_ORIGINS = allowedOrigins;
+    console.log('[longq] backend allowed origins:', allowedOrigins);
     const runtime = runtimeDir(root);
     backendLogPath = path.join(runtime, 'backend.log');
     try {
@@ -369,6 +426,11 @@ function launchBackend(root, port) {
       console.warn('[longq] failed to prepare backend log file', err);
     }
     const logStream = fs.createWriteStream(backendLogPath, { flags: 'a' });
+    const finishLog = () => {
+      if (!logStream.destroyed) {
+        logStream.end(() => maybeTrimBackendLog());
+      }
+    };
     const child = spawn(python, ['-m', 'backend.runner'], {
       cwd: repoRoot,
       env,
@@ -379,7 +441,11 @@ function launchBackend(root, port) {
     writeRuntimeFile(root, 'backend.port', String(port));
     const appendLog = (chunk) => {
       try {
-        logStream.write(chunk);
+        if (!logStream.write(chunk)) {
+          logStream.once('drain', scheduleLogTrim);
+        } else {
+          scheduleLogTrim();
+        }
       } catch (err) {
         console.warn('[longq] failed to write backend log chunk', err);
       }
@@ -388,22 +454,62 @@ function launchBackend(root, port) {
     child.stderr.on('data', appendLog);
     child.on('exit', (code, signal) => {
       appendLog(`\n[${new Date().toISOString()}] backend exited (code=${code ?? ''} signal=${signal ?? ''})\n`);
-      logStream.end();
+      finishLog();
       backendProcess = null;
+
+      if (!isAppQuitting) {
+        const logTail = readLogTail(backendLogPath, 16000);
+        recordDiagnosticEvent({
+          id: randomUUID(),
+          type: 'backend-crash',
+          message: `Backend exited (code=${code ?? ''} signal=${signal ?? 'none'})`,
+          timestamp: new Date().toISOString(),
+          logTail,
+          code: code ?? null,
+          signal: signal ?? null,
+        });
+      }
     });
+
     child.on('error', (err) => {
       appendLog(`\n[${new Date().toISOString()}] spawn error: ${err}\n`);
-      logStream.end();
+      finishLog();
       backendProcess = null;
       err.logPath = backendLogPath;
+
+      if (!isAppQuitting) {
+        const logTail = readLogTail(backendLogPath, 16000);
+        recordDiagnosticEvent({
+          id: randomUUID(),
+          type: 'backend-error',
+          message: `Backend spawn error: ${err && err.message ? err.message : err}`,
+          timestamp: new Date().toISOString(),
+          logTail,
+          code: 999,
+          signal: null,
+        });
+      }
       reject(err);
     });
+
     waitForHealth(port)
       .then(resolve)
       .catch((err) => {
         appendLog(`\n[${new Date().toISOString()}] health check failed: ${err}\n`);
-        logStream.end();
+        finishLog();
         err.logPath = backendLogPath;
+        if (!isAppQuitting) {
+          const logTail = readLogTail(backendLogPath, 16000);
+          recordDiagnosticEvent({
+            id: randomUUID(),
+            type: 'backend-error',
+            message: `Backend health check failed: ${err && err.message ? err.message : err}`,
+            timestamp: new Date().toISOString(),
+            logTail,
+            code: 998,
+            signal: null,
+          });
+        }
         reject(err);
       });
   });
@@ -474,6 +580,60 @@ function injectApiBase(win, apiBase) {
   });
 }
 
+function computeAllowedOrigins() {
+  const origins = [];
+  const appendOrigin = (value) => {
+    if (!value) {
+      return;
+    }
+    let origin;
+    try {
+      origin = new URL(value).origin;
+    } catch {
+      if (typeof value === 'string') {
+        const trimmed = value.trim().replace(/\/+$/, '');
+        if (!trimmed || !/^https?:\/\//i.test(trimmed)) {
+          return;
+        }
+        try {
+          origin = new URL(trimmed).origin;
+        } catch {
+          origin = trimmed;
+        }
+      }
+    }
+    if (origin && !origins.includes(origin)) {
+      origins.push(origin);
+    }
+  };
+
+  const seed = process.env.ALLOWED_ORIGINS;
+  if (seed && seed.trim()) {
+    for (const part of seed.split(',')) {
+      appendOrigin(part.trim());
+    }
+  }
+
+  appendOrigin('http://127.0.0.1:5173');
+  appendOrigin('http://localhost:5173');
+
+  if (UI_PORT && UI_PORT !== 5173) {
+    appendOrigin(`http://127.0.0.1:${UI_PORT}`);
+    appendOrigin(`http://localhost:${UI_PORT}`);
+  }
+
+  if (staticPort) {
+    appendOrigin(`http://127.0.0.1:${staticPort}`);
+    appendOrigin(`http://localhost:${staticPort}`);
+  }
+
+  appendOrigin(resolveUiBase());
+  appendOrigin(process.env.VITE_DEV_SERVER_URL);
+  appendOrigin(process.env.LONGQ_UI_URL);
+
+  return origins.join(',');
+}
+
 async function createWindows() {
   const apiBase = `http://127.0.0.1:${backendPort}`;
   const query = { apiBase };
@@ -483,6 +643,7 @@ async function createWindows() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: preloadPath,
     },
   });
   operatorWindow.on('closed', () => {
@@ -497,6 +658,7 @@ async function createWindows() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: preloadPath,
     },
   });
   guestWindow.on('closed', () => {
@@ -513,6 +675,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  isAppQuitting = true;
   stopBackend();
   stopStaticServer();
 });
@@ -573,12 +736,14 @@ process.on('exit', () => {
 });
 
 process.on('SIGINT', () => {
+  isAppQuitting = true;
   stopBackend();
   stopStaticServer();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
+  isAppQuitting = true;
   stopBackend();
   stopStaticServer();
   process.exit(0);

@@ -27,6 +27,7 @@ import {
   type Sex,
   type DiagnosticEntry,
 } from "./api";
+import type { ElectronDiagnosticsEvent } from "./types/electron";
 
 const REPORT_DEFS: { kind: ReportKind; label: string; aliases: string[] }[] = [
   { kind: "food", label: "Food", aliases: ["food"] },
@@ -471,6 +472,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const presetAutoAppliedRef = useRef(false);
   const presetSessionRef = useRef<number | null>(null);
   const diagnosticsPollRef = useRef<number | null>(null);
+  const electronDiagnosticsSeenRef = useRef<Set<string>>(new Set());
 
   type OperationContext = { seq: number; signal: AbortSignal };
 
@@ -478,23 +480,27 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const fetchDiagnostics = useCallback(async () => {
     setDiagnosticsLoading(true);
     setDiagnosticsFetchError(null);
-    try {
-      const entries = await getDiagnostics(25);
-      if (!mountedRef.current) {
-        return;
-      }
-      setDiagnosticsEntries(entries);
-    } catch (err) {
-      if (!mountedRef.current) {
-        return;
-      }
-      const message = err instanceof Error ? err.message : typeof err === "string" ? err : "Failed to load diagnostics.";
-      setDiagnosticsFetchError(message);
-    } finally {
-      if (mountedRef.current) {
-        setDiagnosticsLoading(false);
-      }
+  try {
+    const entries = await getDiagnostics(25);
+    if (!mountedRef.current) {
+      return;
     }
+    setDiagnosticsEntries(entries);
+  } catch (err) {
+    if (!mountedRef.current) {
+      return;
+    }
+    if (isNetworkError(err)) {
+      setDiagnosticsFetchError("Backend unreachable. Ensure the Quantum Qi™ services are running, then try again.");
+      markBackendDown(err);
+    } else {
+      setDiagnosticsFetchError(formatErrorMessage(err));
+    }
+  } finally {
+    if (mountedRef.current) {
+      setDiagnosticsLoading(false);
+    }
+  }
   }, []);
   const operationSeqRef = useRef(0);
   const operationAbortRef = useRef<AbortController | null>(null);
@@ -634,6 +640,70 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       applyState(setBackendDown, true, ctx);
     }
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const bridge = window.longqDiagnostics;
+    if (!bridge || typeof bridge.subscribe !== "function") {
+      return;
+    }
+
+    let cancelled = false;
+    const seen = electronDiagnosticsSeenRef.current;
+
+    const pushFromEvent = (event?: ElectronDiagnosticsEvent | null) => {
+      if (cancelled || !event || typeof event !== "object") {
+        return;
+      }
+      if (!event.id || seen.has(event.id)) {
+        return;
+      }
+      seen.add(event.id);
+      const entry: DiagnosticEntry = {
+        code: event.type === "backend-crash" ? "BACKEND_CRASH" : "BACKEND_ERROR",
+        level: "ERROR",
+        message: event.message,
+        timestamp: event.timestamp,
+        detail: event.logTail ?? "",
+        logger: "electron",
+      };
+      setDiagnosticsEntries((prev) => {
+        const next = [entry, ...prev];
+        return next.slice(0, 50);
+      });
+      setDiagnosticsFetchError(null);
+      setError(event.message);
+      setBackendDown(true);
+      setBackendReady(true);
+    };
+
+    const historyPromise = bridge.getHistory?.();
+    if (historyPromise && typeof historyPromise.then === "function") {
+      historyPromise
+        .then((history) => {
+          if (cancelled || !history) {
+            return;
+          }
+          history.forEach((event) => pushFromEvent(event));
+        })
+        .catch(() => {
+          /* ignore history errors */
+        });
+    }
+
+    const unsubscribe = bridge.subscribe((event) => {
+      pushFromEvent(event);
+    });
+
+    return () => {
+      cancelled = true;
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    };
+  }, []);
 
   const handleDragHighlight = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
@@ -2215,38 +2285,147 @@ useEffect(() => {
   livePreviewUserScrolledRef.current = false;
 }, [fitPreview, previewScale, liveMonitorUrl, stagedPreviewVisible]);
 
-  if (!backendReady) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-center text-text-primary">
-        <div className="space-y-6">
-          <div className="flex justify-center">
-            <div
-              className="h-12 w-12 animate-spin rounded-full border-4 border-teal-300 border-t-transparent"
-              aria-hidden="true"
-            />
-          </div>
+  const diagnosticsModal = diagnosticsOpen ? (
+    <div
+      className="fixed inset-0 z-[999] flex items-center justify-center bg-black/65 px-4"
+      onClick={() => setDiagnosticsOpen(false)}
+    >
+      <div
+        className="w-full max-w-[640px] overflow-hidden rounded-3xl border border-border bg-surface shadow-surface-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-border bg-surface-subtle px-6 py-4">
           <div>
-            <div className="text-[18px] font-semibold tracking-[0.16em] text-teal-100 uppercase">
-              Initializing Console
+            <div className="text-[16px] font-semibold text-text-primary">Diagnostics</div>
+            <div className="text-[11px] uppercase tracking-[0.3em] text-accent-info/80">
+              Recent backend errors
             </div>
-            <p className="mt-2 text-[14px] text-slate-200">Connecting to the Quantum Qi™ backend…</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="soft"
+              className="px-3"
+              onClick={() => fetchDiagnostics()}
+              disabled={diagnosticsLoading}
+            >
+              Refresh
+            </Button>
+            <Button size="sm" variant="secondary" className="px-3" onClick={() => setDiagnosticsOpen(false)}>
+              Close
+            </Button>
           </div>
         </div>
+        <div className="max-h-[60vh] overflow-y-auto px-6 py-4">
+          {diagnosticsLoading ? (
+            <div className="flex items-center justify-center py-8 text-[13px] text-text-secondary">
+              Loading diagnostics…
+            </div>
+          ) : diagnosticsFetchError ? (
+            <div className="rounded-2xl border border-danger/40 bg-danger/10 p-4 text-[13px] text-danger">
+              Failed to load diagnostics: {diagnosticsFetchError}
+            </div>
+          ) : diagnosticsEntries.length === 0 ? (
+            <div className="rounded-2xl border border-border bg-surface-subtle px-4 py-6 text-center text-[13px] text-text-secondary">
+              No recent errors have been recorded.
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {diagnosticsEntries.map((entry) => (
+                <li key={`${entry.code}-${entry.timestamp}`} className="rounded-2xl border border-border bg-surface px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-accent-info">
+                      {entry.code}
+                    </span>
+                    <span className="text-[11px] text-text-secondary">
+                      {(() => {
+                        const d = new Date(entry.timestamp);
+                        return Number.isNaN(d.getTime()) ? entry.timestamp : d.toLocaleString();
+                      })()}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-[13px] font-semibold text-text-primary">{entry.message}</div>
+                  <div className="mt-1 text-[11px] text-text-secondary">
+                    {(entry.logger ?? "backend")} · {entry.level}
+                    {entry.pathname ? ` · ${entry.pathname}:${entry.lineno ?? 0}` : ""}
+                  </div>
+                  {entry.detail && (
+                    <pre className="mt-3 max-h-40 overflow-auto rounded-lg bg-neutral-dark/40 p-3 text-[11px] text-text-secondary">
+                      {entry.detail}
+                    </pre>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
+    </div>
+  ) : null;
+
+  if (!backendReady) {
+    return (
+      <>
+        <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-center text-text-primary">
+          <div className="space-y-6">
+            <div className="flex justify-center">
+              <div
+                className="h-12 w-12 animate-spin rounded-full border-4 border-teal-300 border-t-transparent"
+                aria-hidden="true"
+              />
+            </div>
+            <div>
+              <div className="text-[18px] font-semibold tracking-[0.16em] text-teal-100 uppercase">
+                Initializing Console
+              </div>
+              <p className="mt-2 text-[14px] text-slate-200">Connecting to the Quantum Qi™ backend…</p>
+            </div>
+          </div>
+        </div>
+        {diagnosticsModal}
+      </>
     );
   }
 
   if (backendDown) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-center text-text-primary">
-        <div className="space-y-4">
-          <div className="text-[30px] font-bold">Operator Console Offline</div>
-          <div className="mt-2 text-[16px] opacity-80">
-            The Quantum Qi™ services are no longer reachable. Close this window and restart the program once
-            the server is running again.
+      <>
+        <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-text-primary">
+          <div className="w-full max-w-[560px] space-y-4 text-center">
+            <div className="text-[30px] font-bold">Operator Console Offline</div>
+            <div className="mt-2 text-[16px] opacity-80">
+              The Quantum Qi™ services are no longer reachable. Close this window and restart the program once
+              the server is running again.
+            </div>
+            {error && (
+              <div className="mx-auto max-w-[520px] rounded-2xl border border-border bg-surface/90 px-5 py-4 text-left text-[13px] leading-relaxed text-text-secondary">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-accent-info/80">
+                  Last reported error
+                </div>
+                <div className="mt-2 text-[13px] text-text-primary">{error}</div>
+              </div>
+            )}
+            <div className="flex flex-wrap justify-center gap-3 pt-1">
+              <Button variant="secondary" size="sm" className="px-4" onClick={() => setDiagnosticsOpen(true)}>
+                View diagnostics
+              </Button>
+              <Button
+                variant="soft"
+                size="sm"
+                className="px-4"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.location.reload();
+                  }
+                }}
+              >
+                Reload
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+        {diagnosticsModal}
+      </>
     );
   }
 
@@ -2571,83 +2750,7 @@ useEffect(() => {
         </div>
       </div>
       </div>
-      {diagnosticsOpen && (
-        <div
-          className="fixed inset-0 z-[999] flex items-center justify-center bg-black/65 px-4"
-          onClick={() => setDiagnosticsOpen(false)}
-        >
-          <div
-            className="w-full max-w-[640px] overflow-hidden rounded-3xl border border-border bg-surface shadow-surface-lg"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-border bg-surface-subtle px-6 py-4">
-              <div>
-                <div className="text-[16px] font-semibold text-text-primary">Diagnostics</div>
-                <div className="text-[11px] uppercase tracking-[0.3em] text-accent-info/80">
-                  Recent backend errors
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="soft"
-                  className="px-3"
-                  onClick={() => fetchDiagnostics()}
-                  disabled={diagnosticsLoading}
-                >
-                  Refresh
-                </Button>
-                <Button size="sm" variant="secondary" className="px-3" onClick={() => setDiagnosticsOpen(false)}>
-                  Close
-                </Button>
-              </div>
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto px-6 py-4">
-              {diagnosticsLoading ? (
-                <div className="flex items-center justify-center py-8 text-[13px] text-text-secondary">
-                  Loading diagnostics…
-                </div>
-              ) : diagnosticsFetchError ? (
-                <div className="rounded-2xl border border-danger/40 bg-danger/10 p-4 text-[13px] text-danger">
-                  Failed to load diagnostics: {diagnosticsFetchError}
-                </div>
-              ) : diagnosticsEntries.length === 0 ? (
-                <div className="rounded-2xl border border-border bg-surface-subtle px-4 py-6 text-center text-[13px] text-text-secondary">
-                  No recent errors have been recorded.
-                </div>
-              ) : (
-                <ul className="space-y-3">
-                  {diagnosticsEntries.map((entry) => (
-                    <li key={`${entry.code}-${entry.timestamp}`} className="rounded-2xl border border-border bg-surface px-4 py-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-accent-info">
-                          {entry.code}
-                        </span>
-                        <span className="text-[11px] text-text-secondary">
-                          {(() => {
-                            const d = new Date(entry.timestamp);
-                            return Number.isNaN(d.getTime()) ? entry.timestamp : d.toLocaleString();
-                          })()}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-[13px] font-semibold text-text-primary">{entry.message}</div>
-                      <div className="mt-1 text-[11px] text-text-secondary">
-                        {(entry.logger ?? "backend")} · {entry.level}
-                        {entry.pathname ? ` · ${entry.pathname}:${entry.lineno ?? 0}` : ""}
-                      </div>
-                      {entry.detail && (
-                        <pre className="mt-3 max-h-40 overflow-auto rounded-lg bg-neutral-dark/40 p-3 text-[11px] text-text-secondary">
-                          {entry.detail}
-                        </pre>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {diagnosticsModal}
     </>
   );
 }
