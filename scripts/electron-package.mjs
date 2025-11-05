@@ -115,7 +115,9 @@ function buildRuntime() {
   run(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], { cwd: backendDir });
   run(python, ['-m', 'pip', 'install', '-r', 'requirements.txt'], { cwd: backendDir });
 
-  run(python, ['-m', 'backend.maintenance', '--help'], { cwd: backendDir });
+   // Make sure 'join' is imported at the top if not already
+
+  run(python, [join(backendDir, 'maintenance.py'), '--help']);
 }
 
 function buildFrontend() {
