@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getDisplay, getParsedBundle, getSession, type Sex } from "./api";
+import { API_BASE, getDisplay, getParsedBundle, getSession, type Sex } from "./api";
 
 import GuestDashboard from "./guest/GuestDashboard";
 import "./guest/guest.css";
@@ -32,7 +32,7 @@ export default function Guest() {
   const [energyMap, setEnergyMap] = useState<RawPeekData | null>(null);
   const [sex, setSex] = useState<Sex>("male");
   const lastSessionId = useRef<number | null>(null);
-  const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
+  const base = API_BASE;
   const [searchParams] = useSearchParams();
   const previewParam = searchParams.get("session");
   const isMonitor = searchParams.has("monitor");

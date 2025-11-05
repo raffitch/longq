@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import errno
 import shutil
+import time
 from pathlib import Path
 from typing import Iterable, Optional
 
 from paths import sessions_dir
 
 SESSION_LOCK_NAME = "session.lock"
+_REMOVE_ATTEMPTS = 5
+_REMOVE_BACKOFF_SECONDS = 0.2
 
 
 def _session_id_to_str(session_id: int | str) -> str:
@@ -57,8 +61,7 @@ def remove_session_lock(session_id: int | str) -> None:
 
 def reset_tmp_directory(session_id: int | str) -> None:
     tmp_dir = session_path(session_id) / "tmp"
-    if tmp_dir.exists():
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+    _robust_rmtree(tmp_dir)
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -94,14 +97,12 @@ def load_upload_bytes(session_id: int | str, file_id: int, original_filename: Op
 
 def remove_files_directory(session_id: int | str) -> None:
     files_dir = session_path(session_id) / "files"
-    if files_dir.exists():
-        shutil.rmtree(files_dir, ignore_errors=True)
+    _robust_rmtree(files_dir)
 
 
 def remove_session_directory(session_id: int | str) -> None:
     path = session_path(session_id)
-    if path.exists():
-        shutil.rmtree(path, ignore_errors=True)
+    _robust_rmtree(path)
 
 
 def iter_session_dirs() -> Iterable[Path]:
@@ -109,3 +110,28 @@ def iter_session_dirs() -> Iterable[Path]:
     if not root.exists():
         return []
     return (p for p in root.iterdir() if p.is_dir())
+
+
+def _robust_rmtree(target: Path) -> None:
+    if not target.exists():
+        return
+    attempts = 0
+    last_error = None
+    while attempts < _REMOVE_ATTEMPTS:
+        try:
+            shutil.rmtree(target)
+            return
+        except FileNotFoundError:
+            return
+        except PermissionError as exc:
+            last_error = exc
+            attempts += 1
+            time.sleep(_REMOVE_BACKOFF_SECONDS * attempts)
+        except OSError as exc:
+            if exc.errno not in {errno.EACCES, errno.EPERM}:
+                raise
+            last_error = exc
+            attempts += 1
+            time.sleep(_REMOVE_BACKOFF_SECONDS * attempts)
+    if last_error is not None:
+        raise last_error

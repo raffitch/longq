@@ -1,4 +1,44 @@
-const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+function detectRuntimeApiBase(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const stored = window.sessionStorage?.getItem?.("LONGQ_API_BASE");
+    if (stored && stored.startsWith("http")) {
+      return stored;
+    }
+  } catch {
+    /* ignore sessionStorage access errors */
+  }
+  try {
+    const params = new URLSearchParams(window.location.search ?? "");
+    const fromQuery = params.get("apiBase");
+    if (fromQuery && fromQuery.startsWith("http")) {
+      try {
+        window.sessionStorage?.setItem?.("LONGQ_API_BASE", fromQuery);
+      } catch {
+        /* sessionStorage may be unavailable */
+      }
+      return fromQuery;
+    }
+  } catch {
+    /* ignore malformed search params */
+  }
+  const injected = (globalThis as any).__LONGQ_API_BASE__;
+  if (typeof injected === "string" && injected.startsWith("http")) {
+    try {
+      window.sessionStorage?.setItem?.("LONGQ_API_BASE", injected);
+    } catch {
+      /* ignore */
+    }
+    return injected;
+  }
+  return null;
+}
+
+export const API_BASE = detectRuntimeApiBase() ?? (import.meta.env.VITE_API_BASE ?? "http://localhost:8000");
+
+const BASE = API_BASE;
 
 export type ReportKind = "food" | "heavy-metals" | "hormones" | "nutrition" | "toxins" | "peek";
 export type Sex = "male" | "female";
@@ -7,6 +47,16 @@ export type FileOut = { id:number; kind:string; filename:string; status:string; 
 export type ParsedOut<T=any> = { session_id:number; kind:string; data:T };
 export type BannerOut = { message:string };
 export type ParsedBundleOut = { session_id:number; reports:Record<string, unknown> };
+export type DiagnosticEntry = {
+  code: string;
+  level: string;
+  message: string;
+  timestamp: string;
+  detail?: string | null;
+  logger?: string;
+  pathname?: string;
+  lineno?: number;
+};
 
 async function ok<T>(r: Response): Promise<T> { if (!r.ok) throw new Error(await r.text()); return r.json(); }
 
@@ -164,4 +214,14 @@ export async function closeSession(sessionId: number): Promise<void> {
   if (!r.ok) {
     throw new Error(await r.text());
   }
+}
+
+export async function getDiagnostics(limit = 20): Promise<DiagnosticEntry[]> {
+  const r = await fetch(`${BASE}/diagnostics?limit=${limit}`);
+  if (!r.ok) {
+    throw new Error(await r.text());
+  }
+  const payload = await r.json();
+  const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+  return entries as DiagnosticEntry[];
 }

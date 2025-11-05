@@ -31,6 +31,10 @@
         "to": "backend"
       },
       {
+        "from": "../backend/runtime",
+        "to": "backend-python"
+      },
+      {
         "from": "../frontend/dist",
         "to": "frontend/dist"
       }

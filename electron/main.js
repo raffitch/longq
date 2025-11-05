@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const net = require('net');
 const { spawn } = require('child_process');
 const { createStaticServer } = require('./serve');
 
@@ -11,7 +12,8 @@ let staticPort = null;
 let operatorWindow = null;
 let guestWindow = null;
 let backendLogPath = null;
-const BACKEND_PORT = Number(process.env.LONGQ_BACKEND_PORT || 8000);
+let backendPort = Number(process.env.LONGQ_BACKEND_PORT || 0);
+const DEFAULT_BACKEND_PORT = 8000;
 const UI_PORT = Number(process.env.LONGQ_UI_PORT || 5173);
 const HEALTH_TIMEOUT_MS = 200;
 const HEALTH_RETRIES = 80;
@@ -44,26 +46,116 @@ try {
   repoRoot = path.resolve(__dirname);
 }
 
+function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    tester.once('error', (err) => {
+      try {
+        tester.close();
+      } catch {
+        /* ignore */
+      }
+      if (err && (err.code === 'EADDRINUSE' || err.code === 'EACCES')) {
+        resolve(false);
+      } else {
+        console.warn('[longq] unexpected error while probing port', port, err);
+        resolve(false);
+      }
+    });
+    tester.once('listening', () => {
+      tester.close(() => resolve(true));
+    });
+    tester.listen(port, '127.0.0.1');
+  });
+}
+
+function acquireEphemeralPort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', (err) => {
+      server.close(() => reject(err));
+    });
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = address && typeof address === 'object' ? address.port : null;
+      server.close(() => {
+        if (port) {
+          resolve(port);
+        } else {
+          reject(new Error('Failed to obtain ephemeral port'));
+        }
+      });
+    });
+  });
+}
+
+async function resolveBackendPort() {
+  if (backendPort && backendPort > 0) {
+    if (await isPortAvailable(backendPort)) {
+      return backendPort;
+    }
+    console.warn('[longq] requested backend port not available:', backendPort);
+  }
+  if (await isPortAvailable(DEFAULT_BACKEND_PORT)) {
+    return DEFAULT_BACKEND_PORT;
+  }
+  const dynamic = await acquireEphemeralPort();
+  console.log('[longq] using dynamic backend port', dynamic);
+  return dynamic;
+}
+
+function pythonCandidatesForRoot(root) {
+  if (!root) {
+    return [];
+  }
+  const candidates = [];
+  if (process.platform === 'win32') {
+    candidates.push(path.join(root, 'Scripts', 'python.exe'));
+    candidates.push(path.join(root, 'python.exe'));
+  } else {
+    candidates.push(path.join(root, 'bin', 'python3'));
+    candidates.push(path.join(root, 'bin', 'python'));
+  }
+  return candidates;
+}
+
+function resolveBundledPython() {
+  const explicit = process.env.LONGQ_BUNDLED_PYTHON;
+  if (explicit && fs.existsSync(explicit)) {
+    return explicit;
+  }
+
+  const roots = [];
+  if (process.resourcesPath) {
+    roots.push(path.join(process.resourcesPath, 'backend-python'));
+  }
+  roots.push(path.join(repoRoot, 'backend', 'runtime'));
+  roots.push(path.join(repoRoot, 'backend', '.venv'));
+
+  for (const root of roots) {
+    for (const candidate of pythonCandidatesForRoot(root)) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
 function resolvePythonExecutable() {
   const candidate = process.env.LONGQ_PYTHON;
   if (candidate && fs.existsSync(candidate)) {
     return candidate;
   }
 
-  const venvDir = path.join(repoRoot, 'backend', '.venv');
-  const venvPython = path.join(
-    venvDir,
-    process.platform === 'win32' ? 'Scripts' : 'bin',
-    process.platform === 'win32' ? 'python.exe' : 'python3',
-  );
-  if (fs.existsSync(venvPython)) {
-    return venvPython;
+  const bundled = resolveBundledPython();
+  if (bundled) {
+    return bundled;
   }
 
-  if (process.platform === 'win32') {
-    return 'python';
-  }
-  return 'python3';
+  const fallback = process.platform === 'win32' ? 'python' : 'python3';
+  console.warn('[longq] falling back to system interpreter:', fallback);
+  return fallback;
 }
 
 function getUserRoot() {
@@ -257,15 +349,16 @@ function setupMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-function launchBackend(root) {
+function launchBackend(root, port) {
   return new Promise((resolve, reject) => {
     const python = resolvePythonExecutable();
+    console.log('[longq] backend interpreter:', python);
     const env = {
       ...process.env,
       LONGQ_ROOT: root,
       EXIT_WHEN_IDLE: process.env.EXIT_WHEN_IDLE || 'true',
       EXIT_IDLE_DEBOUNCE_SEC: process.env.EXIT_IDLE_DEBOUNCE_SEC || '20',
-      BACKEND_PORT: String(BACKEND_PORT),
+      BACKEND_PORT: String(port),
       PYTHONPATH: buildPythonPath(process.env.PYTHONPATH),
     };
     const runtime = runtimeDir(root);
@@ -283,7 +376,7 @@ function launchBackend(root) {
     });
     backendProcess = child;
     writeRuntimeFile(root, 'backend.pid', String(child.pid));
-    writeRuntimeFile(root, 'backend.port', String(BACKEND_PORT));
+    writeRuntimeFile(root, 'backend.port', String(port));
     const appendLog = (chunk) => {
       try {
         logStream.write(chunk);
@@ -305,7 +398,7 @@ function launchBackend(root) {
       err.logPath = backendLogPath;
       reject(err);
     });
-    waitForHealth(BACKEND_PORT)
+    waitForHealth(port)
       .then(resolve)
       .catch((err) => {
         appendLog(`\n[${new Date().toISOString()}] health check failed: ${err}\n`);
@@ -340,24 +433,50 @@ function stopBackend() {
   backendProcess = null;
 }
 
-function buildWindowUrl(pathname = '/operator') {
-  const normalizeBase = (base) => base.replace(/\/$/, '');
-  const normalizePath = (p) => (p.startsWith('/') ? p : `/${p}`);
-  const targetPath = normalizePath(pathname);
+function normalizeBaseUrl(value) {
+  if (!value) {
+    return value;
+  }
+  return value.endsWith('/') ? value : `${value}/`;
+}
 
+function resolveUiBase() {
   if (process.env.VITE_DEV_SERVER_URL) {
-    return `${normalizeBase(process.env.VITE_DEV_SERVER_URL)}${targetPath}`;
+    return normalizeBaseUrl(process.env.VITE_DEV_SERVER_URL);
   }
   if (process.env.LONGQ_UI_URL) {
-    return `${normalizeBase(process.env.LONGQ_UI_URL)}${targetPath}`;
+    return normalizeBaseUrl(process.env.LONGQ_UI_URL);
   }
   if (staticPort) {
-    return `http://127.0.0.1:${staticPort}${targetPath}`;
+    return `http://127.0.0.1:${staticPort}/`;
   }
-  return `http://127.0.0.1:${UI_PORT}${targetPath}`;
+  return `http://127.0.0.1:${UI_PORT}/`;
+}
+
+function buildWindowUrl(pathname = '/operator', queryParams = {}) {
+  const base = resolveUiBase();
+  const url = new URL(pathname, base);
+  for (const [key, value] of Object.entries(queryParams)) {
+    if (value !== undefined && value !== null) {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return url.toString();
+}
+
+function injectApiBase(win, apiBase) {
+  if (!win) {
+    return;
+  }
+  const script = `window.__LONGQ_API_BASE__ = ${JSON.stringify(apiBase)};`;
+  win.webContents.executeJavaScript(script, true).catch((err) => {
+    console.warn('[longq] failed to inject api base into window', err);
+  });
 }
 
 async function createWindows() {
+  const apiBase = `http://127.0.0.1:${backendPort}`;
+  const query = { apiBase };
   operatorWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -369,7 +488,8 @@ async function createWindows() {
   operatorWindow.on('closed', () => {
     operatorWindow = null;
   });
-  await operatorWindow.loadURL(buildWindowUrl('/operator'));
+  await operatorWindow.loadURL(buildWindowUrl('/operator', query));
+  injectApiBase(operatorWindow, apiBase);
 
   guestWindow = new BrowserWindow({
     width: 1280,
@@ -382,7 +502,8 @@ async function createWindows() {
   guestWindow.on('closed', () => {
     guestWindow = null;
   });
-  await guestWindow.loadURL(buildWindowUrl('/guest'));
+  await guestWindow.loadURL(buildWindowUrl('/guest', query));
+  injectApiBase(guestWindow, apiBase);
 }
 
 app.on('window-all-closed', () => {
@@ -407,11 +528,26 @@ app.on('activate', () => {
 app.whenReady().then(async () => {
   setupMenu();
   const root = getUserRoot();
+  try {
+    backendPort = await resolveBackendPort();
+  } catch (err) {
+    console.error('[longq] failed to allocate backend port:', err);
+    await dialog.showMessageBox({
+      type: 'error',
+      buttons: ['OK'],
+      title: 'Quantum Qi™ Backend',
+      message: 'Failed to allocate a port for the backend server.',
+      detail: err && err.message ? err.message : String(err),
+    });
+    app.exit(1);
+    return;
+  }
+  process.env.LONGQ_BACKEND_PORT = String(backendPort);
   await ensureMaintenance(root);
   resetDatabaseIfRequested(root);
   try {
     await startStaticServerIfNeeded();
-    await launchBackend(root);
+    await launchBackend(root, backendPort);
   } catch (err) {
     console.error('Failed to launch backend:', err);
     const message = err && err.message ? err.message : String(err);

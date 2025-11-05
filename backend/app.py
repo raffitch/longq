@@ -1,12 +1,24 @@
-import hashlib, time, asyncio, os, signal, logging, re, tempfile
+import asyncio
+import hashlib
+import json
+import logging
+import logging.config
+import os
+import re
+import signal
+import tempfile
+import time
+from collections import deque
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from secrets import token_hex
-from typing import List, Set, Optional, Dict
 from threading import Lock
-from contextlib import asynccontextmanager
+from typing import List, Set, Optional
 
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from sqlmodel import select, Session
 from sqlalchemy import text
 from db import init_db, get_session, engine
@@ -24,7 +36,8 @@ from schemas import (
     DisplaySet,
 )
 from parser_adapter import parse_file
-from paths import ensure_app_dirs
+from paths import ensure_app_dirs, logs_dir
+from prometheus_client import Counter, Gauge, Histogram, CONTENT_TYPE_LATEST, generate_latest
 from session_fs import (
     ensure_session_scaffold,
     touch_session_lock,
@@ -52,8 +65,152 @@ _event_loop: Optional[asyncio.AbstractEventLoop] = None
 
 logger = logging.getLogger("longevityq.backend")
 
+
+UPLOAD_COUNTER = Counter("longq_upload_reports_total", "Number of reports uploaded", ["kind"])
+UPLOAD_BYTES = Histogram(
+    "longq_upload_size_bytes",
+    "Size of uploaded report files in bytes",
+    ["kind"],
+    buckets=(64 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 2 * 1024 * 1024, 4 * 1024 * 1024, 8 * 1024 * 1024, 16 * 1024 * 1024),
+)
+PARSE_COUNTER = Counter("longq_parse_events_total", "Number of parse attempts", ["kind", "result"])
+PARSE_DURATION = Histogram(
+    "longq_parse_duration_seconds",
+    "Time spent parsing uploaded reports",
+    ["kind"],
+    buckets=(0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 60.0),
+)
+ACTIVE_JOBS_GAUGE = Gauge("longq_active_jobs", "Number of active backend jobs")
+
+DIAGNOSTICS_MAX_ENTRIES = max(1, int(os.getenv("DIAGNOSTICS_MAX_ENTRIES", "100")))
+DIAGNOSTICS_BUFFER = deque(maxlen=DIAGNOSTICS_MAX_ENTRIES)
+_LOGGING_CONFIGURED = False
+
+
+class DiagnosticsHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.levelno < logging.ERROR:
+            return
+        try:
+            message = record.getMessage()
+        except Exception:  # pragma: no cover - defensive
+            message = str(record.msg)
+        entry = {
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": message,
+            "code": _diagnostic_code(record, message),
+            "pathname": record.pathname,
+            "lineno": record.lineno,
+        }
+        if record.exc_info:
+            try:
+                entry["detail"] = self.formatException(record.exc_info)
+            except Exception:
+                entry["detail"] = None
+        elif record.stack_info:
+            entry["detail"] = record.stack_info
+        DIAGNOSTICS_BUFFER.append(entry)
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        try:
+            message = record.getMessage()
+        except Exception:  # pragma: no cover - defensive
+            message = str(record.msg)
+        payload = {
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": message,
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        if record.stack_info:
+            payload["stack_info"] = record.stack_info
+        if record.pathname:
+            payload["pathname"] = record.pathname
+            payload["lineno"] = record.lineno
+        return json.dumps(payload, ensure_ascii=False)
+
+
+def _diagnostic_code(record: logging.LogRecord, message: str) -> str:
+    raw = f"{record.name}:{record.lineno}:{message}".encode("utf-8", errors="ignore")
+    return hashlib.sha1(raw).hexdigest()[:8].upper()
+
+
+def _configure_logging() -> None:
+    global _LOGGING_CONFIGURED
+    if _LOGGING_CONFIGURED:
+        return
+
+    log_dir = logs_dir()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / os.getenv("BACKEND_LOG_FILE", "backend.jsonl")
+    max_bytes = int(os.getenv("BACKEND_LOG_MAX_BYTES", str(5 * 1024 * 1024)))
+    backup_count = int(os.getenv("BACKEND_LOG_BACKUP_COUNT", "5"))
+    level = os.getenv("BACKEND_LOG_LEVEL", "INFO").upper()
+    console_enabled = os.getenv("BACKEND_LOG_TO_STDOUT", "1").lower() in {"1", "true", "yes", "on"}
+
+    handlers = {
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(log_file),
+            "maxBytes": max_bytes,
+            "backupCount": backup_count,
+            "encoding": "utf-8",
+            "formatter": "json",
+        },
+        "diagnostics": {
+            "()": DiagnosticsHandler,
+            "level": "ERROR",
+        },
+    }
+
+    root_handlers = ["file", "diagnostics"]
+    if console_enabled:
+        handlers["console"] = {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+        }
+        root_handlers.append("console")
+
+    logging.config.dictConfig(
+        {
+            "version": 1,
+            "disable_existing_loggers": False,
+            "formatters": {"json": {"()": JsonFormatter}},
+            "handlers": handlers,
+            "root": {"level": level, "handlers": root_handlers},
+        }
+    )
+    _LOGGING_CONFIGURED = True
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 ensure_app_dirs()
+_configure_logging()
+
+logger = logging.getLogger("longevityq.backend")
+
+
+def _parse_allowed_origins(raw: Optional[str]) -> List[str]:
+    if not raw:
+        return ["http://127.0.0.1:5173", "http://localhost:5173"]
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    if not origins:
+        raise RuntimeError(
+            "ALLOWED_ORIGINS is set but empty; specify at least one origin or unset the variable for the default."
+        )
+    if "*" in origins:
+        raise RuntimeError("ALLOWED_ORIGINS may not contain wildcard '*'. Specify explicit origins.")
+    return origins
+
+
+ALLOWED_ORIGINS = _parse_allowed_origins(os.getenv("ALLOWED_ORIGINS"))
+ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "false").lower() in {"1", "true", "yes", "on"}
 
 REPORT_TYPES = {
     "food": {"label": "Food", "aliases": ["food"]},
@@ -66,24 +223,6 @@ REPORT_TYPES = {
 
 _active_jobs = 0
 _active_jobs_lock = Lock()
-
-_upload_payloads: Dict[int, bytes] = {}
-_upload_payloads_lock = Lock()
-
-
-def _store_payload(file_id: int, payload: bytes) -> None:
-    with _upload_payloads_lock:
-        _upload_payloads[file_id] = payload
-
-
-def _get_payload(file_id: int) -> Optional[bytes]:
-    with _upload_payloads_lock:
-        return _upload_payloads.get(file_id)
-
-
-def _discard_payload(file_id: int) -> None:
-    with _upload_payloads_lock:
-        _upload_payloads.pop(file_id, None)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -108,14 +247,38 @@ app = FastAPI(title="Quantum Qi™ Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=ALLOW_CREDENTIALS,
 )
 
 
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+def _recent_diagnostics(limit: int) -> List[dict]:
+    if limit <= 0:
+        return []
+    snapshot = list(DIAGNOSTICS_BUFFER)
+    if not snapshot:
+        return []
+    limited = snapshot[-limit:]
+    limited.reverse()
+    return limited
+
+
+@app.get("/diagnostics")
+def diagnostics(limit: int = 20):
+    limit = max(1, min(limit, DIAGNOSTICS_MAX_ENTRIES))
+    return {"entries": _recent_diagnostics(limit)}
 
 
 def _ensure_display_table_columns() -> None:
@@ -316,6 +479,7 @@ def _note_job_started(tag: str) -> None:
     with _active_jobs_lock:
         _active_jobs += 1
         count = _active_jobs
+    ACTIVE_JOBS_GAUGE.set(count)
     _cancel_shutdown_timer(f"Idle shutdown timer cancelled ({tag} started); {count} active job(s).")
     _log(f"Job started ({tag}); active jobs: {count}.")
 
@@ -325,6 +489,7 @@ def _note_job_finished(tag: str) -> None:
     with _active_jobs_lock:
         _active_jobs = max(0, _active_jobs - 1)
         count = _active_jobs
+    ACTIVE_JOBS_GAUGE.set(count)
     _log(f"Job finished ({tag}); active jobs: {count}.")
     _request_idle_check(f"job finished ({tag})")
 
@@ -597,12 +762,16 @@ def upload_report(session_id: int, kind: str, file: UploadFile = File(...), db=D
             )
         db.add(fr); db.commit(); db.refresh(fr)
         if fr.id is not None:
-            _store_payload(fr.id, payload)
             try:
                 store_upload_bytes(session_id, fr.id, filename, payload)
             except Exception as exc:
                 logger.exception("Failed to persist upload for session %s file %s: %s", session_id, fr.id, exc)
                 raise HTTPException(500, "Failed to persist uploaded file.")
+        try:
+            UPLOAD_COUNTER.labels(kind=kind).inc()
+            UPLOAD_BYTES.labels(kind=kind).observe(size)
+        except Exception:
+            logger.debug("Failed to record upload metrics for kind=%s", kind, exc_info=True)
         return FileOut(id=fr.id, kind=fr.kind, filename=fr.filename, status=fr.status, error=fr.error)
     finally:
         _note_job_finished("upload")
@@ -621,10 +790,10 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
         s.state = "PARSING"; fr.status = "validating"; db.add(s); db.add(fr); db.commit()
 
         touch_session_lock(fr.session_id)
-        payload = _get_payload(fr.id)
+        payload = load_upload_bytes(fr.session_id, fr.id, fr.filename)
         if not payload:
-            payload = load_upload_bytes(fr.session_id, fr.id, fr.filename)
-        if not payload:
+            PARSE_COUNTER.labels(kind=fr.kind, result="failure").inc()
+            logger.error("Report data missing for file %s (kind=%s)", fr.id, fr.kind)
             fr.status = "error"; fr.error = "Report data not available. Please upload again."; db.add(fr)
             s.state = "VALIDATING"; db.add(s); db.commit()
             raise HTTPException(400, "Report data not available. Please upload the file again.")
@@ -637,6 +806,7 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
                 suffix = ".pdf"
 
         tmp_path: Optional[Path] = None
+        parse_started = time.perf_counter()
         try:
             tmp_dir = session_tmp_path(fr.session_id)
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=tmp_dir) as tmp:
@@ -657,12 +827,16 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
                 db.add(ParsedRow(session_id=fr.session_id, kind=fr.kind, data=data))
             s.state = "READY"; db.add(s)
             db.commit()
-            _discard_payload(fr.id)
+            duration = time.perf_counter() - parse_started
+            PARSE_COUNTER.labels(kind=fr.kind, result="success").inc()
+            PARSE_DURATION.labels(kind=fr.kind).observe(duration)
             return ParsedOut(session_id=fr.session_id, kind=fr.kind, data=data)
         except Exception as e:
+            PARSE_COUNTER.labels(kind=fr.kind, result="failure").inc()
             fr.status = "error"; fr.error = str(e); db.add(fr)
             s.state = "VALIDATING"; db.add(s)
             db.commit()
+            logger.exception("Parse failed for file %s (kind=%s)", fr.id, fr.kind)
             raise HTTPException(500, f"Parse failed: {e}")
         finally:
             if tmp_path:
@@ -803,8 +977,6 @@ def close_session(session_id: int, db=Depends(get_session)):
         remove_session_lock(session_id)
     except Exception as exc:
         logger.warning("Failed to clean session %s during close: %s", session_id, exc)
-    for file_id in db.exec(select(FileRow.id).where(FileRow.session_id == session_id)):
-        _discard_payload(file_id)
     s.state = SessionState.CLOSED
     s.published = False
     s.visible_reports = None

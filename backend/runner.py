@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -17,7 +18,8 @@ except ModuleNotFoundError:
 
 
 def main() -> None:
-    config = Config(app=app, host="0.0.0.0", port=8000, reload=False)
+    port = int(os.getenv("BACKEND_PORT", "8000"))
+    config = Config(app=app, host="0.0.0.0", port=port, reload=False)
     server = Server(config)
     app.state.uvicorn_server = server
     server.run()

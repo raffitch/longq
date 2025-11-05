@@ -19,10 +19,13 @@ import {
   closeSession,
   notifyOperatorWindowOpen,
   notifyOperatorWindowClosed,
+  getDiagnostics,
+  API_BASE,
   type Session,
   type FileOut,
   type ReportKind,
   type Sex,
+  type DiagnosticEntry,
 } from "./api";
 
 const REPORT_DEFS: { kind: ReportKind; label: string; aliases: string[] }[] = [
@@ -80,10 +83,10 @@ const FIT_SCALE_MARGIN = 24;
 const ORIGINAL_WIDTH_BUFFER = 64;
 const darkInputClasses =
   "rounded-lg border border-border-strong bg-neutral-dark px-2.5 py-1.5 text-text-primary shadow-[inset_0_1px_2px_rgba(15,23,42,0.45)] outline-none caret-accent-info focus:ring-2 focus:ring-accent-info/40";
-const cardShellClasses = "rounded-3lg border border-border bg-surface text-text-primary shadow-surface-lg";
-const statusCardClasses = "rounded-3lg border border-border bg-surface text-text-primary shadow-surface-md";
+const cardShellClasses = "rounded-2xl border border-border/80 bg-surface text-text-primary shadow-sm";
+const statusCardClasses = "rounded-2xl border border-border/80 bg-surface text-text-primary shadow-sm";
 const tileBaseClasses =
-  "flex h-full min-w-0 flex-col gap-3 rounded-4lg border p-[18px] text-text-primary transition-colors duration-200";
+  "flex h-full min-w-0 flex-col gap-2.5 rounded-3xl border border-border/70 p-3.5 text-text-primary transition-colors duration-200";
 type ChipVariant = React.ComponentProps<typeof Chip>["variant"];
 
 function buildMap<T>(initial: T): Record<ReportKind, T> {
@@ -224,23 +227,27 @@ function formatReportFilename(filename: string, kind: ReportKind): string {
   const dotIndex = filename.lastIndexOf(".");
   const base = dotIndex >= 0 ? filename.slice(0, dotIndex) : filename;
   const extension = dotIndex >= 0 ? filename.slice(dotIndex) : "";
+  const totalLimit = 45;
+  const maxBaseLength = Math.max(0, totalLimit - extension.length);
+  const truncated =
+    base.length > maxBaseLength && maxBaseLength > 3
+      ? `${base.slice(0, maxBaseLength - 3)}...${extension}`
+      : `${base}${extension}`;
   const def = REPORT_DEFS.find((d) => d.kind === kind);
   if (def) {
-    const lowerBase = base.toLowerCase();
+    const lowerBase = truncated.toLowerCase();
     for (const alias of def.aliases) {
       const idx = lowerBase.lastIndexOf(alias.toLowerCase());
       if (idx !== -1) {
         const aliasEnd = idx + alias.length;
-        const before = base.slice(0, aliasEnd);
-        const after = base.slice(aliasEnd).replace(/^[\s._-]+/, "");
+        const before = truncated.slice(0, aliasEnd);
+        const after = truncated.slice(aliasEnd).replace(/^[\s._-]+/, "");
         const withBreak = after ? `${before}\n${after}` : before;
-        const extensionLine = extension ? `${withBreak.endsWith("\n") ? "" : "\n"}${extension}` : "";
-        return `${withBreak}${extensionLine}`;
+        return withBreak;
       }
     }
   }
-  const cleanedBase = base.replace(/[_-]+/g, " ");
-  return extension ? `${cleanedBase}\n${extension}` : cleanedBase;
+  return truncated.replace(/[_-]+/g, " ");
 }
 
 function formatClientName(raw: string): string {
@@ -380,6 +387,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
   const [fitPreview, setFitPreview] = useState(true);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [diagnosticsEntries, setDiagnosticsEntries] = useState<DiagnosticEntry[]>([]);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [diagnosticsFetchError, setDiagnosticsFetchError] = useState<string | null>(null);
   const [livePreviewArea, setLivePreviewArea] = useState(() => ({
     width: FIT_MAX_DIMENSION,
     height: FIT_MAX_DIMENSION,
@@ -452,17 +463,39 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const guestWindowRef = useRef<Window | null>(null);
   const replaceInputsRef = useRef<Record<ReportKind, HTMLInputElement | null>>({} as Record<ReportKind, HTMLInputElement | null>);
-  const base = (import.meta.env.VITE_API_BASE ?? "http://localhost:8000") as string;
+  const base = API_BASE;
   const autoOpenAttemptedRef = useRef(false);
   const autoOpenTimerRef = useRef<number | null>(null);
   const thresholdPanelRef = useRef<HTMLDivElement | null>(null);
   const livePreviewUserScrolledRef = useRef(false);
   const presetAutoAppliedRef = useRef(false);
   const presetSessionRef = useRef<number | null>(null);
+  const diagnosticsPollRef = useRef<number | null>(null);
 
   type OperationContext = { seq: number; signal: AbortSignal };
 
   const mountedRef = useRef(true);
+  const fetchDiagnostics = useCallback(async () => {
+    setDiagnosticsLoading(true);
+    setDiagnosticsFetchError(null);
+    try {
+      const entries = await getDiagnostics(25);
+      if (!mountedRef.current) {
+        return;
+      }
+      setDiagnosticsEntries(entries);
+    } catch (err) {
+      if (!mountedRef.current) {
+        return;
+      }
+      const message = err instanceof Error ? err.message : typeof err === "string" ? err : "Failed to load diagnostics.";
+      setDiagnosticsFetchError(message);
+    } finally {
+      if (mountedRef.current) {
+        setDiagnosticsLoading(false);
+      }
+    }
+  }, []);
   const operationSeqRef = useRef(0);
   const operationAbortRef = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -495,6 +528,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       if (operationAbortRef.current) {
         operationAbortRef.current.abort();
         operationAbortRef.current = null;
+      }
+      if (diagnosticsPollRef.current !== null) {
+        window.clearInterval(diagnosticsPollRef.current);
+        diagnosticsPollRef.current = null;
       }
     };
   }, []);
@@ -538,6 +575,26 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setter(value);
     }
   };
+
+  useEffect(() => {
+    if (!diagnosticsOpen) {
+      if (diagnosticsPollRef.current !== null) {
+        window.clearInterval(diagnosticsPollRef.current);
+        diagnosticsPollRef.current = null;
+      }
+      return;
+    }
+    fetchDiagnostics();
+    diagnosticsPollRef.current = window.setInterval(() => {
+      fetchDiagnostics();
+    }, 15000);
+    return () => {
+      if (diagnosticsPollRef.current !== null) {
+        window.clearInterval(diagnosticsPollRef.current);
+        diagnosticsPollRef.current = null;
+      }
+    };
+  }, [diagnosticsOpen, fetchDiagnostics]);
 
   const setParsedFor = (kind: ReportKind, value: boolean, ctx?: OperationContext) => {
     applyState(setParsedState, (prev) => ({ ...prev, [kind]: value }), ctx);
@@ -1527,7 +1584,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               {hasShownOnGuest
                 ? "Currently showing this session."
                 : guestWindowOpen
-                ? "Ready to reveal on the guest screen."
+                ? "Reveal on the guest screen."
                 : "Guest window not open."}
             </div>
           </div>
@@ -1651,17 +1708,17 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       onDragLeave={handleDragLeaveArea}
       onDrop={handleDrop}
       className={cn(
-        "flex flex-wrap items-center justify-between gap-3 rounded-3lg border border-border bg-surface px-4 py-3 text-[12px] text-[#4b5563] shadow-surface-md transition-colors duration-150",
+        "flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-border/70 bg-surface px-3 py-2.5 text-[11px] text-[#4b5563] shadow-sm transition-colors duration-150",
         {
           "border-[3px] border-accent-blue bg-dropzone-active": isDragActive,
         },
       )}
     >
-      <Button type="button" variant="primary" onClick={onBrowse} className="px-[18px]">
+      <Button type="button" variant="primary" onClick={onBrowse} className="px-[14px] py-1.5 text-[12px]">
         Upload
       </Button>
       <div className="flex min-w-0 flex-1 items-center justify-end text-right">
-        <div className="text-[12px] text-text-primary">Upload reports or drag files anywhere on this screen.</div>
+        <div className="text-[11px] text-text-primary">Upload or drag reports on this screen.</div>
       </div>
       <input
         ref={fileInputRef}
@@ -1688,10 +1745,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         ? publishLocked
           ? "Published and up to date."
           : "Update to reflect recent changes."
-        : "Ready to publish the selected reports."
+        : "Publish the selected reports."
       : session.published
       ? "Publishing will hide all reports from the guest view."
-      : "Upload at least one report to publish.";
+      : "< Upload to publish.";
     const sliderMax = Math.max(1, thresholdMax);
     const sliderValue = Math.min(thresholdLimit, sliderMax);
     const handleToggleSeverity = (severity: GeneralSeverity, checked: boolean) => {
@@ -1710,12 +1767,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
     return (
       <>
-        <div className="mt-4 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)]">
+        <div className="mt-3 grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)]">
           {renderDropZone()}
-          <div className="rounded-3lg border border-border bg-surface shadow-surface-md">
-            <div className="flex flex-wrap items-center gap-4 px-4 py-3 text-[12px] text-[#4b5563]">
+          <div className="rounded-2xl border border-border/70 bg-surface shadow-sm">
+            <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-[11px] text-[#4b5563]">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <div className="text-[13px] font-semibold text-text-primary">Publish Session</div>
+                <div className="text-[12px] font-semibold text-text-primary">Publish Session</div>
                 <div className="text-[11px] text-text-secondary">{publishStatusText}</div>
               </div>
               <div className="ml-auto flex items-center gap-3">
@@ -1802,9 +1859,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
             </div>
           </div>
         </div>
-        <div className="mt-3 rounded-3lg border border-border bg-surface px-4 py-3 shadow-surface-md">
-          <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-[#4b5563]">
-            <div className="text-[13px] font-semibold text-text-primary">Display Preset</div>
+        <div className="mt-2.5 rounded-2xl border border-border/70 bg-surface px-3 py-2.5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 text-[11px] text-[#4b5563]">
+            <div className="text-[12px] font-semibold text-text-primary">Display Preset</div>
             <div className="flex flex-wrap items-center gap-2">
               {PRESET_DEFS.map((preset) => {
                 const isActive = presetsEnabled && currentPreset === preset.key;
@@ -1829,11 +1886,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                 );
               })}
             </div>
-            {!presetsEnabled && (
-              <div className="ml-auto text-[11px] text-text-secondary">
-                Presets unlock after publishing reports.
-              </div>
-            )}
           </div>
         </div>
       </>
@@ -1871,27 +1923,25 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         "border border-dashed border-border bg-tile-pending shadow-none": tileState === "pending" && !hasParseError && !parsedAndSelected,
       });
 
+      const showing = isPublishedReport;
+      const wantsShow = isSelected && !showing;
       const chipVariant: ChipVariant = hasParseError
         ? "danger"
-        : isPublishedReport
+        : showing
         ? "success"
-        : parsedAndSelected
-        ? "success"
+        : wantsShow
+        ? "info"
         : tileState === "uploaded"
-        ? isSelected
-          ? "info"
-          : "muted"
+        ? "muted"
         : "muted";
       const chipLabel = hasParseError
         ? "Error"
-        : isPublishedReport
-        ? "Published"
-        : parsedAndSelected
-        ? "Parsed"
+        : showing
+        ? "Showing"
+        : wantsShow
+        ? "Show"
         : tileState === "uploaded"
-        ? isSelected
-          ? "Ready"
-          : "Uploaded"
+        ? "Hidden"
         : "Waiting";
 
       return (
@@ -1939,10 +1989,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                     {needsLocatorGuidance ? `${err} Fix the file and parse again or deselect to continue.` : err}
                   </div>
                 )}
-                {!isSelected && (
-                  <div className={cn(parsedFlag ? "text-[#60a5fa]" : "text-[#fbbf24]")}>
-                    {parsedFlag ? "Hidden from guest view" : "Deselected until re-selected"}
-                  </div>
+                {!isSelected && !parsedFlag && (
+                  <div className="text-[#fbbf24]">Deselected until re-selected</div>
                 )}
               </>
             ) : err ? (
@@ -1956,7 +2004,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                 onClick={() => onReplace(def.kind)}
                 variant="soft"
                 size="sm"
-                className="self-start rounded-full px-3 py-1.5 text-[11px]"
+                className="mt-auto self-start rounded-full px-3 py-1.5 text-[11px]"
               >
                 Replace File
               </Button>
@@ -1966,12 +2014,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       );
     });
     return (
-      <div className="mt-4 flex flex-col gap-4">
+      <div className="mt-3 flex flex-col gap-3">
         <div
           className={cn(
-            "grid gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]",
+            "grid gap-[12px] [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]",
             {
-              "rounded-[18px] border-[4px] border-dotted border-accent-blue bg-[rgba(37,99,235,0.08)] p-4": isDragActive,
+              "rounded-[16px] border-[3px] border-dotted border-accent-blue bg-[rgba(37,99,235,0.07)] p-3": isDragActive,
             },
           )}
         >
@@ -2203,50 +2251,58 @@ useEffect(() => {
   }
 
   return (
-    <div
-      onDragEnter={handleDragHighlight}
-      onDragOver={handleDragHighlight}
-      onDragLeave={handleDragLeaveArea}
-      onDrop={handleDrop}
-      className="flex flex-wrap items-start gap-6 px-4 py-4"
-    >
-      <div className={cn("flex min-w-[320px] max-w-[760px] flex-1 flex-col", session ? "" : "min-h-[calc(100vh-64px)]")}> 
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-text-primary">
-              <span className="font-logo block text-[28px] font-semibold leading-none">
-                <span className="inline-flex items-baseline">
-                  <span>Quantum Qi</span>
-                  <span className="logo-tm">TM</span>
-                </span>
-              </span>
-              <span className="mt-1 block text-[18px] font-normal tracking-[0.18em] text-teal-100 uppercase">
-                Operator Console
-              </span>
-            </h1>
-          </div>
-          {session && (
-            <Button onClick={resetSession} variant="danger" size="sm" className="px-3">
-              Start Over
-            </Button>
-          )}
-        </div>
-
-        {session ? (
-          <>
-            {renderSessionHeader()}
-            {renderUploadAndPublishRow()}
-            {renderReportTiles()}
-          </>
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-8">
-            <div className="w-full max-w-[520px] rounded-3xl border border-border bg-surface/90 p-10 shadow-surface-lg backdrop-blur-sm">
-              <h2 className="text-center text-[22px] font-semibold text-text-primary">Create a New Session</h2>
-              <p className="mt-2 text-center text-[13px] text-text-secondary">
-                Enter the guest name to begin. You can adjust details later if needed.
-              </p>
-              <form
-                className="mt-6 flex flex-col gap-3"
+    <>
+      <div
+        onDragEnter={handleDragHighlight}
+        onDragOver={handleDragHighlight}
+        onDragLeave={handleDragLeaveArea}
+        onDrop={handleDrop}
+        className="flex flex-wrap items-start gap-4 px-3 py-3"
+      >
+        <div className={cn("flex min-w-[320px] max-w-[720px] flex-1 flex-col", session ? "" : "min-h-[calc(100vh-64px)]")}> 
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <h1 className="text-text-primary">
+                  <span className="font-logo block text-[28px] font-semibold leading-none">
+                    <span className="inline-flex items-baseline">
+                      <span>Quantum Qi</span>
+                      <span className="logo-tm">TM</span>
+                    </span>
+                  </span>
+                  <span className="mt-1 block text-[18px] font-normal tracking-[0.18em] text-teal-100 uppercase">
+                    Operator Console
+                  </span>
+                </h1>
+              </div>
+              {session && (
+                <Button onClick={resetSession} variant="danger" size="sm" className="px-3">
+                  Start Over
+                </Button>
+              )}
+            </div>
+            {session ? (
+              <div className="flex flex-1 flex-col">
+                <div className="flex flex-col gap-3 overflow-y-auto px-0 pb-16">
+                  {renderSessionHeader()}
+                  {renderUploadAndPublishRow()}
+                  {renderReportTiles()}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-1 flex-col items-center gap-6 py-6">
+                <img
+                  src="/quantum-qi-logo.png"
+                  alt="Quantum Qi™ logo"
+                  className="w-44 max-w-[60vw]"
+                />
+                <div className="w-full max-w-[520px] rounded-3xl border border-border bg-surface/90 p-8 shadow-surface-lg backdrop-blur-sm">
+                  <h2 className="text-center text-[22px] font-semibold text-text-primary">Create a New Session</h2>
+                  <p className="mt-2 text-center text-[13px] text-text-secondary">
+                    Enter the guest name to begin. You can adjust details later if needed.
+                  </p>
+                  <form
+                    className="mt-5 flex flex-col gap-2.5"
                 onSubmit={async (e) => {
                   e.preventDefault();
                   const first = formatClientName(firstNameInput);
@@ -2297,7 +2353,7 @@ useEffect(() => {
                   }
                 }}
               >
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="flex flex-col gap-2.5 sm:flex-row">
                   <input
                     className={cn(darkInputClasses, "flex-1 text-[14px]" )}
                     placeholder="First name"
@@ -2343,28 +2399,41 @@ useEffect(() => {
                 </Button>
               </form>
             </div>
-          </div>
-        )}
-
-        {session && (status || error) && (
-          <div className="mt-4 flex flex-col gap-2" aria-live="polite">
-            {status && (
-              <div className="rounded-2lg border border-status-info-border bg-status-info-bg px-[14px] py-2.5 text-[12px] text-status-info-text">
-                {status}
               </div>
             )}
-            {error && (
-              <div className="rounded-2lg border border-status-error-border bg-status-error-bg px-[14px] py-2.5 text-[12px] text-status-error-text">
-                Error: {error}
+
+            {session && (status || error) && (
+              <div className="mt-3 flex flex-col gap-1.5" aria-live="polite">
+                {status && (
+                  <div className="flex items-start gap-2 rounded-xl border border-[#44627a] bg-[#1f2937] px-3 py-2 text-[11px] text-white shadow-sm">
+                    <span aria-hidden className="mt-0.5 h-2 w-2 rounded-full bg-[#60a5fa]" />
+                    {status}
+                  </div>
+                )}
+                {error && (
+                  <div className="rounded-xl border border-status-error-border/80 bg-status-error-bg/95 px-3 py-2 text-[11px] text-status-error-text">
+                    Error: {error}
+                  </div>
+                )}
               </div>
             )}
+            <div className="mt-auto flex items-center gap-2 text-[11px] text-text-secondary">
+              <button
+                type="button"
+                className="text-accent-info underline-offset-2 hover:underline"
+                onClick={() => setDiagnosticsOpen(true)}
+              >
+                Diagnostics
+              </button>
+              <span className="text-text-secondary/60">|</span>
+              <span className="text-text-secondary/80">Quantum Qi™ Operator — v1</span>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
 
-      <div className="sticky top-4 flex min-w-[300px] flex-1 self-stretch">
-        <div className="flex h-[calc(100vh-32px)] min-h-[520px] flex-1 flex-col gap-4 rounded-3lg border border-[#e5e7eb] bg-white p-4">
-          <div className="flex items-start justify-between gap-3">
+      <div className="sticky top-3 flex min-w-[280px] flex-1 self-stretch">
+        <div className="flex h-[calc(100vh-24px)] min-h-[480px] flex-1 flex-col gap-3.5 rounded-2xl border border-[#e5e7eb] bg-white p-3.5 pb-0">
+          <div className="flex items-start justify-between gap-2.5">
             <div className="flex flex-1 flex-col gap-1.5">
               <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
                 <span className="flex h-2.5 w-2.5 items-center justify-center">
@@ -2501,6 +2570,84 @@ useEffect(() => {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+      {diagnosticsOpen && (
+        <div
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-black/65 px-4"
+          onClick={() => setDiagnosticsOpen(false)}
+        >
+          <div
+            className="w-full max-w-[640px] overflow-hidden rounded-3xl border border-border bg-surface shadow-surface-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-border bg-surface-subtle px-6 py-4">
+              <div>
+                <div className="text-[16px] font-semibold text-text-primary">Diagnostics</div>
+                <div className="text-[11px] uppercase tracking-[0.3em] text-accent-info/80">
+                  Recent backend errors
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="soft"
+                  className="px-3"
+                  onClick={() => fetchDiagnostics()}
+                  disabled={diagnosticsLoading}
+                >
+                  Refresh
+                </Button>
+                <Button size="sm" variant="secondary" className="px-3" onClick={() => setDiagnosticsOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto px-6 py-4">
+              {diagnosticsLoading ? (
+                <div className="flex items-center justify-center py-8 text-[13px] text-text-secondary">
+                  Loading diagnostics…
+                </div>
+              ) : diagnosticsFetchError ? (
+                <div className="rounded-2xl border border-danger/40 bg-danger/10 p-4 text-[13px] text-danger">
+                  Failed to load diagnostics: {diagnosticsFetchError}
+                </div>
+              ) : diagnosticsEntries.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-surface-subtle px-4 py-6 text-center text-[13px] text-text-secondary">
+                  No recent errors have been recorded.
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {diagnosticsEntries.map((entry) => (
+                    <li key={`${entry.code}-${entry.timestamp}`} className="rounded-2xl border border-border bg-surface px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-accent-info">
+                          {entry.code}
+                        </span>
+                        <span className="text-[11px] text-text-secondary">
+                          {(() => {
+                            const d = new Date(entry.timestamp);
+                            return Number.isNaN(d.getTime()) ? entry.timestamp : d.toLocaleString();
+                          })()}
+                        </span>
+                      </div>
+                      <div className="mt-2 text-[13px] font-semibold text-text-primary">{entry.message}</div>
+                      <div className="mt-1 text-[11px] text-text-secondary">
+                        {(entry.logger ?? "backend")} · {entry.level}
+                        {entry.pathname ? ` · ${entry.pathname}:${entry.lineno ?? 0}` : ""}
+                      </div>
+                      {entry.detail && (
+                        <pre className="mt-3 max-h-40 overflow-auto rounded-lg bg-neutral-dark/40 p-3 text-[11px] text-text-secondary">
+                          {entry.detail}
+                        </pre>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

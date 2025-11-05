@@ -15,8 +15,8 @@ const CANON_VISIBLE_ORDER = ["very low", "low", "normal", "moderate", "high", "v
 type VisibleValue = (typeof CANON_VISIBLE_ORDER)[number];
 type VisibleArray = readonly VisibleValue[];
 
-const CURRENT_LIMIT_VERSION = "2";
-const CURRENT_VISIBLE_VERSION = "1";
+const CURRENT_LIMIT_VERSION = "3";
+const CURRENT_VISIBLE_VERSION = "2";
 
 const DEFAULT_VISIBLE = Object.freeze(["very high", "high", "moderate", "normal", "low", "very low"] as const) as VisibleArray;
 

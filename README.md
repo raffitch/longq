@@ -107,6 +107,16 @@ Useful environment overrides (place in `backend/.env` or export before running):
 | `DB_URL` | `sqlite:///./data/app.db` | Change persistence location (Postgres/SQLite/etc.). |
 | `EXIT_WHEN_IDLE` | unset | If `"true"`, server shuts down when no sockets/jobs are active. |
 | `EXIT_IDLE_DEBOUNCE_SEC` | `20` | Seconds to wait before idle shutdown fires. |
+| `ALLOWED_ORIGINS` | `http://127.0.0.1:5173,http://localhost:5173` | Comma-separated CORS whitelist. Wildcards are rejected to keep the API locked down. |
+| `CORS_ALLOW_CREDENTIALS` | `false` | Enable only if you intentionally rely on browser cookies/credentials. |
+| `BACKEND_LOG_FILE` | `backend.jsonl` | File name for rotating JSON logs (written under `data/logs/`). |
+| `BACKEND_LOG_MAX_BYTES` | `5242880` | Rotate the log once it exceeds this many bytes. |
+| `BACKEND_LOG_BACKUP_COUNT` | `5` | Number of rotated log files to retain. |
+| `BACKEND_LOG_LEVEL` | `INFO` | Root logging level for the backend (`DEBUG`, `INFO`, etc.). |
+| `BACKEND_LOG_TO_STDOUT` | `1` | Set to `0` to suppress JSON logs on stdout/stderr. |
+| `DIAGNOSTICS_MAX_ENTRIES` | `100` | Maximum number of backend error entries kept for the diagnostics panel. |
+
+- Observability endpoints: `GET /metrics` exposes Prometheus counters/gauges/histograms for uploads and parse activity, while `GET /diagnostics` returns the most recent backend error entries surfaced inside the Operator Console diagnostics pane.
 
 ### Frontend (React + Vite)
 
@@ -124,6 +134,8 @@ npm run dev
   ```
 
 - Production build: `npm run build` (outputs to `frontend/dist/`).
+- Lint: `npm run lint`
+- Format: `npm run format`
 - Preview prod build locally: `npm run preview`.
 
 ### Electron (developer preview)
@@ -161,33 +173,59 @@ Run `./scripts/check-deps.sh` to see which Python or Node packages are outdated 
 
 Packaging relies on [electron-builder](https://www.electron.build/). Ensure the production frontend build exists before invoking the packaging scripts.
 
+### Automated path
+
 ```bash
-# Prepare backend virtualenv (only needed once per machine)
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate            # or .venv\\Scripts\\activate on Windows
-pip install -r requirements.txt
-
-cd ..
-
-# Build the React app (only once per revision)
-cd frontend
-npm install          # first run only
-npm run build
-
-# macOS (.dmg written to electron/dist/)
-cd ../electron
-npm install          # first run only
-npm run dist:mac
-
-# Windows (.exe written to electron/dist/)
-# Run these commands from PowerShell or Git Bash on a Windows machine
-cd electron
-npm install          # first run only
-npm run dist:win
+# macOS or Windows (PowerShell/CMD):
+node scripts/electron-package.mjs package
 ```
 
-Both targets bundle the backend virtualenv, sources, and the pre-built frontend under the Electron app’s resources directory. The generated installers run the same maintenance and reset routines described above. On Windows you may need the Visual C++ redistributable installed before launching the packaged app.
+This command:
+
+1. Builds a clean `backend/runtime` virtualenv (unless you pass `--skip-runtime`).
+2. Builds the production frontend (`frontend/dist`).
+3. Runs the appropriate Electron packaging script for the host OS.
+4. Optionally deletes `backend/runtime` and `electron/dist` when invoked with `--clean`.
+
+Need to tidy up generated artifacts later? Run:
+
+```bash
+node scripts/electron-package.mjs clean
+```
+
+### Manual path (advanced)
+
+1. **Build the backend runtime (per platform)**
+   ```bash
+   cd backend
+   rm -rf runtime
+   python3 -m venv runtime --upgrade-deps      # Windows: py -3 -m venv runtime --upgrade-deps
+   source runtime/bin/activate                 # Windows: runtime\Scripts\activate
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   python -m backend.maintenance --help        # smoke test
+   deactivate
+   cd ..
+   ```
+   `electron-builder` copies `backend/runtime` into the packaged app at `resources/backend-python/`, so packaging will fail if the directory is missing.
+
+2. **Build the production frontend**
+   ```bash
+   cd frontend
+   npm install          # first run only
+   npm run build
+   cd ..
+   ```
+
+3. **Package Electron**
+   ```bash
+   cd electron
+   npm install          # first run only
+   npm run dist:mac     # on macOS
+   npm run dist:win     # on Windows
+   ```
+
+Both targets bundle the backend sources, the production frontend, and the dedicated runtime. The generated installers run the same maintenance routines described above. On Windows you may need the Visual C++ redistributable installed before launching the packaged app.
 
 ### Environment variables
 
@@ -196,6 +234,39 @@ Define in `frontend/.env` (or `.env.local`) as needed:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `VITE_API_BASE` | `http://localhost:8000` | URL of the FastAPI backend. |
+
+---
+
+## Quality gates
+
+Automated checks run through the GitHub Actions workflow in `.github/workflows/ci.yml`. To execute them locally:
+
+- **Frontend** (`frontend/`): `npm run lint`, `npm run format`, `npm run build`.
+- **Backend** (repo root): `ruff check backend`, `black --check backend`, `mypy backend`, `pytest`.
+
+CI executes the same commands on every push and pull request.
+
+## Licensing
+
+This project is released under the MIT License (see [`LICENSE`](LICENSE)). Third-party dependencies are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+To regenerate the notices before a release:
+
+```bash
+# JavaScript / TypeScript packages
+cd frontend
+npx license-checker --production --json > ../THIRD_PARTY_FRONTEND.json
+
+# Python packages
+python3 -m pip install pip-licenses
+python3 -m piplicenses --format=json --output-file THIRD_PARTY_BACKEND.json \
+  --packages $(python3 scripts/list_backend_packages.py)
+
+# Combine JSON into Markdown
+python3 scripts/build_third_party_notice.py
+```
+
+The helper scripts referenced above live in `scripts/`.
 
 ---
 
