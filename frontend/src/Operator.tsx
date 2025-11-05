@@ -70,7 +70,8 @@ type DroppedFile = { file: File; relativePath: string; name: string };
 type SelectionMap = Record<ReportKind, boolean>;
 type ParsedMap = Record<ReportKind, boolean>;
 const GUEST_HEARTBEAT_KEY = "longevityq_guest_heartbeat";
-const GUEST_HEARTBEAT_GRACE_MS = 8000;
+// Allow extra slack so background-tab timer throttling (which can stretch to >60s) does not trigger false "closed" states.
+const GUEST_HEARTBEAT_GRACE_MS = 180000;
 const AUTO_OPEN_GRACE_MS = 5000;
 const PREVIEW_VIEWPORT = {
   width: 1440,
@@ -1778,7 +1779,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       onDragLeave={handleDragLeaveArea}
       onDrop={handleDrop}
       className={cn(
-        "flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-border/70 bg-surface px-3 py-2.5 text-[11px] text-[#4b5563] shadow-sm transition-colors duration-150",
+        "flex h-full flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-border/70 bg-surface px-3 py-2.5 text-[11px] text-[#4b5563] shadow-sm transition-colors duration-150",
         {
           "border-[3px] border-accent-blue bg-dropzone-active": isDragActive,
         },
@@ -1837,9 +1838,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
     return (
       <>
-        <div className="mt-3 grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)]">
+        <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)] md:items-stretch">
           {renderDropZone()}
-          <div className="rounded-2xl border border-border/70 bg-surface shadow-sm">
+          <div className="flex h-full flex-col rounded-2xl border border-border/70 bg-surface shadow-sm">
             <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-[11px] text-[#4b5563]">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="text-[12px] font-semibold text-text-primary">Publish Session</div>
@@ -2438,8 +2439,13 @@ useEffect(() => {
         onDrop={handleDrop}
         className="flex flex-wrap items-start gap-4 px-3 py-3"
       >
-        <div className={cn("flex min-w-[320px] max-w-[720px] flex-1 flex-col", session ? "" : "min-h-[calc(100vh-64px)]")}> 
-          <div className="flex flex-col gap-3">
+        <div
+          className={cn(
+            "flex min-w-[320px] max-w-[720px] flex-1 flex-col self-stretch",
+            session ? "" : "min-h-[calc(100vh-64px)]",
+          )}
+        >
+          <div className="flex h-full flex-col gap-3">
             <div className="flex items-start justify-between gap-4">
               <div className="flex flex-col gap-1">
                 <h1 className="text-text-primary">
@@ -2462,7 +2468,7 @@ useEffect(() => {
             </div>
             {session ? (
               <div className="flex flex-1 flex-col">
-                <div className="flex flex-col gap-3 overflow-y-auto px-0 pb-16">
+                <div className="flex flex-col gap-3 overflow-y-auto px-0">
                   {renderSessionHeader()}
                   {renderUploadAndPublishRow()}
                   {renderReportTiles()}
