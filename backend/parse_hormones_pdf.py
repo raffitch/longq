@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import fitz  # PyMuPDF
 
@@ -27,9 +27,7 @@ def norm_key(s: str) -> str:
 
 
 RATE_BLOCK_RE = re.compile(r"Rate\s+(.+?)Page", re.IGNORECASE | re.DOTALL)
-ITEM_LINE_RE = re.compile(
-    r"^\s*(?P<item>.+?)\s*\[\s*(?P<value>-?\d+(?:\.\d+)?)\s*\]\s*$"
-)
+ITEM_LINE_RE = re.compile(r"^\s*(?P<item>.+?)\s*\[\s*(?P<value>-?\d+(?:\.\d+)?)\s*\]\s*$")
 
 FIRST3_A = [
     norm_key("(11 Beta)-Hydroxylase"),
@@ -41,7 +39,7 @@ FIRST_B = norm_key("Pregnenolone")
 LAST_B = norm_key("Testosterone")
 
 
-def _page_rate_block(page: fitz.Page) -> Optional[str]:
+def _page_rate_block(page: fitz.Page) -> str | None:
     text = page.get_text("text")
     if not text:
         return None
@@ -49,8 +47,8 @@ def _page_rate_block(page: fitz.Page) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def _parse_items(block_text: str) -> List[Tuple[str, float]]:
-    items: List[Tuple[str, float]] = []
+def _parse_items(block_text: str) -> list[tuple[str, float]]:
+    items: list[tuple[str, float]] = []
     for raw in block_text.splitlines():
         line = normalize_chars(raw)
         if not line:
@@ -68,8 +66,11 @@ def _parse_items(block_text: str) -> List[Tuple[str, float]]:
     return items
 
 
-def _extract_blocks(doc: fitz.Document, debug: bool = False) -> List[List[Tuple[str, float]]]:
-    blocks: List[List[Tuple[str, float]]] = []
+def _extract_blocks(
+    doc: fitz.Document,
+    debug: bool = False,
+) -> list[list[tuple[str, float]]]:
+    blocks: list[list[tuple[str, float]]] = []
     for idx, page in enumerate(doc):
         blk = _page_rate_block(page)
         if not blk:
@@ -80,7 +81,9 @@ def _extract_blocks(doc: fitz.Document, debug: bool = False) -> List[List[Tuple[
     return blocks
 
 
-def _find_hormone_blocks(blocks: List[List[Tuple[str, float]]]) -> Optional[Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]]:
+def _find_hormone_blocks(
+    blocks: list[list[tuple[str, float]]],
+) -> tuple[list[tuple[str, float]], list[tuple[str, float]]] | None:
     for i in range(len(blocks) - 1):
         block_a = blocks[i]
         if len(block_a) < 4:
@@ -101,7 +104,7 @@ def _find_hormone_blocks(blocks: List[List[Tuple[str, float]]]) -> Optional[Tupl
     return None
 
 
-def parse_pdf(input_path: str) -> Dict[str, Any]:
+def parse_pdf(input_path: str) -> dict[str, Any]:
     doc = fitz.open(input_path)
     try:
         blocks = _extract_blocks(doc)

@@ -1,7 +1,7 @@
 # models.py
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 from datetime import datetime
 from enum import Enum
 from sqlmodel import SQLModel, Field
@@ -32,7 +32,7 @@ class SessionRow(SQLModel, table=True):
         default="male",
         sa_column=Column(String(16), nullable=False, server_default="male"),
     )
-    visible_reports: Dict[str, bool] | None = Field(
+    visible_reports: dict[str, bool] | None = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
 
@@ -55,7 +55,7 @@ class ParsedRow(SQLModel, table=True):
     session_id: int = Field(index=True, foreign_key="sessionrow.id")
     kind: str = Field(index=True)  # "food"
     # IMPORTANT: type is dict for Pydantic; SQL side uses JSON column:
-    data: Dict[str, Any] = Field(sa_column=Column(JSON))
+    data: dict[str, Any] = Field(sa_column=Column(JSON))
     parsed_at: datetime = Field(default_factory=datetime.utcnow)
 
 

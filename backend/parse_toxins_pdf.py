@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import fitz  # PyMuPDF
 
@@ -28,15 +28,15 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip()).lower()
 
 
-def _page_lines(page: fitz.Page) -> List[str]:
+def _page_lines(page: fitz.Page) -> list[str]:
     text = page.get_text("text")
     if not text:
         return []
     return text.splitlines()
 
 
-def _parse_items(lines: List[str]) -> List[Tuple[str, float]]:
-    items: List[Tuple[str, float]] = []
+def _parse_items(lines: list[str]) -> list[tuple[str, float]]:
+    items: list[tuple[str, float]] = []
     for raw in lines:
         line = raw.strip()
         if not line:
@@ -54,7 +54,7 @@ def _parse_items(lines: List[str]) -> List[Tuple[str, float]]:
     return items
 
 
-def _extract_candidates(doc: fitz.Document) -> List[Tuple[str, float]]:
+def _extract_candidates(doc: fitz.Document) -> list[tuple[str, float]]:
     for page in doc:
         lines = _page_lines(page)
         if not lines:
@@ -77,7 +77,7 @@ def _extract_candidates(doc: fitz.Document) -> List[Tuple[str, float]]:
     return []
 
 
-def parse_pdf(input_path: str) -> Dict[str, Any]:
+def parse_pdf(input_path: str) -> dict[str, Any]:
     doc = fitz.open(input_path)
     try:
         items = _extract_candidates(doc)

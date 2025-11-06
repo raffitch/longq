@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 from fastapi import Request
 from starlette import status
@@ -12,12 +11,15 @@ _token_env = os.getenv("LONGQ_API_TOKEN")
 _allow_insecure = os.getenv("LONGQ_ALLOW_INSECURE", "false").lower() in {"1", "true", "yes", "on"}
 
 if _token_env is None and not _allow_insecure:
-    raise RuntimeError("LONGQ_API_TOKEN is not set. Set LONGQ_API_TOKEN or use LONGQ_ALLOW_INSECURE=1 for local testing.")
+    raise RuntimeError(
+        "LONGQ_API_TOKEN is not set. Set LONGQ_API_TOKEN or use LONGQ_ALLOW_INSECURE=1 "
+        "for local testing."
+    )
 
 API_TOKEN = _token_env
 
 
-def _extract_bearer_value(raw: Optional[str]) -> Optional[str]:
+def _extract_bearer_value(raw: str | None) -> str | None:
     if not raw:
         return None
     if raw.lower().startswith("bearer "):
@@ -25,13 +27,13 @@ def _extract_bearer_value(raw: Optional[str]) -> Optional[str]:
     return raw
 
 
-def _token_matches(candidate: Optional[str]) -> bool:
+def _token_matches(candidate: str | None) -> bool:
     if API_TOKEN is None:
         return True
     return candidate == API_TOKEN
 
 
-def enforce_http_middleware(request: Request) -> Optional[Response]:
+def enforce_http_middleware(request: Request) -> Response | None:
     if API_TOKEN is None:
         return None
     if request.method.upper() == "OPTIONS":

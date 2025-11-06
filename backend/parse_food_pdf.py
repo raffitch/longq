@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # (See docstring in previous attempt for details.)
 import argparse, json, math, re, statistics
-from typing import Any, Dict, List, Tuple
+from typing import Any
 import fitz  # PyMuPDF
 
 CATEGORY_NAMES = [
@@ -358,7 +358,7 @@ def decide_order_mode(items_xy, row_groups):
 
 def parse_pdf(
     input_path: str, start_page: int = 1, end_page: int = 999, order_mode: str = "auto"
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     doc = fitz.open(input_path)
     try:
         out_pages = []

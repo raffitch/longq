@@ -1,8 +1,7 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Dict, Tuple
 
-_UPLOAD_CACHE: Dict[Tuple[int, str], bytes] = {}
+_UPLOAD_CACHE: dict[tuple[int, str], bytes] = {}
 
 
 def save_upload(session_id: int, kind: str, fileobj) -> bytes:

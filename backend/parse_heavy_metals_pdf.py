@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import fitz  # PyMuPDF
 
@@ -27,7 +27,7 @@ FIRST_B = _norm_key("Silicon")
 LAST_B = _norm_key("Zirconium")
 
 
-def _rate_block(page: fitz.Page) -> Optional[str]:
+def _rate_block(page: fitz.Page) -> str | None:
     text = page.get_text("text")
     if not text:
         return None
@@ -35,8 +35,8 @@ def _rate_block(page: fitz.Page) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def _parse_items(block_text: str) -> List[Tuple[str, float]]:
-    items: List[Tuple[str, float]] = []
+def _parse_items(block_text: str) -> list[tuple[str, float]]:
+    items: list[tuple[str, float]] = []
     for raw in (block_text or "").splitlines():
         line = _norm_spaces(raw)
         if not line:
@@ -54,8 +54,8 @@ def _parse_items(block_text: str) -> List[Tuple[str, float]]:
     return items
 
 
-def _collect_blocks(doc: fitz.Document) -> List[List[Tuple[str, float]]]:
-    blocks: List[List[Tuple[str, float]]] = []
+def _collect_blocks(doc: fitz.Document) -> list[list[tuple[str, float]]]:
+    blocks: list[list[tuple[str, float]]] = []
     for page in doc:
         blk = _rate_block(page)
         if not blk:
@@ -66,7 +66,9 @@ def _collect_blocks(doc: fitz.Document) -> List[List[Tuple[str, float]]]:
     return blocks
 
 
-def _match_blocks(blocks: List[List[Tuple[str, float]]]) -> Optional[Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]]:
+def _match_blocks(
+    blocks: list[list[tuple[str, float]]],
+) -> tuple[list[tuple[str, float]], list[tuple[str, float]]] | None:
     for i in range(len(blocks) - 1):
         block_a = blocks[i]
         if len(block_a) < 4:
@@ -86,7 +88,7 @@ def _match_blocks(blocks: List[List[Tuple[str, float]]]) -> Optional[Tuple[List[
     return None
 
 
-def parse_pdf(input_path: str) -> Dict[str, Any]:
+def parse_pdf(input_path: str) -> dict[str, Any]:
     doc = fitz.open(input_path)
     try:
         blocks = _collect_blocks(doc)

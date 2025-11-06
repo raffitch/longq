@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Literal, Any, Dict
+from typing import Any, Literal
 
 
 class SessionCreate(BaseModel):
@@ -29,7 +29,7 @@ class SessionOut(BaseModel):
 
 class PublishRequest(BaseModel):
     publish: bool = True
-    selected_reports: Dict[str, bool] | None = None
+    selected_reports: dict[str, bool] | None = None
 
 
 class BannerOut(BaseModel):

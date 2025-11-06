@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 try:
     from docx import Document  # type: ignore
@@ -16,9 +16,9 @@ except Exception:  # pragma: no cover - runtime dependency
 # ---------------------------------------------------------------------------
 
 ARROW_SEPARATORS = r"(->|→|➔|➜)"
-CHEVR_SEPARATORS = r"(>|›)"
+CHEVR_SEPARATORS = "([>\\u203A])"
 VALUE_RE = re.compile(r"(\d{1,3})\b")
-VALUE_AFTER_CHEVRON = re.compile(r"(?<!-)[>›]\s*(\d{1,3})\b")
+VALUE_AFTER_CHEVRON = re.compile("(?<!-)[>\\u203A]\\s*(\\d{1,3})\\b")
 PAREN_LABEL_RE = re.compile(r"\(([^)]+)\)")
 
 TARGET_ORGAN_IDS = {
@@ -98,7 +98,8 @@ SPECIAL_METRIC_KEYS = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _tokenize_line(raw: str) -> List[str]:
+
+def _tokenize_line(raw: str) -> list[str]:
     if not raw:
         return []
     normalized = raw.replace("\u200b", " ").strip()
@@ -115,7 +116,7 @@ def _tokenize_line(raw: str) -> List[str]:
     return parts
 
 
-def _extract_value(tokens: List[str]) -> Tuple[int | None, int | None]:
+def _extract_value(tokens: list[str]) -> tuple[int | None, int | None]:
     for idx in range(len(tokens) - 1, -1, -1):
         match = VALUE_RE.search(tokens[idx])
         if match:
@@ -143,7 +144,7 @@ def _map_name_to_id(name: str) -> str | None:
     return None
 
 
-def _parse_organ_tokens(tokens: List[str]) -> Tuple[str, int] | None:
+def _parse_organ_tokens(tokens: list[str]) -> tuple[str, int] | None:
     if not tokens or not tokens[0].lower().startswith("organ"):
         return None
 
@@ -166,7 +167,7 @@ def _parse_organ_tokens(tokens: List[str]) -> Tuple[str, int] | None:
     if not filtered:
         filtered = name_tokens
 
-    candidates: List[str] = []
+    candidates: list[str] = []
     for start in range(len(filtered)):
         candidate = " ".join(filtered[start:]).strip()
         if candidate:
@@ -181,7 +182,7 @@ def _parse_organ_tokens(tokens: List[str]) -> Tuple[str, int] | None:
     return None
 
 
-def _parse_chakra_tokens(tokens: List[str]) -> Tuple[str, int] | None:
+def _parse_chakra_tokens(tokens: list[str]) -> tuple[str, int] | None:
     if not tokens or not tokens[0].lower().startswith("chakra"):
         return None
 
@@ -213,7 +214,7 @@ def _value_after_chevron(raw_line: str) -> int | None:
     return int(match.group(1))
 
 
-def _parse_organ_strict(raw_line: str) -> Tuple[str, int] | None:
+def _parse_organ_strict(raw_line: str) -> tuple[str, int] | None:
     if not raw_line.lower().startswith("organs"):
         return None
     value = _value_after_chevron(raw_line)
@@ -227,7 +228,7 @@ def _parse_organ_strict(raw_line: str) -> Tuple[str, int] | None:
     return organ_id, value
 
 
-def _parse_chakra_strict(raw_line: str) -> Tuple[str, int] | None:
+def _parse_chakra_strict(raw_line: str) -> tuple[str, int] | None:
     if not raw_line.lower().startswith("chakra"):
         return None
     value = _value_after_chevron(raw_line)
@@ -241,7 +242,10 @@ def _parse_chakra_strict(raw_line: str) -> Tuple[str, int] | None:
     return chakra_id, value
 
 
-def _parse_special_metric(tokens: List[str], raw_line: str) -> Tuple[str, Dict[str, Any]] | None:
+def _parse_special_metric(
+    tokens: list[str],
+    raw_line: str,
+) -> tuple[str, dict[str, Any]] | None:
     value, value_idx = _extract_value(tokens)
     if value is None or value_idx is None or value_idx <= 1:
         return None
@@ -267,7 +271,7 @@ def _parse_special_metric(tokens: List[str], raw_line: str) -> Tuple[str, Dict[s
     label = label_match.group(1).strip() if label_match else None
     display_name = " ".join(name_tokens).strip()
 
-    metric: Dict[str, Any] = {"value": value}
+    metric: dict[str, Any] = {"value": value}
     if display_name:
         metric["name"] = display_name
     if label:
@@ -276,12 +280,12 @@ def _parse_special_metric(tokens: List[str], raw_line: str) -> Tuple[str, Dict[s
     return metric_id, metric
 
 
-def _read_doc_all_lines(path: Path) -> List[str]:
+def _read_doc_all_lines(path: Path) -> list[str]:
     if Document is None:
         raise RuntimeError("python-docx is not installed. Run: pip install python-docx")
 
     doc = Document(str(path))
-    lines: List[str] = []
+    lines: list[str] = []
 
     for paragraph in doc.paragraphs:
         value = (paragraph.text or "").strip()
@@ -303,10 +307,12 @@ def _read_doc_all_lines(path: Path) -> List[str]:
     return lines
 
 
-def read_word_lines(path: Path) -> List[str]:
+def read_word_lines(path: Path) -> list[str]:
     suffix = path.suffix.lower()
     if suffix != ".docx":
-        raise RuntimeError(f"Unsupported file type for PEEK report: {path.suffix}. Expected '.docx'.")
+        raise RuntimeError(
+            f"Unsupported file type for PEEK report: {path.suffix}. Expected '.docx'."
+        )
     return _read_doc_all_lines(path)
 
 
@@ -314,10 +320,11 @@ def read_word_lines(path: Path) -> List[str]:
 # Public API
 # ---------------------------------------------------------------------------
 
-def parse_report(path: Path) -> Dict[str, Any]:
-    organs: Dict[str, int] = {}
-    chakras: Dict[str, int] = {}
-    metrics: Dict[str, Dict[str, Any]] = {}
+
+def parse_report(path: Path) -> dict[str, Any]:
+    organs: dict[str, int] = {}
+    chakras: dict[str, int] = {}
+    metrics: dict[str, dict[str, Any]] = {}
 
     for raw_line in read_word_lines(path):
         tokens = _tokenize_line(raw_line)
@@ -352,7 +359,7 @@ def parse_report(path: Path) -> Dict[str, Any]:
                     chakras[chakra_id] = value
             continue
 
-    result: Dict[str, Any] = {"organs": organs, "chakras": chakras}
+    result: dict[str, Any] = {"organs": organs, "chakras": chakras}
     if metrics:
         result["metrics"] = metrics
     return result
