@@ -8,3 +8,4 @@ pytest
 pytest-asyncio
 python-docx
 prometheus-client
+greenlet
