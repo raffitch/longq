@@ -9,12 +9,13 @@ import signal
 import tempfile
 import time
 from collections import deque
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from secrets import token_hex
 from threading import Lock
+from typing import Annotated
 
 from fastapi import (
     Depends,
@@ -72,6 +73,9 @@ operator_clients: set[WebSocket] = set()
 operator_window_count = 0
 _operator_window_lock = Lock()
 
+DbSessionDep = Annotated[Session, Depends(get_session)]
+UploadFileDep = Annotated[UploadFile, File(...)]
+
 _shutdown_task: asyncio.Task | None = None
 _event_loop: asyncio.AbstractEventLoop | None = None
 _background_tasks: set[asyncio.Task] = set()
@@ -118,7 +122,7 @@ class DiagnosticsHandler(logging.Handler):
         except Exception:  # pragma: no cover - defensive
             message = str(record.msg)
         entry = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=datetime.UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": message,
@@ -143,7 +147,7 @@ class JsonFormatter(logging.Formatter):
         except Exception:  # pragma: no cover - defensive
             message = str(record.msg)
         payload = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=datetime.UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": message,
@@ -263,7 +267,7 @@ _active_jobs_lock = Lock()
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     global _event_loop
     _event_loop = asyncio.get_running_loop()
     init_db()
@@ -308,12 +312,12 @@ async def _auth_middleware(
 
 
 @app.get("/healthz")
-async def healthz():
+async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/metrics")
-def metrics():
+def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
@@ -329,7 +333,7 @@ def _recent_diagnostics(limit: int) -> list[dict]:
 
 
 @app.get("/diagnostics")
-def diagnostics(limit: int = 20):
+def diagnostics(limit: int = 20) -> dict[str, list[dict]]:
     limit = max(1, min(limit, DIAGNOSTICS_MAX_ENTRIES))
     return {"entries": _recent_diagnostics(limit)}
 
@@ -449,7 +453,7 @@ def _active_jobs_count() -> int:
 
 
 def _cancel_shutdown_timer(reason: str) -> None:
-    def _cancel():
+    def _cancel() -> None:
         global _shutdown_task
         task = _shutdown_task
         if task and not task.done():
@@ -569,7 +573,7 @@ def _on_client_disconnected(kind: str) -> None:
 
 
 @app.websocket("/ws/guest")
-async def ws_guest(ws: WebSocket):
+async def ws_guest(ws: WebSocket) -> None:
     if not await ensure_websocket_authorized(ws):
         return
     await ws.accept()
@@ -591,7 +595,7 @@ async def ws_guest(ws: WebSocket):
 
 
 @app.websocket("/ws/operator")
-async def ws_operator(ws: WebSocket):
+async def ws_operator(ws: WebSocket) -> None:
     if not await ensure_websocket_authorized(ws):
         return
     await ws.accept()
@@ -612,7 +616,7 @@ async def ws_operator(ws: WebSocket):
         _on_client_disconnected("operator")
 
 
-async def broadcast(event: dict):
+async def broadcast(event: dict[str, object]) -> None:
     """Send JSON event to all connected guest screens."""
     dead = []
     for ws in list(guest_clients):
@@ -630,7 +634,7 @@ async def broadcast(event: dict):
 
 # ----------------- Operator window lifecycle -----------------
 @app.post("/operator/window-open")
-async def operator_window_open():
+async def operator_window_open() -> dict[str, int | bool]:
     global operator_window_count
     with _operator_window_lock:
         operator_window_count += 1
@@ -641,7 +645,7 @@ async def operator_window_open():
 
 
 @app.post("/operator/window-closed")
-async def operator_window_closed():
+async def operator_window_closed() -> dict[str, int | bool]:
     global operator_window_count
     with _operator_window_lock:
         operator_window_count = max(0, operator_window_count - 1)
@@ -658,7 +662,7 @@ def short_code() -> str:
 
 # ----------------- Sessions -----------------
 @app.post("/sessions", response_model=SessionOut)
-def create_session(payload: SessionCreate, db: Session = Depends(get_session)) -> SessionOut:
+def create_session(payload: SessionCreate, db: DbSessionDep) -> SessionOut:
     first = _canonicalize_name_part(payload.first_name)
     last = _canonicalize_name_part(payload.last_name)
     if not first:
@@ -694,7 +698,7 @@ def create_session(payload: SessionCreate, db: Session = Depends(get_session)) -
 
 
 @app.get("/sessions", response_model=list[SessionOut])
-def list_sessions(db: Session = Depends(get_session)) -> list[SessionOut]:
+def list_sessions(db: DbSessionDep) -> list[SessionOut]:
     rows = db.exec(select(SessionRow).order_by(SessionRow.id.desc())).all()
     return [
         SessionOut(
@@ -715,7 +719,7 @@ def list_sessions(db: Session = Depends(get_session)) -> list[SessionOut]:
 @app.get("/sessions/{session_id}", response_model=SessionOut)
 def get_session_status(
     session_id: int,
-    db: Session = Depends(get_session),
+    db: DbSessionDep,
 ) -> SessionOut:
     s = db.get(SessionRow, session_id)
     if not s:
@@ -737,7 +741,7 @@ def get_session_status(
 def update_session(
     session_id: int,
     payload: SessionUpdate,
-    db: Session = Depends(get_session),
+    db: DbSessionDep,
 ) -> SessionOut:
     s = db.get(SessionRow, session_id)
     if not s:
@@ -797,7 +801,7 @@ def update_session(
 
 # Greet immediately
 @app.get("/sessions/{session_id}/banner", response_model=BannerOut)
-def banner(session_id: int, db: Session = Depends(get_session)) -> BannerOut:
+def banner(session_id: int, db: DbSessionDep) -> BannerOut:
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")
@@ -810,8 +814,8 @@ def banner(session_id: int, db: Session = Depends(get_session)) -> BannerOut:
 def upload_report(
     session_id: int,
     kind: str,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_session),
+    file: UploadFileDep,
+    db: DbSessionDep,
 ) -> FileOut:
     s = db.get(SessionRow, session_id)
     if not s:
@@ -890,7 +894,7 @@ def upload_report(
 
 
 @app.post("/files/{file_id}/parse", response_model=ParsedOut)
-def parse_uploaded(file_id: int, db: Session = Depends(get_session)) -> ParsedOut:
+def parse_uploaded(file_id: int, db: DbSessionDep) -> ParsedOut:
     fr = db.get(FileRow, file_id)
     if not fr:
         raise HTTPException(404, "File not found")
@@ -982,7 +986,7 @@ def parse_uploaded(file_id: int, db: Session = Depends(get_session)) -> ParsedOu
 async def publish(
     session_id: int,
     req: PublishRequest,
-    db: Session = Depends(get_session),
+    db: DbSessionDep,
 ) -> dict[str, bool]:
     s = db.get(SessionRow, session_id)
     if not s:
@@ -1022,7 +1026,7 @@ async def publish(
 def get_parsed(
     session_id: int,
     kind: str,
-    db: Session = Depends(get_session),
+    db: DbSessionDep,
 ) -> ParsedOut:
     s = db.get(SessionRow, session_id)
     if not s:
@@ -1040,7 +1044,7 @@ def get_parsed(
 @app.get("/sessions/{session_id}/parsed", response_model=ParsedBundleOut)
 def get_parsed_bundle(
     session_id: int,
-    db: Session = Depends(get_session),
+    db: DbSessionDep,
 ) -> ParsedBundleOut:
     s = db.get(SessionRow, session_id)
     if not s:
@@ -1055,7 +1059,7 @@ def get_parsed_bundle(
 
 # ----------------- Guest display binding -----------------
 @app.get("/display/current", response_model=DisplayOut)
-def display_current(db: Session = Depends(get_session)) -> DisplayOut:
+def display_current(db: DbSessionDep) -> DisplayOut:
     d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
     if not d or not d.current_session_id:
         staged_name = d.staged_full_name if d else None
@@ -1094,7 +1098,7 @@ def display_current(db: Session = Depends(get_session)) -> DisplayOut:
 @app.post("/display/current")
 async def display_set(
     req: DisplaySet,
-    db: Session = Depends(get_session),
+    db: DbSessionDep,
 ) -> dict[str, bool]:
     d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
     if not d:
@@ -1130,7 +1134,7 @@ async def display_set(
 @app.post("/sessions/{session_id}/close")
 def close_session(
     session_id: int,
-    db: Session = Depends(get_session),
+    db: DbSessionDep,
 ) -> dict[str, bool]:
     s = db.get(SessionRow, session_id)
     if not s:

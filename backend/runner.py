@@ -2,14 +2,14 @@ import os
 import sys
 from pathlib import Path
 
+from uvicorn import Config, Server
+
 BACKEND_DIR = Path(__file__).resolve().parent
 REPO_DIR = BACKEND_DIR.parent
 
 for candidate in [str(BACKEND_DIR), str(REPO_DIR)]:
     if candidate not in sys.path:
         sys.path.insert(0, candidate)
-
-from uvicorn import Config, Server
 
 try:  # prefer local import when executed from backend directory
     from app import app  # type: ignore

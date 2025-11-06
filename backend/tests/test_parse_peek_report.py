@@ -1,47 +1,46 @@
 import sys
 from pathlib import Path
 
-
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 
 from backend.parse_peek_report import (
+    CHAKRA_ID_BY_NUM,
     _parse_chakra_tokens,
     _parse_organ_tokens,
     _parse_special_metric,
     _tokenize_line,
-    CHAKRA_ID_BY_NUM,
 )
 
 
-def test_tokenize_line_handles_arrows_and_chevrons():
+def test_tokenize_line_handles_arrows_and_chevrons() -> None:
     line = "Organs -> LI -> Large Intestine > 53"
     assert _tokenize_line(line) == ["Organs", "LI", "Large Intestine", "53"]
 
 
-def test_tokenize_line_handles_table_delimiters():
+def test_tokenize_line_handles_table_delimiters() -> None:
     line = "Organs | KI | Kidneys | 48"
     assert _tokenize_line(line) == ["Organs", "KI", "Kidneys", "48"]
 
 
-def test_parse_organ_tokens_returns_mapped_id_and_value():
+def test_parse_organ_tokens_returns_mapped_id_and_value() -> None:
     tokens = ["Organs", "LI", "Large Intestine", "53"]
     assert _parse_organ_tokens(tokens) == ("large_intestine", 53)
 
 
-def test_parse_organ_tokens_falls_back_to_single_token():
+def test_parse_organ_tokens_falls_back_to_single_token() -> None:
     tokens = ["Organs", "Pancreas", "41"]
     assert _parse_organ_tokens(tokens) == ("pancreas_placeholder", 41)
 
 
-def test_parse_chakra_tokens_uses_numeric_mapping():
+def test_parse_chakra_tokens_uses_numeric_mapping() -> None:
     tokens = ["Chakra", "6", "Indigo", "81"]
     chakra_id, value = _parse_chakra_tokens(tokens)
     assert chakra_id == CHAKRA_ID_BY_NUM[6]
     assert value == 81
 
 
-def test_parse_special_metric_extracts_inflammatory_score():
+def test_parse_special_metric_extracts_inflammatory_score() -> None:
     tokens = ["Organs", "As", "Inflammatory score", "7 (Very Low)"]
     source_line = "Organs -> As -> Inflammatory score > 7 (Very Low)"
     metric_id, metric_values = _parse_special_metric(tokens, source_line)
@@ -50,7 +49,7 @@ def test_parse_special_metric_extracts_inflammatory_score():
     assert metric_values["label"] == "Very Low"
 
 
-def test_parse_special_metric_extracts_immunal_defense():
+def test_parse_special_metric_extracts_immunal_defense() -> None:
     tokens = ["Organs", "Ai", "Immunal defense", "72 (Normal)"]
     source_line = "Organs -> Ai -> Immunal defense > 72 (Normal)"
     metric_id, metric_values = _parse_special_metric(tokens, source_line)

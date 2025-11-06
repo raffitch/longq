@@ -1,8 +1,8 @@
 import asyncio
 import importlib
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from types import ModuleType
-from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio

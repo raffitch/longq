@@ -4,9 +4,9 @@ import errno
 import os
 import shutil
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Iterable
 
 from paths import sessions_dir
 

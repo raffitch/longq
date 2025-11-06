@@ -2,21 +2,28 @@ import importlib
 import os
 import sys
 import time
+from collections.abc import Generator
 from pathlib import Path
+from types import ModuleType
 
 import pytest
-from collections.abc import Generator
 from pytest import MonkeyPatch
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "backend"
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
-if str(BACKEND_ROOT) not in sys.path:
-    sys.path.append(str(BACKEND_ROOT))
 
-import session_fs  # pylint: disable=wrong-import-position
-from paths import app_root
+
+def _import_backend_modules() -> tuple[ModuleType, ModuleType]:
+    if str(ROOT) not in sys.path:
+        sys.path.append(str(ROOT))
+    if str(BACKEND_ROOT) not in sys.path:
+        sys.path.append(str(BACKEND_ROOT))
+    session_fs_module = importlib.import_module("session_fs")
+    paths_module = importlib.import_module("paths")
+    return session_fs_module, paths_module.app_root
+
+
+session_fs, app_root = _import_backend_modules()
 
 
 @pytest.fixture(autouse=True)

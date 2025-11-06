@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 # (See docstring in previous attempt for details.)
-import argparse, json, math, re, statistics
+import argparse
+import json
+import math
+import re
+import statistics
+from collections.abc import Sequence
 from typing import Any
+
 import fitz  # PyMuPDF
 
 CATEGORY_NAMES = [
@@ -61,6 +67,10 @@ def severity(score: int) -> str:
     return "low"
 
 
+def _nearest_index(value: float, candidates: Sequence[float]) -> int:
+    return min(range(len(candidates)), key=lambda idx: abs(value - candidates[idx]))
+
+
 def page_spans(page: fitz.Page) -> list[dict[str, Any]]:
     d = page.get_text("dict")
     out: list[dict[str, Any]] = []
@@ -78,7 +88,10 @@ def page_spans(page: fitz.Page) -> list[dict[str, Any]]:
     return out
 
 
-def cluster_lines(spans: list[dict[str, Any]], y_tol: float = Y_LINE_TOL) -> list[list[dict[str, Any]]]:
+def cluster_lines(
+    spans: list[dict[str, Any]],
+    y_tol: float = Y_LINE_TOL,
+) -> list[list[dict[str, Any]]]:
     lines: list[list[dict[str, Any]]] = []
     for sp in spans:
         if not lines:
@@ -457,7 +470,7 @@ def parse_pdf(
             for h in headers_by_y:
                 cname = h["name"]
                 y0, y1, x0, x1 = cat_boxes[cname]
-                hy0, hy1 = header_y_map.get(cname, (None, None))
+                _hy0, hy1 = header_y_map.get(cname, (None, None))
 
                 scores = find_scores_in_box(lines, x0, x1, y0, y1)
                 if not scores:
@@ -472,23 +485,25 @@ def parse_pdf(
                     bands[0] = (max(bt, hy1 + 1.0), bb)
 
                 tmp = []
-                for g, (band_top, band_bot) in zip(row_groups, bands):
+                for g, (band_top, band_bot) in zip(row_groups, bands, strict=False):
                     g = sorted(g, key=lambda s: s["x"])
                     xs = [sc["x"] for sc in g]
-                    for i, sc in enumerate(g):
-                        win_l = max(x0, xs[i] + WINDOW_LEFT_PAD)
-                        win_r = min(x1, (xs[i + 1] - WINDOW_RIGHT_PAD) if i + 1 < len(xs) else x1)
+                    for idx, sc in enumerate(g):
+                        win_l = max(x0, xs[idx] + WINDOW_LEFT_PAD)
+                        win_r = min(
+                            x1, (xs[idx + 1] - WINDOW_RIGHT_PAD) if idx + 1 < len(xs) else x1
+                        )
                         label = collect_label_window(
                             lines, band_top, band_bot, win_l, win_r, expected_set=allowed_set
                         )
-                        if not label and i + 1 < len(xs):
+                        if not label and idx + 1 < len(xs):
                             pad = 4.0
                             label = collect_label_window(
                                 lines,
                                 band_top,
                                 band_bot,
                                 win_l,
-                                min(x1, xs[i + 1] - WINDOW_RIGHT_PAD + pad),
+                                min(x1, xs[idx + 1] - WINDOW_RIGHT_PAD + pad),
                                 expected_set=allowed_set,
                             )
                         try:
@@ -520,18 +535,11 @@ def parse_pdf(
                 else:
                     xs_all = [it["_x"] for it in tmp]
                     centers = kmeans1d_median(xs_all, k=4, iters=25)
-
-                    def col_index(x: float) -> int:
-                        return min(range(len(centers)), key=lambda i: abs(x - centers[i]))
-
                     uniq_rows = sorted({round(v, 2) for v in (it["_ry"] for it in tmp)})
 
-                    def row_index(ry: float) -> int:
-                        return min(range(len(uniq_rows)), key=lambda i: abs(ry - uniq_rows[i]))
-
                     for it in tmp:
-                        it["_col"] = col_index(it["_x"])
-                        it["_row"] = row_index(it["_ry"])
+                        it["_col"] = _nearest_index(it["_x"], centers)
+                        it["_row"] = _nearest_index(it["_ry"], uniq_rows)
                     ordered = sorted(tmp, key=lambda r: (r["_col"], r["_row"]))
 
                 items = [
@@ -557,7 +565,7 @@ def parse_pdf(
         doc.close()
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(description="Parse PDF → JSON (v6g: per-category AUTO ordering).")
     ap.add_argument("pdf")
     ap.add_argument("-o", "--out", default="parsed_food.json")

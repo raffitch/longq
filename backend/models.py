@@ -1,11 +1,14 @@
 # models.py
 from __future__ import annotations
 
-from typing import Any
 from datetime import datetime
 from enum import Enum
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, JSON, String  # <-- use Column + JSON
+from typing import Any
+
+from sqlalchemy import JSON, Column, String  # <-- use Column + JSON
+from sqlmodel import Field, SQLModel
+
+_Field = Field
 
 
 class SessionState(str, Enum):
@@ -57,10 +60,6 @@ class ParsedRow(SQLModel, table=True):
     # IMPORTANT: type is dict for Pydantic; SQL side uses JSON column:
     data: dict[str, Any] = Field(sa_column=Column(JSON))
     parsed_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-# --- Fixed guest-screen binding model ---
-from sqlmodel import Field as _Field
 
 
 class DisplayRow(SQLModel, table=True):

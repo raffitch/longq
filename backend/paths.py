@@ -2,7 +2,6 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_ROOT = _REPO_ROOT / "data"
 
@@ -46,4 +45,3 @@ def ensure_app_dirs() -> None:
     sessions_dir()
     runtime_dir()
     logs_dir()
-

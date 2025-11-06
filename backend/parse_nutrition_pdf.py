@@ -10,7 +10,6 @@ from typing import Any
 
 import fitz  # PyMuPDF
 
-
 ITEM_RE = re.compile(
     r"""
     (?P<name>[A-Za-z0-9][A-Za-z0-9\s\-\(\)\/,&']*?)

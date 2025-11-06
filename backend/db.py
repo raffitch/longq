@@ -1,6 +1,8 @@
 import os
-from sqlmodel import SQLModel, create_engine, Session
+from collections.abc import Iterator
+
 from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine
 
 from paths import backend_dir
 
@@ -20,7 +22,7 @@ else:
     )
 
 
-def init_db():
+def init_db() -> None:
     if DB_URL:
         SQLModel.metadata.create_all(engine)
     else:
@@ -28,6 +30,6 @@ def init_db():
         SQLModel.metadata.create_all(engine)
 
 
-def get_session():
+def get_session() -> Iterator[Session]:
     with Session(engine) as session:
         yield session

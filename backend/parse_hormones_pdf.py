@@ -4,11 +4,9 @@
 from __future__ import annotations
 
 import re
-import os
 from typing import Any
 
 import fitz  # PyMuPDF
-
 
 HYPHEN_CLASS = "[\-\u2010\u2011\u2012\u2013\u2014\u2212]"
 
@@ -17,7 +15,7 @@ def normalize_chars(s: str) -> str:
     if not s:
         return s
     s = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2212]", "-", s)
-    s = s.replace("β", "Beta").replace("Β", "Beta").replace("\u200b", "")
+    s =s.replace("\u03B2", "Beta").replace("\u0392", "Beta").replace("\u200B", "")
     s = re.sub(r"\s+", " ", s)
     return s.strip()
 
@@ -71,7 +69,7 @@ def _extract_blocks(
     debug: bool = False,
 ) -> list[list[tuple[str, float]]]:
     blocks: list[list[tuple[str, float]]] = []
-    for idx, page in enumerate(doc):
+    for _idx, page in enumerate(doc):
         blk = _page_rate_block(page)
         if not blk:
             continue

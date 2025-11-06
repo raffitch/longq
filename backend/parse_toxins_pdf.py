@@ -9,7 +9,6 @@ from typing import Any
 
 import fitz  # PyMuPDF
 
-
 ITEM_LINE_RE = re.compile(
     r"^\s*(?P<item>[A-Za-z0-9][A-Za-z0-9\s\-\(\)/\.]+?[A-Za-z0-9\)])\s*\[\s*(?P<value>-?\d+(?:\.\d+)?)\s*\]\s*$"
 )

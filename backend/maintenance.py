@@ -15,9 +15,9 @@ import json
 import os
 import sys
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Iterable
 
 from paths import ensure_app_dirs, runtime_dir
 from session_fs import (
@@ -25,8 +25,8 @@ from session_fs import (
     default_session_retention_hours,
     iter_session_dirs,
     purge_session_directories,
-    reset_tmp_directory,
     remove_session_lock,
+    reset_tmp_directory,
 )
 
 BACKEND_PID_NAME = "backend.pid"
