@@ -15,6 +15,7 @@ class DummyServer:
 async def idle_app(monkeypatch):
     monkeypatch.setenv("EXIT_WHEN_IDLE", "true")
     monkeypatch.setenv("EXIT_IDLE_DEBOUNCE_SEC", "0.05")
+    monkeypatch.setenv("LONGQ_API_TOKEN", "test-token")
     repo_root = Path(__file__).resolve().parents[2]
     backend_dir = repo_root / "backend"
     monkeypatch.chdir(backend_dir)

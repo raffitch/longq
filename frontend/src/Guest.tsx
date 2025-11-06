@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { API_BASE, getDisplay, getParsedBundle, getSession, type Sex } from "./api";
+import { API_BASE, getApiToken, getDisplay, getParsedBundle, getSession, type Sex } from "./api";
 
 import GuestDashboard from "./guest/GuestDashboard";
 import "./guest/guest.css";
@@ -42,6 +42,18 @@ export default function Guest() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [serverDown, setServerDown] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
+
+  const buildWebSocketUrl = useCallback((): string | null => {
+    const token = getApiToken();
+    if (!token) {
+      return null;
+    }
+    const wsBase = base.replace(/^http/, "ws");
+    const url = new URL(wsBase);
+    url.pathname = `${url.pathname.replace(/\/$/, "")}/ws/guest`;
+    url.searchParams.set("token", token);
+    return url.toString();
+  }, [base]);
 
   useEffect(() => {
     document.title = "Quantum Qi™ - Guest Portal";
@@ -243,7 +255,33 @@ export default function Guest() {
     if (isPreview) {
       return;
     }
-    const wsUrl = base.replace(/^http/, "ws") + "/ws/guest";
+    const attemptConnect = () => {
+      const wsUrl = buildWebSocketUrl();
+      if (!wsUrl) {
+        reconnectTimer = window.setTimeout(attemptConnect, 500);
+        return;
+      }
+      connectWithUrl(wsUrl);
+    };
+
+    const connectWithUrl = (wsUrl: string) => {
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => { noteServerState(false); };
+        ws.onmessage = () => { refreshOnce(); };
+        ws.onclose = () => {
+          noteServerState(true);
+          reconnectTimer = window.setTimeout(attemptConnect, 3000);
+        };
+        ws.onerror = () => {
+          noteServerState(true);
+          try { ws?.close(); } catch {}
+        };
+      } catch {
+        noteServerState(true);
+        reconnectTimer = window.setTimeout(attemptConnect, 3000);
+      }
+    };
     let ws: WebSocket | null = null;
     let reconnectTimer: number | null = null;
     let disposed = false;
@@ -257,26 +295,7 @@ export default function Guest() {
       }
     };
 
-    function connect() {
-      try {
-        ws = new WebSocket(wsUrl);
-        ws.onopen = () => { noteServerState(false); };
-        ws.onmessage = () => { refreshOnce(); };
-        ws.onclose = () => {
-          noteServerState(true);
-          reconnectTimer = window.setTimeout(connect, 3000);
-        };
-        ws.onerror = () => {
-          noteServerState(true);
-          try { ws?.close(); } catch {}
-        };
-      } catch {
-        noteServerState(true);
-        reconnectTimer = window.setTimeout(connect, 3000);
-      }
-    }
-
-    connect();
+    attemptConnect();
     const t = window.setInterval(refreshOnce, 30000);
     refreshOnce();
 
@@ -286,7 +305,7 @@ export default function Guest() {
       clearInterval(t);
       try { ws?.close(); } catch {}
     };
-  }, [base, isPreview]);
+  }, [base, buildWebSocketUrl, isPreview]);
 
   useEffect(() => {
     if (!isMonitor) {

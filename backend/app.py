@@ -16,7 +16,7 @@ from secrets import token_hex
 from threading import Lock
 from typing import List, Set, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from sqlmodel import select, Session
@@ -43,10 +43,13 @@ from session_fs import (
     touch_session_lock,
     reset_tmp_directory,
     remove_session_lock,
+    remove_files_directory,
+    remove_session_directory,
     store_upload_bytes,
     load_upload_bytes,
     session_tmp_path,
 )
+from security import enforce_http_middleware, ensure_websocket_authorized
 
 
 EXIT_WHEN_IDLE = os.getenv("EXIT_WHEN_IDLE", "false").lower() in {"1", "true", "yes", "on"}
@@ -252,6 +255,18 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=ALLOW_CREDENTIALS,
 )
+
+_PUBLIC_HTTP_PATHS = {"/healthz"}
+
+
+@app.middleware("http")
+async def _auth_middleware(request: Request, call_next):
+    if request.url.path in _PUBLIC_HTTP_PATHS:
+        return await call_next(request)
+    unauthorized = enforce_http_middleware(request)
+    if unauthorized is not None:
+        return unauthorized
+    return await call_next(request)
 
 
 @app.get("/healthz")
@@ -506,6 +521,8 @@ def _on_client_disconnected(kind: str) -> None:
 
 @app.websocket("/ws/guest")
 async def ws_guest(ws: WebSocket):
+    if not await ensure_websocket_authorized(ws):
+        return
     await ws.accept()
     guest_clients.add(ws)
     _on_client_connected("guest")
@@ -526,6 +543,8 @@ async def ws_guest(ws: WebSocket):
 
 @app.websocket("/ws/operator")
 async def ws_operator(ws: WebSocket):
+    if not await ensure_websocket_authorized(ws):
+        return
     await ws.accept()
     operator_clients.add(ws)
     _on_client_connected("operator")
@@ -861,6 +880,7 @@ async def publish(session_id: int, req: PublishRequest, db=Depends(get_session))
     db.add(s); db.commit()
     if s.published:
         try:
+            remove_files_directory(session_id)
             reset_tmp_directory(session_id)
             remove_session_lock(session_id)
         except Exception as exc:
@@ -973,8 +993,7 @@ def close_session(session_id: int, db=Depends(get_session)):
     if not s:
         raise HTTPException(404, "Session not found")
     try:
-        reset_tmp_directory(session_id)
-        remove_session_lock(session_id)
+        remove_session_directory(session_id)
     except Exception as exc:
         logger.warning("Failed to clean session %s during close: %s", session_id, exc)
     s.state = SessionState.CLOSED

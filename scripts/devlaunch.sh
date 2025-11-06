@@ -11,6 +11,8 @@ FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 IDLE_SHUTDOWN_DELAY="${IDLE_SHUTDOWN_DELAY:-5}"
+LONGQ_API_TOKEN="${LONGQ_API_TOKEN:-dev-longq-token}"
+export LONGQ_API_TOKEN
 
 ensure_python() {
   if [[ ! -x "$BACKEND_PYTHON" ]]; then
@@ -39,7 +41,7 @@ PY
   fi
   if [[ "$current_hash" != "$cached_hash" ]]; then
     echo "Installing backend requirements..."
-    (cd "$BACKEND_DIR" && "$BACKEND_PYTHON" -m pip install -r requirements.txt)
+    (cd "$BACKEND_DIR" && "$BACKEND_PYTHON" -m pip install --require-hashes -r requirements.txt)
     printf '%s' "$current_hash" >"$hash_file"
   fi
 }
@@ -160,10 +162,10 @@ echo "Starting Quantum Qi™ dev environment..."
 echo "  Backend → http://127.0.0.1:$BACKEND_PORT"
 echo "  Frontend → http://$FRONTEND_HOST:$FRONTEND_PORT"
 
-(cd "$BACKEND_DIR" && EXIT_WHEN_IDLE=true EXIT_IDLE_DEBOUNCE_SEC="$IDLE_SHUTDOWN_DELAY" EXIT_IDLE_SUPERVISOR_PID="$$" WATCHFILES_FORCE_POLLING=1 "$BACKEND_PYTHON" -m uvicorn app:app --host 127.0.0.1 --port "$BACKEND_PORT") &
+(cd "$BACKEND_DIR" && EXIT_WHEN_IDLE=true EXIT_IDLE_DEBOUNCE_SEC="$IDLE_SHUTDOWN_DELAY" EXIT_IDLE_SUPERVISOR_PID="$$" WATCHFILES_FORCE_POLLING=1 LONGQ_API_TOKEN="$LONGQ_API_TOKEN" "$BACKEND_PYTHON" -m uvicorn app:app --host 127.0.0.1 --port "$BACKEND_PORT") &
 BACKEND_PID=$!
 
-(cd "$FRONTEND_DIR" && VITE_API_BASE="http://127.0.0.1:$BACKEND_PORT" npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT" --strictPort) &
+(cd "$FRONTEND_DIR" && VITE_API_BASE="http://127.0.0.1:$BACKEND_PORT" VITE_LONGQ_API_TOKEN="$LONGQ_API_TOKEN" npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT" --strictPort) &
 FRONTEND_PID=$!
 
 launch_browser() {

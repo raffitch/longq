@@ -80,7 +80,9 @@ If you prefer to manage each service yourself instead of `scripts/devlaunch.sh`,
 cd backend
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
+# Generate a bearer token the frontend/electron clients will use
+export LONGQ_API_TOKEN=$(python -c 'import secrets; print(secrets.token_hex(24))')
 
 # Optional: set .env values (see below)
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
@@ -90,8 +92,16 @@ Dependencies are pinned in `requirements.txt`. When you need to upgrade:
 
 ```bash
 pip install pip-tools
-pip-compile requirements.in --output-file requirements.txt
-pip install -r requirements.txt
+pip-compile --generate-hashes requirements.in --output-file requirements.txt
+pip install --require-hashes -r requirements.txt
+```
+
+Backend quality gates can be exercised locally with [tox](https://tox.wiki/):
+
+```bash
+tox -e lint     # Ruff
+tox -e format   # Black
+tox -e type     # mypy
 ```
 
 > PyMuPDF currently publishes wheels for Python ≤ 3.12. Using 3.13 or newer will force a source build that requires manual TLS configuration. Stick to Python 3.12 unless you are prepared to compile MuPDF yourself.
@@ -115,6 +125,9 @@ Useful environment overrides (place in `backend/.env` or export before running):
 | `BACKEND_LOG_LEVEL` | `INFO` | Root logging level for the backend (`DEBUG`, `INFO`, etc.). |
 | `BACKEND_LOG_TO_STDOUT` | `1` | Set to `0` to suppress JSON logs on stdout/stderr. |
 | `DIAGNOSTICS_MAX_ENTRIES` | `100` | Maximum number of backend error entries kept for the diagnostics panel. |
+| `LONGQ_API_TOKEN` | _(required)_ | Bearer token clients must send with API/WebSocket requests (`Authorization: Bearer …`). Generate a strong random value for production. |
+| `LONGQ_ALLOW_INSECURE` | unset | Set to `1` only for local experiments to bypass auth (not recommended). |
+| `SESSION_FILE_RETENTION_HOURS` | `168` | Hours to retain per-session upload directories before maintenance purges them. |
 
 - Observability endpoints: `GET /metrics` exposes Prometheus counters/gauges/histograms for uploads and parse activity, while `GET /diagnostics` returns the most recent backend error entries surfaced inside the Operator Console diagnostics pane.
 
@@ -123,7 +136,7 @@ Useful environment overrides (place in `backend/.env` or export before running):
 ```bash
 cd frontend
 npm install
-npm run dev
+VITE_API_BASE=http://localhost:8000 VITE_LONGQ_API_TOKEN=$LONGQ_API_TOKEN npm run dev
 ```
 
 - Vite serves the app at `http://localhost:5173` by default.
@@ -137,6 +150,9 @@ npm run dev
 - Lint: `npm run lint`
 - Format: `npm run format`
 - Preview prod build locally: `npm run preview`.
+
+> **Auth token:** The backend rejects unauthenticated requests. `scripts/devlaunch.sh` and the Electron shell inject a token automatically; when running manually, set both `LONGQ_API_TOKEN` (backend) and `VITE_LONGQ_API_TOKEN` (frontend) to the same value.
+> Always deploy behind HTTPS (e.g., with Nginx/Traefik terminating TLS) so bearer tokens are never sent in clear text.
 
 ### Electron (developer preview)
 
@@ -202,7 +218,7 @@ node scripts/electron-package.mjs clean
    python3 -m venv runtime --upgrade-deps      # Windows: py -3 -m venv runtime --upgrade-deps
    source runtime/bin/activate                 # Windows: runtime\Scripts\activate
    pip install --upgrade pip
-   pip install -r requirements.txt
+   pip install --require-hashes -r requirements.txt
    python -m backend.maintenance --help        # smoke test
    deactivate
    cd ..

@@ -21,6 +21,7 @@ import {
   notifyOperatorWindowClosed,
   getDiagnostics,
   API_BASE,
+  getApiToken,
   type Session,
   type FileOut,
   type ReportKind,
@@ -466,6 +467,22 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const guestWindowRef = useRef<Window | null>(null);
   const replaceInputsRef = useRef<Record<ReportKind, HTMLInputElement | null>>({} as Record<ReportKind, HTMLInputElement | null>);
   const base = API_BASE;
+
+  const buildWebSocketUrl = useCallback(
+    (pathname: string): string | null => {
+      const token = getApiToken();
+      if (!token) {
+        return null;
+      }
+      const wsBase = base.replace(/^http/, "ws");
+      const url = new URL(wsBase);
+      const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
+      url.pathname = `${url.pathname.replace(/\/$/, "")}${normalizedPath}`;
+      url.searchParams.set("token", token);
+      return url.toString();
+    },
+    [base],
+  );
   const autoOpenAttemptedRef = useRef(false);
   const autoOpenTimerRef = useRef<number | null>(null);
   const thresholdPanelRef = useRef<HTMLDivElement | null>(null);
@@ -945,7 +962,34 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   }, []);
 
   useEffect(() => {
-    const wsUrl = base.replace(/^http/, "ws") + "/ws/operator";
+    const attemptConnect = () => {
+      const wsUrl = buildWebSocketUrl("/ws/operator");
+      if (!wsUrl) {
+        reconnectTimer = window.setTimeout(attemptConnect, 500);
+        return;
+      }
+      connectWithUrl(wsUrl);
+    };
+
+    const connectWithUrl = (wsUrl: string) => {
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => noteState(false);
+        ws.onmessage = () => {};
+        ws.onclose = () => {
+          noteState(true);
+          reconnectTimer = window.setTimeout(attemptConnect, 3000);
+        };
+        ws.onerror = () => {
+          noteState(true);
+          try { ws?.close(); } catch {}
+        };
+      } catch {
+        noteState(true);
+        reconnectTimer = window.setTimeout(attemptConnect, 3000);
+      }
+    };
+
     let ws: WebSocket | null = null;
     let reconnectTimer: number | null = null;
     let disposed = false;
@@ -958,32 +1002,13 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       }
     };
 
-    function connect() {
-      try {
-        ws = new WebSocket(wsUrl);
-        ws.onopen = () => noteState(false);
-        ws.onmessage = () => {};
-        ws.onclose = () => {
-          noteState(true);
-          reconnectTimer = window.setTimeout(connect, 3000);
-        };
-        ws.onerror = () => {
-          noteState(true);
-          try { ws?.close(); } catch {}
-        };
-      } catch {
-        noteState(true);
-        reconnectTimer = window.setTimeout(connect, 3000);
-      }
-    }
-
-    connect();
+    attemptConnect();
     return () => {
       disposed = true;
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       try { ws?.close(); } catch {}
     };
-  }, [base]);
+  }, [base, buildWebSocketUrl]);
 
   const handleDragLeaveArea = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();

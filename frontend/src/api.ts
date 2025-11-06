@@ -1,44 +1,160 @@
-function detectRuntimeApiBase(): string | null {
+const DEV_MODE = Boolean(import.meta.env.DEV);
+
+const STORAGE_KEYS = {
+  base: "LONGQ_API_BASE",
+  token: "LONGQ_API_TOKEN",
+} as const;
+
+const globalScope = typeof globalThis !== "undefined" ? (globalThis as Record<string, unknown>) : {};
+
+function persistValue(key: string, value: string | null): void {
   if (typeof window === "undefined") {
-    return null;
+    return;
   }
   try {
-    const stored = window.sessionStorage?.getItem?.("LONGQ_API_BASE");
-    if (stored && stored.startsWith("http")) {
-      return stored;
+    if (value) {
+      window.sessionStorage?.setItem?.(key, value);
+      window.localStorage?.setItem?.(key, value);
+    } else {
+      window.sessionStorage?.removeItem?.(key);
+      window.localStorage?.removeItem?.(key);
     }
   } catch {
-    /* ignore sessionStorage access errors */
+    /* ignore storage errors */
   }
-  try {
-    const params = new URLSearchParams(window.location.search ?? "");
-    const fromQuery = params.get("apiBase");
-    if (fromQuery && fromQuery.startsWith("http")) {
-      try {
-        window.sessionStorage?.setItem?.("LONGQ_API_BASE", fromQuery);
-      } catch {
-        /* sessionStorage may be unavailable */
-      }
-      return fromQuery;
-    }
-  } catch {
-    /* ignore malformed search params */
-  }
-  const injected = (globalThis as any).__LONGQ_API_BASE__;
-  if (typeof injected === "string" && injected.startsWith("http")) {
-    try {
-      window.sessionStorage?.setItem?.("LONGQ_API_BASE", injected);
-    } catch {
-      /* ignore */
-    }
+}
+
+function readInjectedBase(): string | null {
+  const injected = globalScope.__LONGQ_API_BASE__;
+  return typeof injected === "string" && injected.startsWith("http") ? injected : null;
+}
+
+function readInjectedToken(): string | null {
+  const injected = globalScope.__LONGQ_API_TOKEN__;
+  if (typeof injected === "string" && injected.length > 0) {
+    persistValue(STORAGE_KEYS.token, injected);
     return injected;
   }
   return null;
 }
 
-export const API_BASE = detectRuntimeApiBase() ?? (import.meta.env.VITE_API_BASE ?? "http://localhost:8000");
+function readStoredValue(key: string): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const read = (storage: Storage | undefined | null) => {
+    if (!storage) return null;
+    try {
+      const value = storage.getItem(key);
+      return typeof value === "string" && value.length > 0 ? value : null;
+    } catch {
+      return null;
+    }
+  };
+  return read(window.sessionStorage) ?? read(window.localStorage);
+}
 
+function detectRuntimeApiBase(): string {
+  const injected = readInjectedBase();
+  if (injected) {
+    return injected;
+  }
+  const stored = readStoredValue(STORAGE_KEYS.base);
+  if (stored) {
+    return stored;
+  }
+  if (DEV_MODE && typeof window !== "undefined") {
+    try {
+      const params = new URLSearchParams(window.location.search ?? "");
+      const fromQuery = params.get("apiBase");
+      if (fromQuery && fromQuery.startsWith("http")) {
+        return fromQuery;
+      }
+    } catch {
+      /* ignore malformed search params */
+    }
+  }
+  const fallback = import.meta.env.VITE_API_BASE;
+  if (typeof fallback === "string" && fallback.startsWith("http")) {
+    return fallback;
+  }
+  return "http://localhost:8000";
+}
+
+function detectInitialApiToken(): string | null {
+  const injected = readInjectedToken();
+  if (injected) {
+    return injected;
+  }
+  if (DEV_MODE && typeof window !== "undefined") {
+    try {
+      const params = new URLSearchParams(window.location.search ?? "");
+      const fromQuery = params.get("apiToken");
+      if (fromQuery && fromQuery.length > 0) {
+        persistValue(STORAGE_KEYS.token, fromQuery);
+        return fromQuery;
+      }
+    } catch {
+      /* ignore malformed params */
+    }
+  }
+  const envToken = import.meta.env.VITE_LONGQ_API_TOKEN;
+  if (typeof envToken === "string" && envToken.length > 0) {
+    return envToken;
+  }
+  const stored = readStoredValue(STORAGE_KEYS.token);
+  if (stored) {
+    return stored;
+  }
+  return null;
+}
+
+export const API_BASE = detectRuntimeApiBase();
 const BASE = API_BASE;
+
+let runtimeToken: string | null = detectInitialApiToken();
+
+if (typeof window !== "undefined") {
+  persistValue(STORAGE_KEYS.base, API_BASE);
+  if (runtimeToken) {
+    persistValue(STORAGE_KEYS.token, runtimeToken);
+  }
+}
+
+export function getApiToken(): string | null {
+  if (runtimeToken && runtimeToken.length > 0) {
+    return runtimeToken;
+  }
+  const injected = readInjectedToken();
+  if (injected) {
+    runtimeToken = injected;
+    return runtimeToken;
+  }
+  if (DEV_MODE) {
+    const stored = readStoredValue(STORAGE_KEYS.token);
+    if (stored) {
+      runtimeToken = stored;
+      return runtimeToken;
+    }
+  }
+  return null;
+}
+
+export function setApiToken(token: string | null, persist = true): void {
+  runtimeToken = token;
+  if (persist) {
+    persistValue(STORAGE_KEYS.token, token);
+  }
+}
+
+function authHeaders(headers: Record<string, string> = {}): Record<string, string> {
+  const next = { ...headers };
+  const token = getApiToken();
+  if (token && !next.Authorization) {
+    next.Authorization = `Bearer ${token}`;
+  }
+  return next;
+}
 
 export type ReportKind = "food" | "heavy-metals" | "hormones" | "nutrition" | "toxins" | "peek";
 export type Sex = "male" | "female";
@@ -64,7 +180,7 @@ export async function createSession(first_name: string, last_name: string, sex: 
   return ok(
     await fetch(`${BASE}/sessions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ first_name, last_name, sex }),
     }),
   );
@@ -75,20 +191,20 @@ export async function updateSession(
 ): Promise<Session> {
   return ok(await fetch(`${BASE}/sessions/${sessionId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(data),
   }));
 }
 export async function banner(sessionId:number): Promise<BannerOut> {
-  return ok(await fetch(`${BASE}/sessions/${sessionId}/banner`));
+  return ok(await fetch(`${BASE}/sessions/${sessionId}/banner`, { headers: authHeaders() }));
 }
 export async function uploadPdf(sessionId:number, kind:ReportKind, file:File): Promise<FileOut> {
   const fd = new FormData();
   fd.append("file", file);
-  return ok(await fetch(`${BASE}/sessions/${sessionId}/upload/${kind}`, { method:"POST", body: fd }));
+  return ok(await fetch(`${BASE}/sessions/${sessionId}/upload/${kind}`, { method:"POST", body: fd, headers: authHeaders() }));
 }
 export async function parseFile(fileId:number): Promise<ParsedOut> {
-  return ok(await fetch(`${BASE}/files/${fileId}/parse`, { method:"POST" }));
+  return ok(await fetch(`${BASE}/files/${fileId}/parse`, { method:"POST", headers: authHeaders() }));
 }
 export async function publish(
   sessionId: number,
@@ -102,17 +218,17 @@ export async function publish(
   return ok(
     await fetch(`${BASE}/sessions/${sessionId}/publish`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     }),
   );
 }
 export async function getParsedBundle(sessionId: number): Promise<ParsedBundleOut> {
-  return ok(await fetch(`${BASE}/sessions/${sessionId}/parsed`));
+  return ok(await fetch(`${BASE}/sessions/${sessionId}/parsed`, { headers: authHeaders() }));
 }
 
 export async function getSession(sessionId:number): Promise<Session> {
-  return ok(await fetch(`${BASE}/sessions/${sessionId}`));
+  return ok(await fetch(`${BASE}/sessions/${sessionId}`, { headers: authHeaders() }));
 }
 
 export type DisplaySessionPayload = {
@@ -142,7 +258,7 @@ export async function setDisplaySession(payload: DisplaySessionPayload): Promise
   }
   const r = await fetch(`${BASE}/display/current`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(await r.text());
@@ -161,7 +277,7 @@ export async function getDisplay(): Promise<{
   sex?: Sex | null;
   staged_sex?: Sex | null;
 }> {
-  const r = await fetch(`${BASE}/display/current`);
+  const r = await fetch(`${BASE}/display/current`, { headers: authHeaders() });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
@@ -170,7 +286,7 @@ export async function notifyOperatorWindowOpen(): Promise<void> {
   try {
     await fetch(`${BASE}/operator/window-open`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: "{}",
     });
   } catch {
@@ -180,23 +296,11 @@ export async function notifyOperatorWindowOpen(): Promise<void> {
 
 export function notifyOperatorWindowClosed(): void {
   const url = `${BASE}/operator/window-closed`;
-  if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
-    try {
-      let body: BodyInit | null = null;
-      if (typeof Blob !== "undefined") {
-        body = new Blob(["{}"], { type: "application/json" });
-      }
-      navigator.sendBeacon(url, body);
-      return;
-    } catch {
-      /* ignore sendBeacon errors */
-    }
-  }
   if (typeof fetch !== "undefined") {
     try {
       void fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: "{}",
         keepalive: true,
       });
@@ -209,7 +313,7 @@ export function notifyOperatorWindowClosed(): void {
 export async function closeSession(sessionId: number): Promise<void> {
   const r = await fetch(`${BASE}/sessions/${sessionId}/close`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
   });
   if (!r.ok) {
     throw new Error(await r.text());
@@ -217,7 +321,7 @@ export async function closeSession(sessionId: number): Promise<void> {
 }
 
 export async function getDiagnostics(limit = 20): Promise<DiagnosticEntry[]> {
-  const r = await fetch(`${BASE}/diagnostics?limit=${limit}`);
+  const r = await fetch(`${BASE}/diagnostics?limit=${limit}`, { headers: authHeaders() });
   if (!r.ok) {
     throw new Error(await r.text());
   }

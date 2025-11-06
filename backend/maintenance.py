@@ -22,7 +22,9 @@ from typing import Iterable, List, Optional
 from paths import ensure_app_dirs, runtime_dir
 from session_fs import (
     SESSION_LOCK_NAME,
+    default_session_retention_hours,
     iter_session_dirs,
+    purge_session_directories,
     reset_tmp_directory,
     remove_session_lock,
 )
@@ -47,6 +49,13 @@ class RuntimeCleanupReport:
     port_removed: bool = False
     stale_pid: Optional[int] = None
     error: Optional[str] = None
+
+
+@dataclass
+class SessionRetentionReport:
+    session: str
+    age_hours: float
+    removed: bool
 
 
 def remove_tmp_directory(path: Path, dry_run: bool) -> bool:
@@ -166,17 +175,29 @@ def remove_runtime_files(dry_run: bool = False) -> RuntimeCleanupReport:
     return report
 
 
-def clean_all(max_lock_age: int = DEFAULT_LOCK_STALE_SECONDS, nuke_tmp: bool = False, dry_run: bool = False) -> dict:
+def clean_all(
+    max_lock_age: int = DEFAULT_LOCK_STALE_SECONDS,
+    nuke_tmp: bool = False,
+    purge_sessions: bool = False,
+    session_max_age_hours: float = default_session_retention_hours(),
+    dry_run: bool = False,
+) -> dict:
     ensure_app_dirs()
     summary = {
         "stale_locks": [],
         "tmp_removed": [],
         "runtime": None,
+        "session_retention": [],
     }
     summary["stale_locks"] = [report.__dict__ for report in prune_stale_session_locks(max_age_seconds=max_lock_age, dry_run=dry_run)]
     if nuke_tmp:
         summary["tmp_removed"] = [report.__dict__ for report in nuke_all_tmp_dirs(dry_run=dry_run)]
     summary["runtime"] = remove_runtime_files(dry_run=dry_run).__dict__
+    if purge_sessions:
+        summary["session_retention"] = [
+            SessionRetentionReport(session=res.session, age_hours=res.age_hours, removed=res.removed).__dict__
+            for res in purge_session_directories(session_max_age_hours, dry_run=dry_run)
+        ]
     return summary
 
 
@@ -186,6 +207,13 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     parser.add_argument("--prune-locks", action="store_true", help="Remove stale session.lock files past the threshold.")
     parser.add_argument("--nuke-tmp", action="store_true", help="Delete every sessions/<id>/tmp directory.")
     parser.add_argument("--clean-runtime", action="store_true", help="Remove lingering backend runtime metadata (pid/port files).")
+    parser.add_argument("--purge-sessions", action="store_true", help="Remove entire session directories that exceed the retention window.")
+    parser.add_argument(
+        "--session-max-age-hours",
+        type=float,
+        default=default_session_retention_hours(),
+        help="Retention window (in hours) before a session directory is purged.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Log intended actions without deleting anything.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -198,9 +226,20 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         results["tmp_removed"] = [r.__dict__ for r in nuke_all_tmp_dirs(dry_run=args.dry_run)]
     if args.clean_runtime:
         results["runtime"] = remove_runtime_files(dry_run=args.dry_run).__dict__
+    if args.purge_sessions:
+        results["session_retention"] = [
+            SessionRetentionReport(session=res.session, age_hours=res.age_hours, removed=res.removed).__dict__
+            for res in purge_session_directories(args.session_max_age_hours, dry_run=args.dry_run)
+        ]
 
     if not results:
-        results = clean_all(max_lock_age=args.max_lock_age, nuke_tmp=False, dry_run=args.dry_run)
+        results = clean_all(
+            max_lock_age=args.max_lock_age,
+            nuke_tmp=args.nuke_tmp,
+            purge_sessions=args.purge_sessions,
+            session_max_age_hours=args.session_max_age_hours,
+            dry_run=args.dry_run,
+        )
 
     print(json.dumps(results, indent=2))
     return 0

@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+pydantic
+python-multipart
+PyMuPDF
+pytest
+pytest-asyncio
+python-docx
+prometheus-client

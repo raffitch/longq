@@ -16,6 +16,7 @@ let guestWindow = null;
 let backendLogPath = null;
 let isAppQuitting = false;
 let backendPort = Number(process.env.LONGQ_BACKEND_PORT || 0);
+let apiToken = process.env.LONGQ_API_TOKEN || null;
 const DEFAULT_BACKEND_PORT = 8000;
 const UI_PORT = Number(process.env.LONGQ_UI_PORT || 5173);
 const HEALTH_TIMEOUT_MS = 200;
@@ -24,6 +25,11 @@ const MAX_BACKEND_LOG_BYTES = 4 * 1024 * 1024;
 const MAX_DIAGNOSTIC_EVENTS = 32;
 const diagnosticEventHistory = [];
 let trimPending = false;
+
+if (!apiToken) {
+  apiToken = randomUUID();
+  process.env.LONGQ_API_TOKEN = apiToken;
+}
 
 function resolveRepoRoot() {
   const candidates = [
@@ -186,9 +192,13 @@ function writeRuntimeFile(root, filename, contents) {
 function ensureMaintenance(root) {
   return new Promise((resolve) => {
     const python = resolvePythonExecutable();
+    const maintenanceArgs = ['-m', 'backend.maintenance', '--prune-locks', '--clean-runtime', '--nuke-tmp', '--purge-sessions'];
+    if (process.env.LONGQ_SESSION_RETENTION_HOURS) {
+      maintenanceArgs.push('--session-max-age-hours', String(process.env.LONGQ_SESSION_RETENTION_HOURS));
+    }
     const child = spawn(
       python,
-      ['-m', 'backend.maintenance', '--prune-locks', '--clean-runtime', '--nuke-tmp'],
+      maintenanceArgs,
       {
         cwd: repoRoot,
         env: { ...process.env, LONGQ_ROOT: root, PYTHONPATH: buildPythonPath(process.env.PYTHONPATH) },
@@ -570,13 +580,19 @@ function buildWindowUrl(pathname = '/operator', queryParams = {}) {
   return url.toString();
 }
 
-function injectApiBase(win, apiBase) {
+function injectRuntimeConfig(win, apiBase, token) {
   if (!win) {
     return;
   }
-  const script = `window.__LONGQ_API_BASE__ = ${JSON.stringify(apiBase)};`;
+  const assignments = [
+    `window.__LONGQ_API_BASE__ = ${JSON.stringify(apiBase)};`,
+    token ? `window.__LONGQ_API_TOKEN__ = ${JSON.stringify(token)};` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const script = `(function(){ ${assignments} })();`;
   win.webContents.executeJavaScript(script, true).catch((err) => {
-    console.warn('[longq] failed to inject api base into window', err);
+    console.warn('[longq] failed to inject runtime config into window', err);
   });
 }
 
@@ -650,7 +666,7 @@ async function createWindows() {
     operatorWindow = null;
   });
   await operatorWindow.loadURL(buildWindowUrl('/operator', query));
-  injectApiBase(operatorWindow, apiBase);
+  injectRuntimeConfig(operatorWindow, apiBase, apiToken);
 
   guestWindow = new BrowserWindow({
     width: 1280,
@@ -665,7 +681,7 @@ async function createWindows() {
     guestWindow = null;
   });
   await guestWindow.loadURL(buildWindowUrl('/guest', query));
-  injectApiBase(guestWindow, apiBase);
+  injectRuntimeConfig(guestWindow, apiBase, apiToken);
 }
 
 app.on('window-all-closed', () => {

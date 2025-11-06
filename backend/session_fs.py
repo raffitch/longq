@@ -1,16 +1,35 @@
 from __future__ import annotations
 
 import errno
+import os
 import shutil
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 
 from paths import sessions_dir
 
 SESSION_LOCK_NAME = "session.lock"
 _REMOVE_ATTEMPTS = 5
 _REMOVE_BACKOFF_SECONDS = 0.2
+
+try:
+    _DEFAULT_RETENTION_HOURS = float(os.getenv("SESSION_FILE_RETENTION_HOURS", "168"))
+except ValueError:
+    _DEFAULT_RETENTION_HOURS = 168.0
+
+
+def default_session_retention_hours() -> float:
+    """Return the configured retention window (hours) for session directories."""
+    return _DEFAULT_RETENTION_HOURS
+
+
+@dataclass(frozen=True)
+class SessionRetentionResult:
+    session: str
+    age_hours: float
+    removed: bool
 
 
 def _session_id_to_str(session_id: int | str) -> str:
@@ -110,6 +129,38 @@ def iter_session_dirs() -> Iterable[Path]:
     if not root.exists():
         return []
     return (p for p in root.iterdir() if p.is_dir())
+
+
+def _session_age_hours(path: Path, *, reference: Optional[float] = None) -> Optional[float]:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    now = reference or time.time()
+    age_seconds = max(0.0, now - stat.st_mtime)
+    return age_seconds / 3600.0
+
+
+def purge_session_directories(max_age_hours: float, dry_run: bool = False) -> List[SessionRetentionResult]:
+    """
+    Remove session directories older than the specified age threshold.
+
+    Returns details for each directory evaluated for removal.
+    """
+    results: List[SessionRetentionResult] = []
+    if max_age_hours <= 0:
+        return results
+    reference = time.time()
+    for session_dir in iter_session_dirs():
+        age_hours = _session_age_hours(session_dir, reference=reference)
+        if age_hours is None or age_hours < max_age_hours:
+            continue
+        removed = False
+        if not dry_run:
+            _robust_rmtree(session_dir)
+            removed = True
+        results.append(SessionRetentionResult(session=session_dir.name, age_hours=age_hours, removed=removed))
+    return results
 
 
 def _robust_rmtree(target: Path) -> None:
