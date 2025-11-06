@@ -3,6 +3,7 @@ import importlib
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from types import ModuleType
+from typing import Self
 
 import pytest
 import pytest_asyncio
@@ -10,7 +11,7 @@ from pytest import MonkeyPatch
 
 
 class DummyServer:
-    def __init__(self) -> None:
+    def __init__(self: Self) -> None:
         self.should_exit = False
 
 

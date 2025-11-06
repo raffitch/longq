@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from secrets import token_hex
 from threading import Lock
-from typing import Annotated
+from typing import Annotated, Self
 
 from fastapi import (
     Depends,
@@ -114,7 +114,7 @@ _LOGGING_CONFIGURED = False
 
 
 class DiagnosticsHandler(logging.Handler):
-    def emit(self, record: logging.LogRecord) -> None:
+    def emit(self: Self, record: logging.LogRecord) -> None:
         if record.levelno < logging.ERROR:
             return
         try:
@@ -141,7 +141,7 @@ class DiagnosticsHandler(logging.Handler):
 
 
 class JsonFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
+    def format(self: Self, record: logging.LogRecord) -> str:
         try:
             message = record.getMessage()
         except Exception:  # pragma: no cover - defensive
