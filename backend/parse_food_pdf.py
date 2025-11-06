@@ -61,9 +61,9 @@ def severity(score: int) -> str:
     return "low"
 
 
-def page_spans(page: fitz.Page):
+def page_spans(page: fitz.Page) -> list[dict[str, Any]]:
     d = page.get_text("dict")
-    out = []
+    out: list[dict[str, Any]] = []
     for b in d.get("blocks", []):
         for ln in b.get("lines", []):
             for sp in ln.get("spans", []):
@@ -78,8 +78,8 @@ def page_spans(page: fitz.Page):
     return out
 
 
-def cluster_lines(spans, y_tol=Y_LINE_TOL):
-    lines = []
+def cluster_lines(spans: list[dict[str, Any]], y_tol: float = Y_LINE_TOL) -> list[list[dict[str, Any]]]:
+    lines: list[list[dict[str, Any]]] = []
     for sp in spans:
         if not lines:
             lines.append([sp])
@@ -96,8 +96,8 @@ def cluster_lines(spans, y_tol=Y_LINE_TOL):
     return lines
 
 
-def find_total_lines(lines):
-    totals = []
+def find_total_lines(lines: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    totals: list[dict[str, Any]] = []
     for ln in lines:
         txt = " ".join(s["t"] for s in ln)
         if TOTAL_RE.match(txt):
@@ -109,9 +109,9 @@ def find_total_lines(lines):
     return totals
 
 
-def detect_headers(lines):
+def detect_headers(lines: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
     allowed = set(CATEGORY_NAMES)
-    headers = []
+    headers: list[dict[str, Any]] = []
     for ln in lines:
         for s in ln:
             nm = canon_cat(s["t"])
@@ -121,8 +121,8 @@ def detect_headers(lines):
     return headers
 
 
-def group_headers_into_rows(headers):
-    rows = []
+def group_headers_into_rows(headers: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    rows: list[list[dict[str, Any]]] = []
     for h in headers:
         if not rows:
             rows.append([h])
@@ -139,8 +139,11 @@ def group_headers_into_rows(headers):
     return rows
 
 
-def build_row_boxes(rows, page_w: float):
-    boxes = {}
+def build_row_boxes(
+    rows: list[list[dict[str, Any]]],
+    page_w: float,
+) -> dict[str, tuple[float, float, float, float]]:
+    boxes: dict[str, tuple[float, float, float, float]] = {}
     for row in rows:
         y0 = min(h["y0"] for h in row)
         if len(row) == 1:
@@ -163,7 +166,7 @@ def build_row_boxes(rows, page_w: float):
     return boxes
 
 
-def find_footer_page_y(lines, page_height: float) -> float:
+def find_footer_page_y(lines: list[list[dict[str, Any]]], page_height: float) -> float:
     for ln in reversed(lines):
         txt = " ".join(s["t"] for s in ln).strip().lower()
         if "page" in txt:
@@ -174,12 +177,15 @@ def find_footer_page_y(lines, page_height: float) -> float:
     return page_height
 
 
-def intersect_x(a0, a1, b0, b1) -> float:
+def intersect_x(a0: float, a1: float, b0: float, b1: float) -> float:
     return max(0.0, min(a1, b1) - max(a0, b0))
 
 
-def clamp_y1_with_totals(cat_boxes, totals):
-    new = {}
+def clamp_y1_with_totals(
+    cat_boxes: dict[str, tuple[float, float, float, float]],
+    totals: list[dict[str, float]],
+) -> dict[str, tuple[float, float, float, float]]:
+    new: dict[str, tuple[float, float, float, float]] = {}
     for name, (y0, _, x0, x1) in cat_boxes.items():
         y1 = math.inf
         for t in totals:
@@ -192,8 +198,14 @@ def clamp_y1_with_totals(cat_boxes, totals):
     return new
 
 
-def find_scores_in_box(lines, x0, x1, y0, y1):
-    scores = []
+def find_scores_in_box(
+    lines: list[list[dict[str, Any]]],
+    x0: float,
+    x1: float,
+    y0: float,
+    y1: float,
+) -> list[dict[str, float]]:
+    scores: list[dict[str, float]] = []
     for ln in lines:
         ly = min(s["y0"] for s in ln)
         if not (y0 <= ly < y1):
@@ -208,8 +220,11 @@ def find_scores_in_box(lines, x0, x1, y0, y1):
     return scores
 
 
-def cluster_score_rows(scores, tol=ROW_CLUSTER_TOL):
-    rows = []
+def cluster_score_rows(
+    scores: list[dict[str, float]],
+    tol: float = ROW_CLUSTER_TOL,
+) -> list[list[dict[str, float]]]:
+    rows: list[list[dict[str, float]]] = []
     for sc in scores:
         if not rows:
             rows.append([sc])
@@ -226,8 +241,12 @@ def cluster_score_rows(scores, tol=ROW_CLUSTER_TOL):
     return rows
 
 
-def build_row_bands(row_centers, cat_y0, cat_y1):
-    bands = []
+def build_row_bands(
+    row_centers: list[float],
+    cat_y0: float,
+    cat_y1: float,
+) -> list[tuple[float, float]]:
+    bands: list[tuple[float, float]] = []
     if not row_centers:
         return bands
     for i, y in enumerate(row_centers):
@@ -239,7 +258,7 @@ def build_row_bands(row_centers, cat_y0, cat_y1):
     return bands
 
 
-def smart_join(parts):
+def smart_join(parts: list[str]) -> str:
     if not parts:
         return ""
     out = parts[0]
@@ -259,8 +278,15 @@ def smart_join(parts):
     return out.strip(" •·-—")
 
 
-def collect_label_window(lines, y_top, y_bot, x_left, x_right, expected_set):
-    parts = []
+def collect_label_window(
+    lines: list[list[dict[str, Any]]],
+    y_top: float,
+    y_bot: float,
+    x_left: float,
+    x_right: float,
+    expected_set: set[str],
+) -> str:
+    parts: list[str] = []
     for ln in lines:
         ly = min(s["y0"] for s in ln)
         if not (y_top <= ly < y_bot):
@@ -277,7 +303,7 @@ def collect_label_window(lines, y_top, y_bot, x_left, x_right, expected_set):
     return smart_join(parts)
 
 
-def quantiles(values, qs):
+def quantiles(values: list[float], qs: list[float]) -> list[float]:
     if not values:
         return [0.0] * len(qs)
     vs = sorted(values)
@@ -288,7 +314,7 @@ def quantiles(values, qs):
     return out
 
 
-def kmeans1d_median(xs, k=4, iters=20):
+def kmeans1d_median(xs: list[float], k: int = 4, iters: int = 20) -> list[float]:
     if not xs:
         return []
     xs_sorted = sorted(xs)
@@ -311,7 +337,13 @@ def kmeans1d_median(xs, k=4, iters=20):
     return sorted(centers)
 
 
-def header_has_items(lines, header, page_w: float, header_row, all_headers):
+def header_has_items(
+    lines: list[list[dict[str, Any]]],
+    header: dict[str, Any],
+    page_w: float,
+    header_row: list[dict[str, Any]],
+    all_headers: list[dict[str, Any]],
+) -> bool:
     row = sorted(header_row, key=lambda r: r["x0"])
     if len(row) == 1:
         x0, x1 = 0.0, float(page_w)
@@ -337,13 +369,16 @@ def header_has_items(lines, header, page_w: float, header_row, all_headers):
     return False
 
 
-def decide_order_mode(items_xy, row_groups):
+def decide_order_mode(
+    items_xy: list[dict[str, float]],
+    row_groups: list[list[dict[str, float]]],
+) -> str:
     if not items_xy:
         return "row"
     xs = [x for (x, y) in items_xy]
     centers = kmeans1d_median(xs, k=4, iters=25)
 
-    def col_idx(x):
+    def col_idx(x: float) -> int:
         return min(range(len(centers)), key=lambda i: abs(x - centers[i]))
 
     cols = [col_idx(x) for (x, _) in items_xy]
@@ -486,12 +521,12 @@ def parse_pdf(
                     xs_all = [it["_x"] for it in tmp]
                     centers = kmeans1d_median(xs_all, k=4, iters=25)
 
-                    def col_index(x):
+                    def col_index(x: float) -> int:
                         return min(range(len(centers)), key=lambda i: abs(x - centers[i]))
 
                     uniq_rows = sorted({round(v, 2) for v in (it["_ry"] for it in tmp)})
 
-                    def row_index(ry):
+                    def row_index(ry: float) -> int:
                         return min(range(len(uniq_rows)), key=lambda i: abs(ry - uniq_rows[i]))
 
                     for it in tmp:

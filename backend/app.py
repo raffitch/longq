@@ -9,6 +9,7 @@ import signal
 import tempfile
 import time
 from collections import deque
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -294,7 +295,10 @@ _PUBLIC_HTTP_PATHS = {"/healthz"}
 
 
 @app.middleware("http")
-async def _auth_middleware(request: Request, call_next):
+async def _auth_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
     if request.url.path in _PUBLIC_HTTP_PATHS:
         return await call_next(request)
     unauthorized = enforce_http_middleware(request)
@@ -428,7 +432,7 @@ def _log(message: str) -> None:
     logger.info(message)
 
 
-def _run_in_loop(callback, *args) -> None:
+def _run_in_loop(callback: Callable[..., None], *args: object) -> None:
     global _event_loop
     try:
         loop = asyncio.get_running_loop()
@@ -654,7 +658,7 @@ def short_code() -> str:
 
 # ----------------- Sessions -----------------
 @app.post("/sessions", response_model=SessionOut)
-def create_session(payload: SessionCreate, db=Depends(get_session)):
+def create_session(payload: SessionCreate, db: Session = Depends(get_session)) -> SessionOut:
     first = _canonicalize_name_part(payload.first_name)
     last = _canonicalize_name_part(payload.last_name)
     if not first:
@@ -690,7 +694,7 @@ def create_session(payload: SessionCreate, db=Depends(get_session)):
 
 
 @app.get("/sessions", response_model=list[SessionOut])
-def list_sessions(db=Depends(get_session)):
+def list_sessions(db: Session = Depends(get_session)) -> list[SessionOut]:
     rows = db.exec(select(SessionRow).order_by(SessionRow.id.desc())).all()
     return [
         SessionOut(
@@ -709,7 +713,10 @@ def list_sessions(db=Depends(get_session)):
 
 
 @app.get("/sessions/{session_id}", response_model=SessionOut)
-def get_session_status(session_id: int, db=Depends(get_session)):
+def get_session_status(
+    session_id: int,
+    db: Session = Depends(get_session),
+) -> SessionOut:
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")
@@ -727,7 +734,11 @@ def get_session_status(session_id: int, db=Depends(get_session)):
 
 
 @app.patch("/sessions/{session_id}", response_model=SessionOut)
-def update_session(session_id: int, payload: SessionUpdate, db=Depends(get_session)):
+def update_session(
+    session_id: int,
+    payload: SessionUpdate,
+    db: Session = Depends(get_session),
+) -> SessionOut:
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")
@@ -786,7 +797,7 @@ def update_session(session_id: int, payload: SessionUpdate, db=Depends(get_sessi
 
 # Greet immediately
 @app.get("/sessions/{session_id}/banner", response_model=BannerOut)
-def banner(session_id: int, db=Depends(get_session)):
+def banner(session_id: int, db: Session = Depends(get_session)) -> BannerOut:
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")
@@ -800,8 +811,8 @@ def upload_report(
     session_id: int,
     kind: str,
     file: UploadFile = File(...),
-    db=Depends(get_session),
-):
+    db: Session = Depends(get_session),
+) -> FileOut:
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")
@@ -879,7 +890,7 @@ def upload_report(
 
 
 @app.post("/files/{file_id}/parse", response_model=ParsedOut)
-def parse_uploaded(file_id: int, db=Depends(get_session)):
+def parse_uploaded(file_id: int, db: Session = Depends(get_session)) -> ParsedOut:
     fr = db.get(FileRow, file_id)
     if not fr:
         raise HTTPException(404, "File not found")
@@ -968,7 +979,11 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
 
 
 @app.post("/sessions/{session_id}/publish")
-async def publish(session_id: int, req: PublishRequest, db=Depends(get_session)):
+async def publish(
+    session_id: int,
+    req: PublishRequest,
+    db: Session = Depends(get_session),
+) -> dict[str, bool]:
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")
@@ -1004,7 +1019,11 @@ async def publish(session_id: int, req: PublishRequest, db=Depends(get_session))
 
 # Strict publish gate
 @app.get("/sessions/{session_id}/parsed/{kind}", response_model=ParsedOut)
-def get_parsed(session_id: int, kind: str, db=Depends(get_session)):
+def get_parsed(
+    session_id: int,
+    kind: str,
+    db: Session = Depends(get_session),
+) -> ParsedOut:
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")
@@ -1019,7 +1038,10 @@ def get_parsed(session_id: int, kind: str, db=Depends(get_session)):
 
 
 @app.get("/sessions/{session_id}/parsed", response_model=ParsedBundleOut)
-def get_parsed_bundle(session_id: int, db=Depends(get_session)):
+def get_parsed_bundle(
+    session_id: int,
+    db: Session = Depends(get_session),
+) -> ParsedBundleOut:
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")
@@ -1033,7 +1055,7 @@ def get_parsed_bundle(session_id: int, db=Depends(get_session)):
 
 # ----------------- Guest display binding -----------------
 @app.get("/display/current", response_model=DisplayOut)
-def display_current(db=Depends(get_session)):
+def display_current(db: Session = Depends(get_session)) -> DisplayOut:
     d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
     if not d or not d.current_session_id:
         staged_name = d.staged_full_name if d else None
@@ -1070,7 +1092,10 @@ def display_current(db=Depends(get_session)):
 
 
 @app.post("/display/current")
-async def display_set(req: DisplaySet, db=Depends(get_session)):
+async def display_set(
+    req: DisplaySet,
+    db: Session = Depends(get_session),
+) -> dict[str, bool]:
     d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
     if not d:
         d = DisplayRow(code="main")
@@ -1103,7 +1128,10 @@ async def display_set(req: DisplaySet, db=Depends(get_session)):
 
 
 @app.post("/sessions/{session_id}/close")
-def close_session(session_id: int, db=Depends(get_session)):
+def close_session(
+    session_id: int,
+    db: Session = Depends(get_session),
+) -> dict[str, bool]:
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")

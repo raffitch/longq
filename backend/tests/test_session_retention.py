@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 
 import pytest
+from collections.abc import Generator
+from pytest import MonkeyPatch
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "backend"
@@ -18,7 +20,10 @@ from paths import app_root
 
 
 @pytest.fixture(autouse=True)
-def _reset_app_root(monkeypatch, tmp_path):
+def _reset_app_root(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> Generator[None, None, None]:
     monkeypatch.setenv("LONGQ_ROOT", str(tmp_path))
     app_root.cache_clear()
     yield
@@ -33,7 +38,7 @@ def _touch_session(session_id: str, *, age_hours: float = 0.0) -> Path:
     return path
 
 
-def test_purge_session_directories_respects_age_threshold(monkeypatch):
+def test_purge_session_directories_respects_age_threshold(monkeypatch: MonkeyPatch) -> None:
     threshold = 2.0
     older = _touch_session("old", age_hours=threshold + 1)
     recent = _touch_session("recent", age_hours=threshold - 1)
@@ -47,7 +52,7 @@ def test_purge_session_directories_respects_age_threshold(monkeypatch):
     assert recent.exists()
 
 
-def test_default_retention_hours_uses_env_override(monkeypatch):
+def test_default_retention_hours_uses_env_override(monkeypatch: MonkeyPatch) -> None:
     baseline = session_fs.default_session_retention_hours()
     monkeypatch.setenv("SESSION_FILE_RETENTION_HOURS", "12")
     app_root.cache_clear()

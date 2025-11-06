@@ -1,9 +1,12 @@
 import asyncio
 import importlib
 from pathlib import Path
+from types import ModuleType
+from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
+from pytest import MonkeyPatch
 
 
 class DummyServer:
@@ -12,7 +15,7 @@ class DummyServer:
 
 
 @pytest_asyncio.fixture
-async def idle_app(monkeypatch):
+async def idle_app(monkeypatch: MonkeyPatch) -> AsyncGenerator[ModuleType, None]:
     monkeypatch.setenv("EXIT_WHEN_IDLE", "true")
     monkeypatch.setenv("EXIT_IDLE_DEBOUNCE_SEC", "0.05")
     monkeypatch.setenv("LONGQ_API_TOKEN", "test-token")
@@ -34,7 +37,7 @@ async def idle_app(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_idle_shutdown_triggers_after_debounce(idle_app):
+async def test_idle_shutdown_triggers_after_debounce(idle_app: ModuleType) -> None:
     idle_app.operator_clients.clear()
     idle_app.guest_clients.clear()
 
@@ -45,7 +48,7 @@ async def test_idle_shutdown_triggers_after_debounce(idle_app):
 
 
 @pytest.mark.asyncio
-async def test_idle_shutdown_cancelled_when_client_returns(idle_app):
+async def test_idle_shutdown_cancelled_when_client_returns(idle_app: ModuleType) -> None:
     idle_app.operator_clients.clear()
     idle_app.guest_clients.clear()
 
@@ -58,7 +61,7 @@ async def test_idle_shutdown_cancelled_when_client_returns(idle_app):
 
 
 @pytest.mark.asyncio
-async def test_idle_shutdown_waits_for_active_jobs(idle_app):
+async def test_idle_shutdown_waits_for_active_jobs(idle_app: ModuleType) -> None:
     idle_app.operator_clients.clear()
     idle_app.guest_clients.clear()
 

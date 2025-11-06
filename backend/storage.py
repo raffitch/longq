@@ -1,10 +1,11 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import BinaryIO
 
 _UPLOAD_CACHE: dict[tuple[int, str], bytes] = {}
 
 
-def save_upload(session_id: int, kind: str, fileobj) -> bytes:
+def save_upload(session_id: int, kind: str, fileobj: BinaryIO) -> bytes:
     """Store the uploaded PDF bytes in memory and return the raw payload."""
     data = fileobj.read()
     _UPLOAD_CACHE[(session_id, kind)] = data
