@@ -15,7 +15,7 @@ def normalize_chars(s: str) -> str:
     if not s:
         return s
     s = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2212]", "-", s)
-    s =s.replace("\u03B2", "Beta").replace("\u0392", "Beta").replace("\u200B", "")
+    s = s.replace("\u03b2", "Beta").replace("\u0392", "Beta").replace("\u200b", "")
     s = re.sub(r"\s+", " ", s)
     return s.strip()
 

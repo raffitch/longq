@@ -1,4 +1,5 @@
 import asyncio
+import datetime as dt
 import hashlib
 import json
 import logging
@@ -11,7 +12,6 @@ import time
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from datetime import datetime
 from pathlib import Path
 from secrets import token_hex
 from threading import Lock
@@ -122,7 +122,7 @@ class DiagnosticsHandler(logging.Handler):
         except Exception:  # pragma: no cover - defensive
             message = str(record.msg)
         entry = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=datetime.UTC).isoformat(),
+            "timestamp": dt.datetime.fromtimestamp(record.created, tz=dt.UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": message,
@@ -147,7 +147,7 @@ class JsonFormatter(logging.Formatter):
         except Exception:  # pragma: no cover - defensive
             message = str(record.msg)
         payload = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=datetime.UTC).isoformat(),
+            "timestamp": dt.datetime.fromtimestamp(record.created, tz=dt.UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": message,
