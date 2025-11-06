@@ -43,7 +43,8 @@ def test_parse_chakra_tokens_uses_numeric_mapping():
 
 def test_parse_special_metric_extracts_inflammatory_score():
     tokens = ["Organs", "As", "Inflammatory score", "7 (Very Low)"]
-    metric_id, metric_values = _parse_special_metric(tokens, "Organs -> As -> Inflammatory score > 7 (Very Low)")
+    source_line = "Organs -> As -> Inflammatory score > 7 (Very Low)"
+    metric_id, metric_values = _parse_special_metric(tokens, source_line)
     assert metric_id == "inflammatory_score"
     assert metric_values["value"] == 7
     assert metric_values["label"] == "Very Low"
@@ -51,7 +52,8 @@ def test_parse_special_metric_extracts_inflammatory_score():
 
 def test_parse_special_metric_extracts_immunal_defense():
     tokens = ["Organs", "Ai", "Immunal defense", "72 (Normal)"]
-    metric_id, metric_values = _parse_special_metric(tokens, "Organs -> Ai -> Immunal defense > 72 (Normal)")
+    source_line = "Organs -> Ai -> Immunal defense > 72 (Normal)"
+    metric_id, metric_values = _parse_special_metric(tokens, source_line)
     assert metric_id == "immunal_defense"
     assert metric_values["value"] == 72
     assert metric_values["label"] == "Normal"

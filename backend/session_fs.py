@@ -6,7 +6,7 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Iterable, List
 
 from paths import sessions_dir
 
@@ -84,7 +84,7 @@ def reset_tmp_directory(session_id: int | str) -> None:
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
 
-def build_upload_filename(file_id: int, original_filename: Optional[str]) -> str:
+def build_upload_filename(file_id: int, original_filename: str | None) -> str:
     suffix = ""
     if original_filename:
         suffix = Path(original_filename).suffix
@@ -96,14 +96,23 @@ def build_upload_filename(file_id: int, original_filename: Optional[str]) -> str
     return f"{file_id}{suffix}"
 
 
-def store_upload_bytes(session_id: int | str, file_id: int, original_filename: Optional[str], payload: bytes) -> Path:
+def store_upload_bytes(
+    session_id: int | str,
+    file_id: int,
+    original_filename: str | None,
+    payload: bytes,
+) -> Path:
     files_dir = session_files_path(session_id)
     target = files_dir / build_upload_filename(file_id, original_filename)
     target.write_bytes(payload)
     return target
 
 
-def load_upload_bytes(session_id: int | str, file_id: int, original_filename: Optional[str]) -> Optional[bytes]:
+def load_upload_bytes(
+    session_id: int | str,
+    file_id: int,
+    original_filename: str | None,
+) -> bytes | None:
     files_dir = session_files_path(session_id)
     target = files_dir / build_upload_filename(file_id, original_filename)
     if target.exists():
@@ -131,7 +140,7 @@ def iter_session_dirs() -> Iterable[Path]:
     return (p for p in root.iterdir() if p.is_dir())
 
 
-def _session_age_hours(path: Path, *, reference: Optional[float] = None) -> Optional[float]:
+def _session_age_hours(path: Path, *, reference: float | None = None) -> float | None:
     try:
         stat = path.stat()
     except FileNotFoundError:
@@ -141,13 +150,16 @@ def _session_age_hours(path: Path, *, reference: Optional[float] = None) -> Opti
     return age_seconds / 3600.0
 
 
-def purge_session_directories(max_age_hours: float, dry_run: bool = False) -> List[SessionRetentionResult]:
+def purge_session_directories(
+    max_age_hours: float,
+    dry_run: bool = False,
+) -> list[SessionRetentionResult]:
     """
     Remove session directories older than the specified age threshold.
 
     Returns details for each directory evaluated for removal.
     """
-    results: List[SessionRetentionResult] = []
+    results: list[SessionRetentionResult] = []
     if max_age_hours <= 0:
         return results
     reference = time.time()
@@ -159,7 +171,13 @@ def purge_session_directories(max_age_hours: float, dry_run: bool = False) -> Li
         if not dry_run:
             _robust_rmtree(session_dir)
             removed = True
-        results.append(SessionRetentionResult(session=session_dir.name, age_hours=age_hours, removed=removed))
+        results.append(
+            SessionRetentionResult(
+                session=session_dir.name,
+                age_hours=age_hours,
+                removed=removed,
+            )
+        )
     return results
 
 

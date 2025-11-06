@@ -14,43 +14,51 @@ from datetime import datetime, timezone
 from pathlib import Path
 from secrets import token_hex
 from threading import Lock
-from typing import List, Set, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Request
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from sqlmodel import select, Session
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from sqlalchemy import text
-from db import init_db, get_session, engine
-from models import SessionRow, FileRow, ParsedRow, DisplayRow, SessionState
-from schemas import (
-    SessionCreate,
-    SessionUpdate,
-    SessionOut,
-    PublishRequest,
-    BannerOut,
-    FileOut,
-    ParsedOut,
-    ParsedBundleOut,
-    DisplayOut,
-    DisplaySet,
-)
+from sqlmodel import Session, select
+
+from db import engine, get_session, init_db
+from models import DisplayRow, FileRow, ParsedRow, SessionRow, SessionState
 from parser_adapter import parse_file
 from paths import ensure_app_dirs, logs_dir
-from prometheus_client import Counter, Gauge, Histogram, CONTENT_TYPE_LATEST, generate_latest
-from session_fs import (
-    ensure_session_scaffold,
-    touch_session_lock,
-    reset_tmp_directory,
-    remove_session_lock,
-    remove_files_directory,
-    remove_session_directory,
-    store_upload_bytes,
-    load_upload_bytes,
-    session_tmp_path,
+from schemas import (
+    BannerOut,
+    DisplayOut,
+    DisplaySet,
+    FileOut,
+    ParsedBundleOut,
+    ParsedOut,
+    PublishRequest,
+    SessionCreate,
+    SessionOut,
+    SessionUpdate,
 )
 from security import enforce_http_middleware, ensure_websocket_authorized
-
+from session_fs import (
+    ensure_session_scaffold,
+    load_upload_bytes,
+    remove_files_directory,
+    remove_session_directory,
+    remove_session_lock,
+    reset_tmp_directory,
+    session_tmp_path,
+    store_upload_bytes,
+    touch_session_lock,
+)
 
 EXIT_WHEN_IDLE = os.getenv("EXIT_WHEN_IDLE", "false").lower() in {"1", "true", "yes", "on"}
 try:
@@ -58,13 +66,14 @@ try:
 except ValueError:
     EXIT_IDLE_DEBOUNCE_SEC = 20.0
 
-guest_clients: Set[WebSocket] = set()
-operator_clients: Set[WebSocket] = set()
+guest_clients: set[WebSocket] = set()
+operator_clients: set[WebSocket] = set()
 operator_window_count = 0
 _operator_window_lock = Lock()
 
-_shutdown_task: Optional[asyncio.Task] = None
-_event_loop: Optional[asyncio.AbstractEventLoop] = None
+_shutdown_task: asyncio.Task | None = None
+_event_loop: asyncio.AbstractEventLoop | None = None
+_background_tasks: set[asyncio.Task] = set()
 
 logger = logging.getLogger("longevityq.backend")
 
@@ -74,7 +83,16 @@ UPLOAD_BYTES = Histogram(
     "longq_upload_size_bytes",
     "Size of uploaded report files in bytes",
     ["kind"],
-    buckets=(64 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 2 * 1024 * 1024, 4 * 1024 * 1024, 8 * 1024 * 1024, 16 * 1024 * 1024),
+    buckets=(
+        64 * 1024,
+        256 * 1024,
+        512 * 1024,
+        1024 * 1024,
+        2 * 1024 * 1024,
+        4 * 1024 * 1024,
+        8 * 1024 * 1024,
+        16 * 1024 * 1024,
+    ),
 )
 PARSE_COUNTER = Counter("longq_parse_events_total", "Number of parse attempts", ["kind", "result"])
 PARSE_DURATION = Histogram(
@@ -199,33 +217,49 @@ _configure_logging()
 logger = logging.getLogger("longevityq.backend")
 
 
-def _parse_allowed_origins(raw: Optional[str]) -> List[str]:
+def _parse_allowed_origins(raw: str | None) -> list[str]:
     if not raw:
         return ["http://127.0.0.1:5173", "http://localhost:5173"]
     origins = [item.strip() for item in raw.split(",") if item.strip()]
     if not origins:
-        raise RuntimeError(
-            "ALLOWED_ORIGINS is set but empty; specify at least one origin or unset the variable for the default."
+        message = (
+            "ALLOWED_ORIGINS is set but empty; specify at least one origin or unset the "
+            "variable for the default."
         )
+        raise RuntimeError(message)
     if "*" in origins:
-        raise RuntimeError("ALLOWED_ORIGINS may not contain wildcard '*'. Specify explicit origins.")
+        raise RuntimeError(
+            "ALLOWED_ORIGINS may not contain wildcard '*'. Specify explicit origins."
+        )
     return origins
 
 
 ALLOWED_ORIGINS = _parse_allowed_origins(os.getenv("ALLOWED_ORIGINS"))
-ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "false").lower() in {"1", "true", "yes", "on"}
+ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 REPORT_TYPES = {
     "food": {"label": "Food", "aliases": ["food"]},
-    "heavy-metals": {"label": "Heavy Metals", "aliases": ["heavy metals", "heavy-metals", "heavy_metals"]},
+    "heavy-metals": {
+        "label": "Heavy Metals",
+        "aliases": ["heavy metals", "heavy-metals", "heavy_metals"],
+    },
     "hormones": {"label": "Hormones", "aliases": ["hormones"]},
     "nutrition": {"label": "Nutrition", "aliases": ["nutrition"]},
     "toxins": {"label": "Toxins", "aliases": ["toxins"]},
-    "peek": {"label": "PEEK Report", "aliases": ["peek", "peek report", "energy", "energy map"]},
+    "peek": {
+        "label": "PEEK Report",
+        "aliases": ["peek", "peek report", "energy", "energy map"],
+    },
 }
 
 _active_jobs = 0
 _active_jobs_lock = Lock()
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -279,7 +313,7 @@ def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-def _recent_diagnostics(limit: int) -> List[dict]:
+def _recent_diagnostics(limit: int) -> list[dict]:
     if limit <= 0:
         return []
     snapshot = list(DIAGNOSTICS_BUFFER)
@@ -314,6 +348,7 @@ def _ensure_display_table_columns() -> None:
         if statements:
             conn.commit()
 
+
 def _ensure_session_table_columns() -> None:
     with engine.connect() as conn:
         info = conn.execute(text("PRAGMA table_info(sessionrow)")).fetchall()
@@ -324,6 +359,7 @@ def _ensure_session_table_columns() -> None:
         if "sex" not in existing:
             conn.execute(text("ALTER TABLE sessionrow ADD COLUMN sex TEXT DEFAULT 'male'"))
             conn.commit()
+
 
 # ----------------- Idle shutdown utilities -----------------
 
@@ -444,7 +480,10 @@ def _schedule_idle_check(reason: str) -> None:
         _log("Idle shutdown timer already running; no action taken.")
         return
 
-    _log(f"All clients disconnected; scheduling idle shutdown in {EXIT_IDLE_DEBOUNCE_SEC:.1f}s ({reason}).")
+    _log(
+        f"All clients disconnected; scheduling idle shutdown in "
+        f"{EXIT_IDLE_DEBOUNCE_SEC:.1f}s ({reason})."
+    )
     _shutdown_task = asyncio.create_task(_shutdown_after_delay(reason))
 
 
@@ -489,6 +528,11 @@ async def _shutdown_after_delay(reason: str) -> None:
         _shutdown_task = None
 
 
+def _track_background_task(task: asyncio.Task) -> None:
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
 def _note_job_started(tag: str) -> None:
     global _active_jobs
     with _active_jobs_lock:
@@ -510,6 +554,7 @@ def _note_job_finished(tag: str) -> None:
 
 
 # ----------------- WebSocket endpoints -----------------
+
 
 def _on_client_connected(kind: str) -> None:
     _cancel_shutdown_timer(f"Idle shutdown timer cancelled ({kind} connected).")
@@ -562,6 +607,7 @@ async def ws_operator(ws: WebSocket):
         operator_clients.discard(ws)
         _on_client_disconnected("operator")
 
+
 async def broadcast(event: dict):
     """Send JSON event to all connected guest screens."""
     dead = []
@@ -601,8 +647,10 @@ async def operator_window_closed():
         _request_idle_check("operator window closed")
     return {"ok": True, "active": current}
 
+
 def short_code() -> str:
     return token_hex(3).upper()  # 6 hex chars
+
 
 # ----------------- Sessions -----------------
 @app.post("/sessions", response_model=SessionOut)
@@ -613,13 +661,21 @@ def create_session(payload: SessionCreate, db=Depends(get_session)):
         raise HTTPException(400, "First name is required.")
     client_name = _compose_client_name(first, last)
     sex = payload.sex if payload.sex in {"male", "female"} else "male"
-    s = SessionRow(client_name=client_name, first_name=first, last_name=last, code=short_code(), sex=sex)
-    db.add(s); db.commit(); db.refresh(s)
+    s = SessionRow(
+        client_name=client_name,
+        first_name=first,
+        last_name=last,
+        code=short_code(),
+        sex=sex,
+    )
+    db.add(s)
+    db.commit()
+    db.refresh(s)
     try:
         ensure_session_scaffold(s.id)
     except Exception as exc:
         logger.exception("Failed to initialize storage for session %s: %s", s.id, exc)
-        raise HTTPException(500, "Failed to initialize session storage.")
+        raise HTTPException(500, "Failed to initialize session storage.") from exc
     return SessionOut(
         id=s.id,
         code=s.code,
@@ -632,7 +688,8 @@ def create_session(payload: SessionCreate, db=Depends(get_session)):
         sex=s.sex,
     )
 
-@app.get("/sessions", response_model=List[SessionOut])
+
+@app.get("/sessions", response_model=list[SessionOut])
 def list_sessions(db=Depends(get_session)):
     rows = db.exec(select(SessionRow).order_by(SessionRow.id.desc())).all()
     return [
@@ -650,10 +707,12 @@ def list_sessions(db=Depends(get_session)):
         for r in rows
     ]
 
+
 @app.get("/sessions/{session_id}", response_model=SessionOut)
 def get_session_status(session_id: int, db=Depends(get_session)):
     s = db.get(SessionRow, session_id)
-    if not s: raise HTTPException(404, "Session not found")
+    if not s:
+        raise HTTPException(404, "Session not found")
     return SessionOut(
         id=s.id,
         code=s.code,
@@ -665,6 +724,7 @@ def get_session_status(session_id: int, db=Depends(get_session)):
         published=s.published,
         sex=s.sex,
     )
+
 
 @app.patch("/sessions/{session_id}", response_model=SessionOut)
 def update_session(session_id: int, payload: SessionUpdate, db=Depends(get_session)):
@@ -723,19 +783,28 @@ def update_session(session_id: int, payload: SessionUpdate, db=Depends(get_sessi
         sex=s.sex,
     )
 
+
 # Greet immediately
 @app.get("/sessions/{session_id}/banner", response_model=BannerOut)
 def banner(session_id: int, db=Depends(get_session)):
     s = db.get(SessionRow, session_id)
-    if not s: raise HTTPException(404, "Session not found")
+    if not s:
+        raise HTTPException(404, "Session not found")
     first = s.first_name or (s.client_name.split(" ", 1)[0] if s.client_name else "Friend")
     return BannerOut(message=f"Hi, {first}, your wellness journey is about to begin.")
 
+
 # ----------------- Upload / Parse / Publish -----------------
 @app.post("/sessions/{session_id}/upload/{kind}", response_model=FileOut)
-def upload_report(session_id: int, kind: str, file: UploadFile = File(...), db=Depends(get_session)):
+def upload_report(
+    session_id: int,
+    kind: str,
+    file: UploadFile = File(...),
+    db=Depends(get_session),
+):
     s = db.get(SessionRow, session_id)
-    if not s: raise HTTPException(404, "Session not found")
+    if not s:
+        raise HTTPException(404, "Session not found")
 
     kind = kind.lower()
     info = REPORT_TYPES.get(kind)
@@ -760,9 +829,9 @@ def upload_report(session_id: int, kind: str, file: UploadFile = File(...), db=D
         filehash = hashlib.sha256(payload).hexdigest()
         size = len(payload)
 
-        fr = db.exec(select(FileRow).where(
-            (FileRow.session_id == session_id) & (FileRow.kind == kind)
-        )).first()
+        fr = db.exec(
+            select(FileRow).where((FileRow.session_id == session_id) & (FileRow.kind == kind))
+        ).first()
         if fr:
             fr.filename = filename
             fr.filehash = filehash
@@ -779,42 +848,66 @@ def upload_report(session_id: int, kind: str, file: UploadFile = File(...), db=D
                 size=size,
                 status="uploaded",
             )
-        db.add(fr); db.commit(); db.refresh(fr)
+        db.add(fr)
+        db.commit()
+        db.refresh(fr)
         if fr.id is not None:
             try:
                 store_upload_bytes(session_id, fr.id, filename, payload)
             except Exception as exc:
-                logger.exception("Failed to persist upload for session %s file %s: %s", session_id, fr.id, exc)
-                raise HTTPException(500, "Failed to persist uploaded file.")
+                logger.exception(
+                    "Failed to persist upload for session %s file %s: %s",
+                    session_id,
+                    fr.id,
+                    exc,
+                )
+                raise HTTPException(500, "Failed to persist uploaded file.") from exc
         try:
             UPLOAD_COUNTER.labels(kind=kind).inc()
             UPLOAD_BYTES.labels(kind=kind).observe(size)
         except Exception:
             logger.debug("Failed to record upload metrics for kind=%s", kind, exc_info=True)
-        return FileOut(id=fr.id, kind=fr.kind, filename=fr.filename, status=fr.status, error=fr.error)
+        return FileOut(
+            id=fr.id,
+            kind=fr.kind,
+            filename=fr.filename,
+            status=fr.status,
+            error=fr.error,
+        )
     finally:
         _note_job_finished("upload")
+
 
 @app.post("/files/{file_id}/parse", response_model=ParsedOut)
 def parse_uploaded(file_id: int, db=Depends(get_session)):
     fr = db.get(FileRow, file_id)
-    if not fr: raise HTTPException(404, "File not found")
+    if not fr:
+        raise HTTPException(404, "File not found")
     s = db.get(SessionRow, fr.session_id)
-    if not s: raise HTTPException(404, "Session not found")
+    if not s:
+        raise HTTPException(404, "Session not found")
     if fr.kind not in {"food", "nutrition", "hormones", "heavy-metals", "toxins", "peek"}:
         raise HTTPException(400, f"Parsing not supported for report type '{fr.kind}'.")
 
     _note_job_started("parse")
     try:
-        s.state = "PARSING"; fr.status = "validating"; db.add(s); db.add(fr); db.commit()
+        s.state = "PARSING"
+        fr.status = "validating"
+        db.add(s)
+        db.add(fr)
+        db.commit()
 
         touch_session_lock(fr.session_id)
         payload = load_upload_bytes(fr.session_id, fr.id, fr.filename)
         if not payload:
             PARSE_COUNTER.labels(kind=fr.kind, result="failure").inc()
             logger.error("Report data missing for file %s (kind=%s)", fr.id, fr.kind)
-            fr.status = "error"; fr.error = "Report data not available. Please upload again."; db.add(fr)
-            s.state = "VALIDATING"; db.add(s); db.commit()
+            fr.status = "error"
+            fr.error = "Report data not available. Please upload again."
+            db.add(fr)
+            s.state = "VALIDATING"
+            db.add(s)
+            db.commit()
             raise HTTPException(400, "Report data not available. Please upload the file again.")
 
         suffix = ".pdf"
@@ -824,7 +917,7 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
             except Exception:
                 suffix = ".pdf"
 
-        tmp_path: Optional[Path] = None
+        tmp_path: Path | None = None
         parse_started = time.perf_counter()
         try:
             tmp_dir = session_tmp_path(fr.session_id)
@@ -834,29 +927,36 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
                 tmp_path = Path(tmp.name)
 
             version, data = parse_file(fr.kind, tmp_path)
-            fr.status = "parsed"; fr.parser_version = version
+            fr.status = "parsed"
+            fr.parser_version = version
             db.add(fr)
-            existing = db.exec(select(ParsedRow).where(
-                (ParsedRow.session_id == fr.session_id) & (ParsedRow.kind == fr.kind)
-            )).first()
+            existing = db.exec(
+                select(ParsedRow).where(
+                    (ParsedRow.session_id == fr.session_id) & (ParsedRow.kind == fr.kind)
+                )
+            ).first()
             if existing:
                 existing.data = data
                 db.add(existing)
             else:
                 db.add(ParsedRow(session_id=fr.session_id, kind=fr.kind, data=data))
-            s.state = "READY"; db.add(s)
+            s.state = "READY"
+            db.add(s)
             db.commit()
             duration = time.perf_counter() - parse_started
             PARSE_COUNTER.labels(kind=fr.kind, result="success").inc()
             PARSE_DURATION.labels(kind=fr.kind).observe(duration)
             return ParsedOut(session_id=fr.session_id, kind=fr.kind, data=data)
-        except Exception as e:
+        except Exception as exc:
             PARSE_COUNTER.labels(kind=fr.kind, result="failure").inc()
-            fr.status = "error"; fr.error = str(e); db.add(fr)
-            s.state = "VALIDATING"; db.add(s)
+            fr.status = "error"
+            fr.error = str(exc)
+            db.add(fr)
+            s.state = "VALIDATING"
+            db.add(s)
             db.commit()
             logger.exception("Parse failed for file %s (kind=%s)", fr.id, fr.kind)
-            raise HTTPException(500, f"Parse failed: {e}")
+            raise HTTPException(500, f"Parse failed: {exc}") from exc
         finally:
             if tmp_path:
                 try:
@@ -866,18 +966,22 @@ def parse_uploaded(file_id: int, db=Depends(get_session)):
     finally:
         _note_job_finished("parse")
 
+
 @app.post("/sessions/{session_id}/publish")
 async def publish(session_id: int, req: PublishRequest, db=Depends(get_session)):
     s = db.get(SessionRow, session_id)
-    if not s: raise HTTPException(404, "Session not found")
+    if not s:
+        raise HTTPException(404, "Session not found")
     s.published = bool(req.publish)
-    if s.published: s.state = "PUBLISHED"
+    if s.published:
+        s.state = "PUBLISHED"
     if req.selected_reports is not None:
         normalized = {str(k): bool(v) for k, v in req.selected_reports.items()}
         s.visible_reports = normalized
     elif not s.published:
         s.visible_reports = None
-    db.add(s); db.commit()
+    db.add(s)
+    db.commit()
     if s.published:
         try:
             remove_files_directory(session_id)
@@ -885,23 +989,34 @@ async def publish(session_id: int, req: PublishRequest, db=Depends(get_session))
             remove_session_lock(session_id)
         except Exception as exc:
             logger.warning("Failed to finalize session %s storage cleanup: %s", session_id, exc)
-    # push an event so guest screens update immediately
-    asyncio.create_task(broadcast({"type": "published", "sessionId": session_id, "ts": time.time()}))
+    task = asyncio.create_task(
+        broadcast(
+            {
+                "type": "published",
+                "sessionId": session_id,
+                "ts": time.time(),
+            }
+        )
+    )
+    _track_background_task(task)
     return {"ok": True, "published": s.published}
+
 
 # Strict publish gate
 @app.get("/sessions/{session_id}/parsed/{kind}", response_model=ParsedOut)
 def get_parsed(session_id: int, kind: str, db=Depends(get_session)):
     s = db.get(SessionRow, session_id)
-    if not s: raise HTTPException(404, "Session not found")
+    if not s:
+        raise HTTPException(404, "Session not found")
     if not s.published:
         raise HTTPException(403, "Results not published yet")
-    pr = db.exec(select(ParsedRow).where(
-        (ParsedRow.session_id == session_id) & (ParsedRow.kind == kind)
-    )).first()
+    pr = db.exec(
+        select(ParsedRow).where((ParsedRow.session_id == session_id) & (ParsedRow.kind == kind))
+    ).first()
     if not pr:
         return ParsedOut(session_id=session_id, kind=kind, data=None)
     return ParsedOut(session_id=pr.session_id, kind=pr.kind, data=pr.data)
+
 
 @app.get("/sessions/{session_id}/parsed", response_model=ParsedBundleOut)
 def get_parsed_bundle(session_id: int, db=Depends(get_session)):
@@ -912,12 +1027,9 @@ def get_parsed_bundle(session_id: int, db=Depends(get_session)):
         raise HTTPException(403, "Results not published yet")
     rows = db.exec(select(ParsedRow).where(ParsedRow.session_id == session_id)).all()
     visibility = s.visible_reports or {}
-    reports = {
-        row.kind: row.data
-        for row in rows
-        if visibility.get(row.kind, True)
-    }
+    reports = {row.kind: row.data for row in rows if visibility.get(row.kind, True)}
     return ParsedBundleOut(session_id=session_id, reports=reports)
+
 
 # ----------------- Guest display binding -----------------
 @app.get("/display/current", response_model=DisplayOut)
@@ -956,6 +1068,7 @@ def display_current(db=Depends(get_session)):
         staged_sex=d.staged_sex,
     )
 
+
 @app.post("/display/current")
 async def display_set(req: DisplaySet, db=Depends(get_session)):
     d = db.exec(select(DisplayRow).where(DisplayRow.code == "main")).first()
@@ -972,9 +1085,10 @@ async def display_set(req: DisplaySet, db=Depends(get_session)):
             d.staged_sex = None
     if "session_id" in fields:
         d.current_session_id = req.session_id
-    db.add(d); db.commit(); db.refresh(d)
-    # push an event so guest screens update instantly
-    asyncio.create_task(
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    task = asyncio.create_task(
         broadcast(
             {
                 "type": "displaySet",
@@ -984,6 +1098,7 @@ async def display_set(req: DisplaySet, db=Depends(get_session)):
             }
         )
     )
+    _track_background_task(task)
     return {"ok": True}
 
 
