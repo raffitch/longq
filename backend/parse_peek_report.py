@@ -13,7 +13,7 @@ class DocumentLike(Protocol):
 
 
 class DocumentLoader(Protocol):
-    def __call__(self, docx: str | IO[bytes] | None = None) -> DocumentLike: ...
+    def __call__(self: DocumentLoader, docx: str | IO[bytes] | None = None) -> DocumentLike: ...
 
 
 Document: DocumentLoader | None

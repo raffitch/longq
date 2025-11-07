@@ -279,32 +279,32 @@ def _build_text_dict_from_pdfplumber(pl_page: PdfPage) -> dict[str, Any]:
 class _Rect:
     __slots__ = ("_h", "_w")
 
-    def __init__(self, width: float, height: float) -> None:
+    def __init__(self: _Rect, width: float, height: float) -> None:
         self._w = float(width)
         self._h = float(height)
 
     @property
-    def width(self) -> float:
+    def width(self: _Rect) -> float:
         return self._w
 
     @property
-    def height(self) -> float:
+    def height(self: _Rect) -> float:
         return self._h
 
 
 class _PageCompat:
     __slots__ = ("_cache", "_pl", "_rect")
 
-    def __init__(self, pl_page: PdfPage) -> None:
+    def __init__(self: _PageCompat, pl_page: PdfPage) -> None:
         self._pl = pl_page
         self._rect = _Rect(pl_page.width, pl_page.height)
         self._cache: dict[str, Any] | None = None
 
     @property
-    def rect(self) -> _Rect:
+    def rect(self: _PageCompat) -> _Rect:
         return self._rect
 
-    def get_text(self, mode: str) -> dict[str, Any]:
+    def get_text(self: _PageCompat, mode: str) -> dict[str, Any]:
         if mode != "dict":
             msg = 'Only get_text("dict") is supported.'
             raise NotImplementedError(msg)
@@ -314,16 +314,16 @@ class _PageCompat:
 
 
 class _DocumentCompat:
-    def __init__(self, pl_doc: pdfplumber.PDF) -> None:
+    def __init__(self: _DocumentCompat, pl_doc: pdfplumber.PDF) -> None:
         self._doc = pl_doc
 
-    def __len__(self) -> int:
+    def __len__(self: _DocumentCompat) -> int:
         return len(self._doc.pages)
 
-    def __getitem__(self, index: int) -> _PageCompat:
+    def __getitem__(self: _DocumentCompat, index: int) -> _PageCompat:
         return _PageCompat(self._doc.pages[index])
 
-    def close(self) -> None:
+    def close(self: _DocumentCompat) -> None:
         try:
             self._doc.close()
         except Exception:
@@ -340,9 +340,9 @@ class FitzCompat:
 
 class _PageLike(Protocol):
     @property
-    def rect(self) -> _Rect: ...
+    def rect(self: _PageLike) -> _Rect: ...
 
-    def get_text(self, mode: str) -> dict[str, Any]: ...
+    def get_text(self: _PageLike, mode: str) -> dict[str, Any]: ...
 
 
 fitz = FitzCompat
