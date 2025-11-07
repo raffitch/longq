@@ -4,12 +4,24 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, IO, Protocol, cast
+
+class DocumentLoader(Protocol):
+    def __call__(self, docx: str | IO[bytes] | None = None) -> Any:  # pragma: no cover - protocol
+        ...
+
+
+Document: DocumentLoader | None
+_document_import_error: Exception | None
 
 try:
-    from docx import Document  # type: ignore
-except Exception:  # pragma: no cover - runtime dependency
+    from docx import Document as _RealDocument
+except Exception as exc:  # pragma: no cover - runtime dependency
     Document = None
+    _document_import_error = exc
+else:
+    Document = cast(DocumentLoader, _RealDocument)
+    _document_import_error = None
 
 # ---------------------------------------------------------------------------
 # Constants & mappings
@@ -191,10 +203,10 @@ def _parse_chakra_tokens(tokens: list[str]) -> tuple[str, int] | None:
         return None
 
     value, value_idx = _extract_value(body)
-    if value is None:
+    if value is None or value_idx is None:
         return None
 
-    number = None
+    number: int | None = None
     for idx in range(value_idx + 1):
         match = re.search(r"(\d+)", body[idx])
         if match:
@@ -282,7 +294,9 @@ def _parse_special_metric(
 
 def _read_doc_all_lines(path: Path) -> list[str]:
     if Document is None:
-        raise RuntimeError("python-docx is not installed. Run: pip install python-docx")
+        raise RuntimeError(
+            "python-docx is not installed. Run: pip install python-docx"
+        ) from _document_import_error
 
     doc = Document(str(path))
     lines: list[str] = []

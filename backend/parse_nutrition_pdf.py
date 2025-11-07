@@ -46,13 +46,17 @@ def _clean_item_name(raw: str) -> str:
     return cleaned
 
 
-def _parse_line(line: str) -> list[tuple[str, float]]:
-    items: list[tuple[str, float]] = []
+Number = float | int
+
+
+def _parse_line(line: str) -> list[tuple[str, Number]]:
+    items: list[tuple[str, Number]] = []
     for match in ITEM_RE.finditer(line):
         name = _clean_item_name(match.group("name"))
         if not name:
             continue
         value_raw = match.group("value")
+        value: Number
         try:
             value = int(value_raw)
         except ValueError:
@@ -64,10 +68,10 @@ def _parse_line(line: str) -> list[tuple[str, float]]:
     return items
 
 
-def _extract_items(path: str) -> list[tuple[str, float]]:
+def _extract_items(path: str) -> list[tuple[str, Number]]:
     doc = fitz.open(path)
     try:
-        items: list[tuple[str, float]] = []
+        items: list[tuple[str, Number]] = []
         for line in _iter_page_lines(doc):
             if "[" not in line or "]" not in line:
                 continue
@@ -82,8 +86,8 @@ def parse_pdf(input_path: str) -> dict[str, Any]:
     items = _extract_items(input_path)
     if not items:
         raise ValueError("Unable to locate any nutrition items in supplied PDF.")
-    seen: dict[str, tuple[str, float]] = {}
-    ordered: list[tuple[str, float]] = []
+    seen: dict[str, tuple[str, Number]] = {}
+    ordered: list[tuple[str, Number]] = []
     for name, value in items:
         key = _norm_name(name)
         if key in seen:

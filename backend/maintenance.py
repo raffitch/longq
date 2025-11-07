@@ -18,6 +18,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from paths import ensure_app_dirs, runtime_dir
 from session_fs import (
@@ -189,9 +190,9 @@ def clean_all(
     purge_sessions: bool = False,
     session_max_age_hours: float = default_session_retention_hours(),
     dry_run: bool = False,
-) -> dict:
+) -> dict[str, Any]:
     ensure_app_dirs()
-    summary = {
+    summary: dict[str, Any] = {
         "stale_locks": [],
         "tmp_removed": [],
         "runtime": None,
@@ -262,7 +263,7 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     ensure_app_dirs()
 
-    results = {}
+    results: dict[str, Any] = {}
     if args.prune_locks:
         results["stale_locks"] = [
             r.__dict__

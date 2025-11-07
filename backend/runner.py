@@ -2,7 +2,9 @@ import os
 import sys
 from importlib import import_module
 from pathlib import Path
+from typing import cast
 
+from fastapi import FastAPI
 from uvicorn import Config, Server
 
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -17,7 +19,7 @@ try:
 except ModuleNotFoundError:
     app_module = import_module("backend.app")
 
-app = app_module.app  # type: ignore[attr-defined]
+app = cast(FastAPI, getattr(app_module, "app"))
 
 
 def main() -> None:

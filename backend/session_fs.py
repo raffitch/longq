@@ -185,7 +185,7 @@ def _robust_rmtree(target: Path) -> None:
     if not target.exists():
         return
     attempts = 0
-    last_error = None
+    last_error: OSError | None = None
     while attempts < _REMOVE_ATTEMPTS:
         try:
             shutil.rmtree(target)

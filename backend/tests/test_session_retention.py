@@ -5,6 +5,7 @@ import time
 from collections.abc import Generator
 from pathlib import Path
 from types import ModuleType
+from typing import cast
 
 import pytest
 from pytest import MonkeyPatch
@@ -38,7 +39,7 @@ def _reset_app_root(
 
 
 def _touch_session(session_id: str, *, age_hours: float = 0.0) -> Path:
-    path = session_fs.session_path(session_id)
+    path = cast(Path, session_fs.session_path(session_id))
     # ensure directory exists and adjust mtime
     past_time = time.time() - (age_hours * 3600.0)
     os.utime(path, (past_time, past_time))

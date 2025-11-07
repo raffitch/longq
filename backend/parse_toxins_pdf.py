@@ -28,7 +28,7 @@ def _norm(s: str) -> str:
 
 
 def _page_lines(page: fitz.Page) -> list[str]:
-    text = page.get_text("text")
+    text = str(page.get_text("text"))
     if not text:
         return []
     return text.splitlines()

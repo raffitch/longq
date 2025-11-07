@@ -2612,19 +2612,12 @@ useEffect(() => {
               </div>
             )}
 
-            {session && (status || error) && (
+            {session && status && (
               <div className="mt-3 flex flex-col gap-1.5" aria-live="polite">
-                {status && (
-                  <div className="flex items-start gap-2 rounded-xl border border-[#44627a] bg-[#1f2937] px-3 py-2 text-[11px] text-white shadow-sm">
-                    <span aria-hidden className="mt-0.5 h-2 w-2 rounded-full bg-[#60a5fa]" />
-                    {status}
-                  </div>
-                )}
-                {error && (
-                  <div className="rounded-xl border border-status-error-border/80 bg-status-error-bg/95 px-3 py-2 text-[11px] text-status-error-text">
-                    Error: {error}
-                  </div>
-                )}
+                <div className="flex items-start gap-2 rounded-xl border border-[#44627a] bg-[#1f2937] px-3 py-2 text-[11px] text-white shadow-sm">
+                  <span aria-hidden className="mt-0.5 h-2 w-2 rounded-full bg-[#60a5fa]" />
+                  {status}
+                </div>
               </div>
             )}
             <div className="mt-auto flex items-center gap-2 text-[11px] text-text-secondary">

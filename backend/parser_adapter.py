@@ -1,39 +1,71 @@
-from collections.abc import Callable
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
+
+class FoodParser(Protocol):
+    def __call__(
+        self, pdf_path: str, start_page: int = ..., end_page: int = ..., order_mode: str = ...
+    ) -> dict[str, Any]:
+        ...
+
+
+class SimpleParser(Protocol):
+    def __call__(self, pdf_path: str) -> dict[str, Any]:
+        ...
+
+
+class PeekParser(Protocol):
+    def __call__(self, pdf_path: Path) -> dict[str, Any]:
+        ...
+
+parse_food_pdf: FoodParser | None = None
+parse_nutrition_pdf: SimpleParser | None = None
+parse_hormones_pdf: SimpleParser | None = None
+parse_heavy_metals_pdf: SimpleParser | None = None
+parse_toxins_pdf: SimpleParser | None = None
+
+_food_import_error: Exception | None = None
+_nutrition_import_error: Exception | None = None
+_hormones_import_error: Exception | None = None
+_heavy_import_error: Exception | None = None
+_toxins_import_error: Exception | None = None
 
 try:
-    from parse_food_pdf import parse_pdf as parse_food_pdf  # your real function
+    from parse_food_pdf import parse_pdf as _food_parser
 except Exception as e:
-    parse_food_pdf = None
     _food_import_error = e
+else:
+    parse_food_pdf = cast(FoodParser, _food_parser)
 
 try:
-    from parse_nutrition_pdf import parse_pdf as parse_nutrition_pdf
+    from parse_nutrition_pdf import parse_pdf as _nutrition_parser
 except Exception as e:
-    parse_nutrition_pdf = None
     _nutrition_import_error = e
+else:
+    parse_nutrition_pdf = cast(SimpleParser, _nutrition_parser)
 
 try:
-    from parse_hormones_pdf import parse_pdf as parse_hormones_pdf
+    from parse_hormones_pdf import parse_pdf as _hormones_parser
 except Exception as e:
-    parse_hormones_pdf = None
     _hormones_import_error = e
+else:
+    parse_hormones_pdf = cast(SimpleParser, _hormones_parser)
 
 try:
-    from parse_heavy_metals_pdf import parse_pdf as parse_heavy_metals_pdf
+    from parse_heavy_metals_pdf import parse_pdf as _heavy_metals_parser
 except Exception as e:
-    parse_heavy_metals_pdf = None
     _heavy_import_error = e
+else:
+    parse_heavy_metals_pdf = cast(SimpleParser, _heavy_metals_parser)
 
 try:
-    from parse_toxins_pdf import parse_pdf as parse_toxins_pdf
+    from parse_toxins_pdf import parse_pdf as _toxins_parser
 except Exception as e:
-    parse_toxins_pdf = None
     _toxins_import_error = e
+else:
+    parse_toxins_pdf = cast(SimpleParser, _toxins_parser)
 
-parse_peek_report: Callable[[Path], Any] | None = None
+parse_peek_report: PeekParser | None = None
 _peek_import_error: Exception | None = None
 
 for module_name in ("backend.parse_peek_report", "parse_peek_report"):
@@ -44,12 +76,12 @@ for module_name in ("backend.parse_peek_report", "parse_peek_report"):
         continue
     fallback_func = getattr(module, "parse_report", None)
     if callable(fallback_func):
-        parse_peek_report = fallback_func  # type: ignore[assignment]
+        parse_peek_report = cast(PeekParser, fallback_func)
         _peek_import_error = None
         break
 
 
-def _fallback(pdf_path: str) -> dict:
+def _fallback(pdf_path: str) -> dict[str, Any]:
     return {"meta": {"note": "Fallback parser in use", "file": pdf_path}, "pages": []}
 
 
@@ -114,7 +146,7 @@ def parse_file(kind: str, pdf_path: Path) -> tuple[str, Any]:
                 "PEEK parser not available; ensure parse_peek_report is importable "
                 "(python-docx installed?)."
             )
-        data = parse_peek_report(Path(pdf_path))  # type: ignore[arg-type]
+        data = parse_peek_report(pdf_path)
         if not isinstance(data, dict):
             raise RuntimeError(
                 "PEEK parser returned unexpected shape; expected dict with 'organs' and 'chakras'."

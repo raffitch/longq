@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from secrets import token_hex
 from threading import Lock
-from typing import Annotated, Self
+from typing import Annotated, Any, Literal, Self, cast
 
 from fastapi import (
     Depends,
@@ -30,7 +30,8 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
-from sqlalchemy import text
+from sqlalchemy import desc, text
+from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, select
 
 from db import engine, get_session, init_db
@@ -81,6 +82,11 @@ _event_loop: asyncio.AbstractEventLoop | None = None
 _background_tasks: set[asyncio.Task] = set()
 
 logger = logging.getLogger("longevityq.backend")
+
+SexLiteral = Literal["male", "female"]
+StateLiteral = Literal[
+    "CREATED", "INGESTING", "VALIDATING", "PARSING", "READY", "PUBLISHED", "CLOSED"
+]
 
 
 UPLOAD_COUNTER = Counter("longq_upload_reports_total", "Number of reports uploaded", ["kind"])
@@ -146,7 +152,7 @@ class JsonFormatter(logging.Formatter):
             message = record.getMessage()
         except Exception:  # pragma: no cover - defensive
             message = str(record.msg)
-        payload = {
+        payload: dict[str, object] = {
             "timestamp": dt.datetime.fromtimestamp(record.created, tz=dt.UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
@@ -160,6 +166,23 @@ class JsonFormatter(logging.Formatter):
             payload["pathname"] = record.pathname
             payload["lineno"] = record.lineno
         return json.dumps(payload, ensure_ascii=False)
+
+
+def _state_literal(value: SessionState | str) -> StateLiteral:
+    return cast(StateLiteral, value.value if isinstance(value, SessionState) else value)
+
+
+def _sex_literal_optional(value: str | None) -> SexLiteral | None:
+    if value is None:
+        return None
+    if value in {"male", "female"}:
+        return cast(SexLiteral, value)
+    return cast(SexLiteral, "male")
+
+
+def _sex_literal_required(value: str | None) -> SexLiteral:
+    normalized = _sex_literal_optional(value)
+    return normalized if normalized is not None else cast(SexLiteral, "male")
 
 
 def _diagnostic_code(record: logging.LogRecord, message: str) -> str:
@@ -439,11 +462,10 @@ def _log(message: str) -> None:
 def _run_in_loop(callback: Callable[..., None], *args: object) -> None:
     global _event_loop
     try:
-        loop = asyncio.get_running_loop()
-        loop.call_soon(callback, *args)
+        asyncio.get_running_loop().call_soon(callback, *args)
     except RuntimeError:
         loop = _event_loop
-        if loop:
+        if loop is not None:
             loop.call_soon_threadsafe(callback, *args)
 
 
@@ -626,7 +648,7 @@ async def broadcast(event: dict[str, object]) -> None:
             dead.append(ws)
     for d in dead:
         try:
-            d.close()
+            await d.close()
         except Exception:
             pass
         guest_clients.discard(d)
@@ -679,11 +701,14 @@ def create_session(payload: SessionCreate, db: DbSessionDep) -> SessionOut:
     db.add(s)
     db.commit()
     db.refresh(s)
+    if s.id is None:
+        raise HTTPException(500, "Session id not initialized")
     try:
         ensure_session_scaffold(s.id)
     except Exception as exc:
         logger.exception("Failed to initialize storage for session %s: %s", s.id, exc)
         raise HTTPException(500, "Failed to initialize session storage.") from exc
+
     return SessionOut(
         id=s.id,
         code=s.code,
@@ -691,29 +716,35 @@ def create_session(payload: SessionCreate, db: DbSessionDep) -> SessionOut:
         first_name=s.first_name,
         last_name=s.last_name,
         folder_name=s.folder_name,
-        state=s.state,
+        state=_state_literal(s.state),
         published=s.published,
-        sex=s.sex,
+        sex=_sex_literal_required(s.sex),
     )
 
 
 @app.get("/sessions", response_model=list[SessionOut])
 def list_sessions(db: DbSessionDep) -> list[SessionOut]:
-    rows = db.exec(select(SessionRow).order_by(SessionRow.id.desc())).all()
-    return [
-        SessionOut(
-            id=r.id,
-            code=r.code,
-            client_name=r.client_name,
-            first_name=r.first_name,
-            last_name=r.last_name,
-            folder_name=r.folder_name,
-            state=r.state,
-            published=r.published,
-            sex=r.sex,
+    rows = db.exec(
+        select(SessionRow).order_by(desc(cast(ColumnElement[Any], SessionRow.id)))
+    ).all()
+    output: list[SessionOut] = []
+    for r in rows:
+        if r.id is None:
+            continue
+        output.append(
+            SessionOut(
+                id=r.id,
+                code=r.code,
+                client_name=r.client_name,
+                first_name=r.first_name,
+                last_name=r.last_name,
+                folder_name=r.folder_name,
+                state=_state_literal(r.state),
+                published=r.published,
+                sex=_sex_literal_required(r.sex),
+            )
         )
-        for r in rows
-    ]
+    return output
 
 
 @app.get("/sessions/{session_id}", response_model=SessionOut)
@@ -724,6 +755,10 @@ def get_session_status(
     s = db.get(SessionRow, session_id)
     if not s:
         raise HTTPException(404, "Session not found")
+
+    if s.id is None:
+        raise HTTPException(500, "Session id not initialized")
+
     return SessionOut(
         id=s.id,
         code=s.code,
@@ -731,9 +766,9 @@ def get_session_status(
         first_name=s.first_name,
         last_name=s.last_name,
         folder_name=s.folder_name,
-        state=s.state,
+        state=_state_literal(s.state),
         published=s.published,
-        sex=s.sex,
+        sex=_sex_literal_required(s.sex),
     )
 
 
@@ -786,6 +821,9 @@ def update_session(
         db.commit()
         db.refresh(s)
 
+    if s.id is None:
+        raise HTTPException(500, "Session id not initialized")
+
     return SessionOut(
         id=s.id,
         code=s.code,
@@ -793,9 +831,9 @@ def update_session(
         first_name=s.first_name,
         last_name=s.last_name,
         folder_name=s.folder_name,
-        state=s.state,
+        state=_state_literal(s.state),
         published=s.published,
-        sex=s.sex,
+        sex=_sex_literal_required(s.sex),
     )
 
 
@@ -829,7 +867,8 @@ def upload_report(
     _note_job_started("upload")
     try:
         touch_session_lock(session_id)
-        filename = Path(file.filename).name
+        raw_filename = file.filename or ""
+        filename = Path(raw_filename).name
         if not filename:
             raise HTTPException(400, "Uploaded file name is missing.")
         _validate_uploaded_filename(s, kind, filename)
@@ -866,17 +905,18 @@ def upload_report(
         db.add(fr)
         db.commit()
         db.refresh(fr)
-        if fr.id is not None:
-            try:
-                store_upload_bytes(session_id, fr.id, filename, payload)
-            except Exception as exc:
-                logger.exception(
-                    "Failed to persist upload for session %s file %s: %s",
-                    session_id,
-                    fr.id,
-                    exc,
-                )
-                raise HTTPException(500, "Failed to persist uploaded file.") from exc
+        if fr.id is None:
+            raise HTTPException(500, "File id not initialized")
+        try:
+            store_upload_bytes(session_id, fr.id, filename, payload)
+        except Exception as exc:
+            logger.exception(
+                "Failed to persist upload for session %s file %s: %s",
+                session_id,
+                fr.id,
+                exc,
+            )
+            raise HTTPException(500, "Failed to persist uploaded file.") from exc
         try:
             UPLOAD_COUNTER.labels(kind=kind).inc()
             UPLOAD_BYTES.labels(kind=kind).observe(size)
@@ -913,6 +953,8 @@ def parse_uploaded(file_id: int, db: DbSessionDep) -> ParsedOut:
         db.commit()
 
         touch_session_lock(fr.session_id)
+        if fr.id is None:
+            raise HTTPException(500, "File id not initialized")
         payload = load_upload_bytes(fr.session_id, fr.id, fr.filename)
         if not payload:
             PARSE_COUNTER.labels(kind=fr.kind, result="failure").inc()
@@ -1008,16 +1050,13 @@ async def publish(
             remove_session_lock(session_id)
         except Exception as exc:
             logger.warning("Failed to finalize session %s storage cleanup: %s", session_id, exc)
-    task = asyncio.create_task(
-        broadcast(
-            {
-                "type": "published",
-                "sessionId": session_id,
-                "ts": time.time(),
-            }
-        )
+    await broadcast(
+        {
+            "type": "published",
+            "sessionId": session_id,
+            "ts": time.time(),
+        }
     )
-    _track_background_task(task)
     return {"ok": True, "published": s.published}
 
 
@@ -1064,7 +1103,7 @@ def display_current(db: DbSessionDep) -> DisplayOut:
     if not d or not d.current_session_id:
         staged_name = d.staged_full_name if d else None
         staged_first = d.staged_first_name if d else None
-        staged_sex = d.staged_sex if d else None
+        staged_sex = _sex_literal_optional(d.staged_sex if d else None)
         return DisplayOut(
             session_id=None,
             staged_session_id=d.staged_session_id if d else None,
@@ -1079,7 +1118,7 @@ def display_current(db: DbSessionDep) -> DisplayOut:
             staged_session_id=d.staged_session_id,
             staged_full_name=d.staged_full_name,
             staged_first_name=d.staged_first_name,
-            staged_sex=d.staged_sex,
+            staged_sex=_sex_literal_optional(d.staged_sex),
         )
     return DisplayOut(
         session_id=s.id,
@@ -1090,8 +1129,8 @@ def display_current(db: DbSessionDep) -> DisplayOut:
         staged_session_id=d.staged_session_id,
         staged_full_name=d.staged_full_name,
         staged_first_name=d.staged_first_name,
-        sex=s.sex,
-        staged_sex=d.staged_sex,
+        sex=_sex_literal_required(s.sex),
+        staged_sex=_sex_literal_optional(d.staged_sex),
     )
 
 
@@ -1117,17 +1156,14 @@ async def display_set(
     db.add(d)
     db.commit()
     db.refresh(d)
-    task = asyncio.create_task(
-        broadcast(
-            {
-                "type": "displaySet",
-                "sessionId": d.current_session_id,
-                "stagedSessionId": d.staged_session_id,
-                "ts": time.time(),
-            }
-        )
+    await broadcast(
+        {
+            "type": "displaySet",
+            "sessionId": d.current_session_id,
+            "stagedSessionId": d.staged_session_id,
+            "ts": time.time(),
+        }
     )
-    _track_background_task(task)
     return {"ok": True}
 
 
