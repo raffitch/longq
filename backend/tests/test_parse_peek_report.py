@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+
 from backend.parse_peek_report import (
     CHAKRA_ID_BY_NUM,
     _parse_chakra_tokens,

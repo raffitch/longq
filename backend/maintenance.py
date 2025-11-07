@@ -18,7 +18,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from paths import ensure_app_dirs, runtime_dir
 from session_fs import (
@@ -122,11 +122,11 @@ def nuke_all_tmp_dirs(dry_run: bool = False) -> list[SessionCleanupReport]:
 
 
 def backend_pid_path() -> Path:
-    return runtime_dir() / BACKEND_PID_NAME
+    return cast(Path, runtime_dir()) / BACKEND_PID_NAME
 
 
 def backend_port_path() -> Path:
-    return runtime_dir() / BACKEND_PORT_NAME
+    return cast(Path, runtime_dir()) / BACKEND_PORT_NAME
 
 
 def read_pid() -> int | None:

@@ -7,6 +7,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from paths import sessions_dir
 
@@ -36,8 +37,12 @@ def _session_id_to_str(session_id: int | str) -> str:
     return str(session_id)
 
 
+def _sessions_root() -> Path:
+    return cast(Path, sessions_dir())
+
+
 def session_path(session_id: int | str) -> Path:
-    path = sessions_dir() / _session_id_to_str(session_id)
+    path = _sessions_root() / _session_id_to_str(session_id)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -134,7 +139,7 @@ def remove_session_directory(session_id: int | str) -> None:
 
 
 def iter_session_dirs() -> Iterable[Path]:
-    root = sessions_dir()
+    root = _sessions_root()
     if not root.exists():
         return []
     return (p for p in root.iterdir() if p.is_dir())

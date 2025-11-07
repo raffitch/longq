@@ -29,7 +29,14 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from sqlalchemy import desc, text
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, select
@@ -89,7 +96,14 @@ StateLiteral = Literal[
 ]
 
 
-UPLOAD_COUNTER = Counter("longq_upload_reports_total", "Number of reports uploaded", ["kind"])
+_METRICS_REGISTRY = CollectorRegistry(auto_describe=True)
+
+UPLOAD_COUNTER = Counter(
+    "longq_upload_reports_total",
+    "Number of reports uploaded",
+    ["kind"],
+    registry=_METRICS_REGISTRY,
+)
 UPLOAD_BYTES = Histogram(
     "longq_upload_size_bytes",
     "Size of uploaded report files in bytes",
@@ -104,15 +118,26 @@ UPLOAD_BYTES = Histogram(
         8 * 1024 * 1024,
         16 * 1024 * 1024,
     ),
+    registry=_METRICS_REGISTRY,
 )
-PARSE_COUNTER = Counter("longq_parse_events_total", "Number of parse attempts", ["kind", "result"])
+PARSE_COUNTER = Counter(
+    "longq_parse_events_total",
+    "Number of parse attempts",
+    ["kind", "result"],
+    registry=_METRICS_REGISTRY,
+)
 PARSE_DURATION = Histogram(
     "longq_parse_duration_seconds",
     "Time spent parsing uploaded reports",
     ["kind"],
     buckets=(0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 60.0),
+    registry=_METRICS_REGISTRY,
 )
-ACTIVE_JOBS_GAUGE = Gauge("longq_active_jobs", "Number of active backend jobs")
+ACTIVE_JOBS_GAUGE = Gauge(
+    "longq_active_jobs",
+    "Number of active backend jobs",
+    registry=_METRICS_REGISTRY,
+)
 
 DIAGNOSTICS_MAX_ENTRIES = max(1, int(os.getenv("DIAGNOSTICS_MAX_ENTRIES", "100")))
 DIAGNOSTICS_BUFFER: deque[dict[str, object]] = deque(maxlen=DIAGNOSTICS_MAX_ENTRIES)
@@ -289,8 +314,7 @@ _active_jobs = 0
 _active_jobs_lock = Lock()
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def on_startup() -> None:
     global _event_loop
     _event_loop = asyncio.get_running_loop()
     init_db()
@@ -301,11 +325,22 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if not d:
             db.add(DisplayRow(code="main"))
             db.commit()
+    return None
+
+
+async def on_shutdown() -> None:
+    _cancel_shutdown_timer("Application shutdown requested.")
+    global _event_loop
+    _event_loop = None
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    await on_startup()
     try:
         yield
     finally:
-        _cancel_shutdown_timer("Application shutdown requested.")
-        _event_loop = None
+        await on_shutdown()
 
 
 app = FastAPI(title="Quantum Qi™ Backend", lifespan=lifespan)
@@ -330,7 +365,7 @@ async def _auth_middleware(
         return await call_next(request)
     unauthorized = enforce_http_middleware(request)
     if unauthorized is not None:
-        return unauthorized
+        return cast(Response, unauthorized)
     return await call_next(request)
 
 
@@ -341,7 +376,8 @@ async def healthz() -> dict[str, str]:
 
 @app.get("/metrics")
 def metrics() -> Response:
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    payload = cast(bytes, generate_latest(_METRICS_REGISTRY))
+    return Response(payload, media_type=CONTENT_TYPE_LATEST)
 
 
 def _recent_diagnostics(limit: int) -> list[dict]:
