@@ -1,5 +1,6 @@
 import os
 import sys
+from importlib import import_module
 from pathlib import Path
 
 from uvicorn import Config, Server
@@ -11,10 +12,12 @@ for candidate in [str(BACKEND_DIR), str(REPO_DIR)]:
     if candidate not in sys.path:
         sys.path.insert(0, candidate)
 
-try:  # prefer local import when executed from backend directory
-    from app import app  # type: ignore
+try:
+    app_module = import_module("app")
 except ModuleNotFoundError:
-    from backend.app import app  # type: ignore
+    app_module = import_module("backend.app")
+
+app = app_module.app  # type: ignore[attr-defined]
 
 
 def main() -> None:

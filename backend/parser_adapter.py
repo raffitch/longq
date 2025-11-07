@@ -1,3 +1,5 @@
+from collections.abc import Callable
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -31,11 +33,20 @@ except Exception as e:
     parse_toxins_pdf = None
     _toxins_import_error = e
 
-try:
-    from parse_peek_report import parse_report as parse_peek_report
-except Exception as e:
-    parse_peek_report = None
-    _peek_import_error = e
+parse_peek_report: Callable[[Path], Any] | None = None
+_peek_import_error: Exception | None = None
+
+for module_name in ("backend.parse_peek_report", "parse_peek_report"):
+    try:
+        module = import_module(module_name)
+    except Exception as exc:  # pragma: no cover - import fallback guard
+        _peek_import_error = exc
+        continue
+    fallback_func = getattr(module, "parse_report", None)
+    if callable(fallback_func):
+        parse_peek_report = fallback_func  # type: ignore[assignment]
+        _peek_import_error = None
+        break
 
 
 def _fallback(pdf_path: str) -> dict:

@@ -109,7 +109,7 @@ PARSE_DURATION = Histogram(
 ACTIVE_JOBS_GAUGE = Gauge("longq_active_jobs", "Number of active backend jobs")
 
 DIAGNOSTICS_MAX_ENTRIES = max(1, int(os.getenv("DIAGNOSTICS_MAX_ENTRIES", "100")))
-DIAGNOSTICS_BUFFER = deque(maxlen=DIAGNOSTICS_MAX_ENTRIES)
+DIAGNOSTICS_BUFFER: deque[dict[str, object]] = deque(maxlen=DIAGNOSTICS_MAX_ENTRIES)
 _LOGGING_CONFIGURED = False
 
 
@@ -132,7 +132,7 @@ class DiagnosticsHandler(logging.Handler):
         }
         if record.exc_info:
             try:
-                entry["detail"] = self.formatException(record.exc_info)
+                entry["detail"] = logging.Formatter().formatException(record.exc_info)
             except Exception:
                 entry["detail"] = None
         elif record.stack_info:
@@ -838,7 +838,7 @@ def upload_report(
         if not payload:
             raise HTTPException(400, "Uploaded file is empty.")
 
-        s.state = "INGESTING"
+        s.state = SessionState.INGESTING
         db.add(s)
 
         filehash = hashlib.sha256(payload).hexdigest()
@@ -906,7 +906,7 @@ def parse_uploaded(file_id: int, db: DbSessionDep) -> ParsedOut:
 
     _note_job_started("parse")
     try:
-        s.state = "PARSING"
+        s.state = SessionState.PARSING
         fr.status = "validating"
         db.add(s)
         db.add(fr)
@@ -920,7 +920,7 @@ def parse_uploaded(file_id: int, db: DbSessionDep) -> ParsedOut:
             fr.status = "error"
             fr.error = "Report data not available. Please upload again."
             db.add(fr)
-            s.state = "VALIDATING"
+            s.state = SessionState.VALIDATING
             db.add(s)
             db.commit()
             raise HTTPException(400, "Report data not available. Please upload the file again.")
@@ -955,7 +955,7 @@ def parse_uploaded(file_id: int, db: DbSessionDep) -> ParsedOut:
                 db.add(existing)
             else:
                 db.add(ParsedRow(session_id=fr.session_id, kind=fr.kind, data=data))
-            s.state = "READY"
+            s.state = SessionState.READY
             db.add(s)
             db.commit()
             duration = time.perf_counter() - parse_started
@@ -967,7 +967,7 @@ def parse_uploaded(file_id: int, db: DbSessionDep) -> ParsedOut:
             fr.status = "error"
             fr.error = str(exc)
             db.add(fr)
-            s.state = "VALIDATING"
+            s.state = SessionState.VALIDATING
             db.add(s)
             db.commit()
             logger.exception("Parse failed for file %s (kind=%s)", fr.id, fr.kind)
@@ -993,7 +993,7 @@ async def publish(
         raise HTTPException(404, "Session not found")
     s.published = bool(req.publish)
     if s.published:
-        s.state = "PUBLISHED"
+        s.state = SessionState.PUBLISHED
     if req.selected_reports is not None:
         normalized = {str(k): bool(v) for k, v in req.selected_reports.items()}
         s.visible_reports = normalized

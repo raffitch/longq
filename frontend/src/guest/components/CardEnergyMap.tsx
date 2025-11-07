@@ -48,8 +48,6 @@ const VIEWBOX = {
   chakra: PADMASANA_VIEWBOX,
 } as const;
 
-const BAR_HEIGHT = 8;
-const BAR_GAP = 6;
 const MIN_OPACITY = 0.2;
 const CHAKRA_RADIUS = 8.8;
 
