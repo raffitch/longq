@@ -6,7 +6,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-import fitz  # PyMuPDF
+import pdfplumber
+from pdfplumber import PDF
+from pdfplumber.page import Page as PdfPage
 
 HYPHEN_CLASS = "[\-\u2010\u2011\u2012\u2013\u2014\u2212]"
 
@@ -37,8 +39,8 @@ FIRST_B = norm_key("Pregnenolone")
 LAST_B = norm_key("Testosterone")
 
 
-def _page_rate_block(page: fitz.Page) -> str | None:
-    text = page.get_text("text")
+def _page_rate_block(page: PdfPage) -> str | None:
+    text = page.extract_text()
     if not text:
         return None
     m = RATE_BLOCK_RE.search(text)
@@ -65,11 +67,11 @@ def _parse_items(block_text: str) -> list[tuple[str, float]]:
 
 
 def _extract_blocks(
-    doc: fitz.Document,
+    doc: PDF,
     debug: bool = False,
 ) -> list[list[tuple[str, float]]]:
     blocks: list[list[tuple[str, float]]] = []
-    for _idx, page in enumerate(doc):
+    for _idx, page in enumerate(doc.pages):
         blk = _page_rate_block(page)
         if not blk:
             continue
@@ -103,11 +105,8 @@ def _find_hormone_blocks(
 
 
 def parse_pdf(input_path: str) -> dict[str, Any]:
-    doc = fitz.open(input_path)
-    try:
+    with pdfplumber.open(input_path) as doc:
         blocks = _extract_blocks(doc)
-    finally:
-        doc.close()
 
     match = _find_hormone_blocks(blocks)
     if not match:

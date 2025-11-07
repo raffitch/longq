@@ -724,9 +724,7 @@ def create_session(payload: SessionCreate, db: DbSessionDep) -> SessionOut:
 
 @app.get("/sessions", response_model=list[SessionOut])
 def list_sessions(db: DbSessionDep) -> list[SessionOut]:
-    rows = db.exec(
-        select(SessionRow).order_by(desc(cast(ColumnElement[Any], SessionRow.id)))
-    ).all()
+    rows = db.exec(select(SessionRow).order_by(desc(cast(ColumnElement[Any], SessionRow.id)))).all()
     output: list[SessionOut] = []
     for r in rows:
         if r.id is None:

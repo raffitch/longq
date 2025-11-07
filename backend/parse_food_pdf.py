@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 # (See docstring in previous attempt for details.)
+from __future__ import annotations
+
 import argparse
 import json
 import math
 import re
 import statistics
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Protocol
 
-import fitz  # PyMuPDF
+import pdfplumber
+from pdfplumber.page import Page as PdfPage
 
 CATEGORY_NAMES = [
     "Dairy",
@@ -55,9 +58,16 @@ WINDOW_LEFT_PAD = 2.0
 WINDOW_RIGHT_PAD = 2.0
 HEADER_VALIDATE_Y_RANGE = 220.0
 
+X_SPACE_FACTOR = 0.45
+X_BREAK_FACTOR = 1.25
+HEADER_AUGMENT_IF_MISSING = True
+
 
 def canon_cat(s: str) -> str:
     return CANON.get(" ".join(s.split()).lower(), s)
+
+
+CATEGORY_CANON_SET = {canon_cat(name) for name in CATEGORY_NAMES}
 
 
 def severity(score: int) -> str:
@@ -67,11 +77,282 @@ def severity(score: int) -> str:
     return "low"
 
 
+def _normalize_font(fontname: str) -> str:
+    return fontname.split("+", 1)[1] if "+" in fontname else fontname
+
+
+def _merge_line_to_spans(line: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not line:
+        return []
+
+    spans: list[dict[str, Any]] = []
+
+    def avg_char_width(widths: list[float]) -> float:
+        good = [w for w in widths if w > 0.0]
+        if good:
+            return max(1.0, sum(good) / len(good))
+        sizes = [float(c.get("_size", 0.0)) for c in line]
+        if sizes:
+            return max(3.0, (sum(sizes) / len(sizes)) * 0.5)
+        return 4.0
+
+    line.sort(key=lambda c: c["_x0"])
+    cur: dict[str, Any] | None = None
+    widths: list[float] = [line[0]["_w"] or 0.0]
+    last_x1: float | None = None
+    last_txt = ""
+
+    def flush() -> None:
+        nonlocal cur
+        if cur and str(cur["text"]).strip():
+            spans.append(cur)
+        cur = None
+
+    def start_span(ch: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "text": ch["text"],
+            "bbox": [ch["_x0"], ch["_top"], ch["_x1"], ch["_bot"]],
+            "size": ch["_size"],
+            "font": ch["_font"],
+        }
+
+    for ch in line:
+        x0, x1, top, bot = ch["_x0"], ch["_x1"], ch["_top"], ch["_bot"]
+        gap = (x0 - last_x1) if last_x1 is not None else 0.0
+
+        if cur is None:
+            cur = start_span(ch)
+        else:
+            same_style = abs(ch["_size"] - cur["size"]) < 0.01 and ch["_font"] == cur["font"]
+            if (not same_style) or (gap > X_BREAK_FACTOR * max(1.0, avg_char_width(widths))):
+                flush()
+                cur = start_span(ch)
+                widths = [ch["_w"] or 0.0]
+            else:
+                this_txt = ch["text"]
+                if this_txt != " " and last_txt != " ":
+                    no_space_before = "),.:%;!?]&"
+                    no_space_after = "([/$"
+                    gap_thresh = X_SPACE_FACTOR * max(1.0, avg_char_width(widths))
+                    if not (this_txt and this_txt[0] in no_space_before) and not (
+                        last_txt and last_txt[-1] in no_space_after
+                    ):
+                        if gap > gap_thresh:
+                            cur["text"] += " "
+                            cur["bbox"][2] = max(cur["bbox"][2], x0)
+                cur["text"] += this_txt
+                cur["bbox"][0] = min(cur["bbox"][0], x0)
+                cur["bbox"][1] = min(cur["bbox"][1], top)
+                cur["bbox"][2] = max(cur["bbox"][2], x1)
+                cur["bbox"][3] = max(cur["bbox"][3], bot)
+                widths.append(ch["_w"] or 0.0)
+
+        last_x1 = x1
+        last_txt = ch["text"]
+
+    flush()
+    return [s for s in spans if str(s.get("text", "")).strip()]
+
+
+def _dedup_header_spans(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    kept: list[dict[str, Any]] = []
+    for span in sorted(spans, key=lambda s: float(s["bbox"][0])):
+        text = (span.get("text") or "").strip()
+        canon = canon_cat(text)
+        if canon in CATEGORY_CANON_SET:
+            x0, y0, x1, y1 = map(float, span["bbox"])
+            cx, cy = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
+            dup = False
+            for kept_span in kept:
+                kept_text = (kept_span.get("text") or "").strip()
+                if canon_cat(kept_text) != canon:
+                    continue
+                kx0, ky0, kx1, ky1 = map(float, kept_span["bbox"])
+                kcx, kcy = 0.5 * (kx0 + kx1), 0.5 * (ky0 + ky1)
+                if abs(cx - kcx) <= 1.5 and abs(cy - kcy) <= 1.5:
+                    dup = True
+                    break
+            if dup:
+                continue
+        kept.append(span)
+    return kept
+
+
+def _line_center_y(line_obj: dict[str, Any]) -> float:
+    ys = [float(span["bbox"][1]) for span in line_obj.get("spans", [])]
+    return (sum(ys) / len(ys)) if ys else 0.0
+
+
+def _line_has_header(line_obj: dict[str, Any], canon: str, near_x: float, tol: float = 3.0) -> bool:
+    for span in line_obj.get("spans", []):
+        text = (span.get("text") or "").strip()
+        if canon_cat(text) == canon:
+            x0 = float(span.get("bbox", [0, 0, 0, 0])[0])
+            if abs(x0 - near_x) <= tol:
+                return True
+    return False
+
+
+def _build_text_dict_from_pdfplumber(pl_page: PdfPage) -> dict[str, Any]:
+    chars = list(pl_page.chars or [])
+    if not chars:
+        return {"blocks": []}
+
+    for ch in chars:
+        ch["_x0"] = float(ch["x0"])
+        ch["_x1"] = float(ch["x1"])
+        ch["_top"] = float(ch["top"])
+        ch["_bot"] = float(ch["bottom"])
+        ch["_w"] = ch["_x1"] - ch["_x0"]
+        ch["_yc"] = 0.5 * (ch["_top"] + ch["_bot"])
+        ch["_size"] = float(ch.get("size", 0.0))
+        ch["_font"] = _normalize_font(str(ch.get("fontname", "")))
+        ch["text"] = str(ch.get("text", ""))
+    chars.sort(key=lambda c: (c["_yc"], c["_x0"]))
+
+    lines_chars: list[list[dict[str, Any]]] = []
+    for ch in chars:
+        if not lines_chars:
+            lines_chars.append([ch])
+            continue
+        last = lines_chars[-1]
+        y_ref = sum(x["_yc"] for x in last) / len(last)
+        if abs(ch["_yc"] - y_ref) <= Y_LINE_TOL:
+            last.append(ch)
+        else:
+            last.sort(key=lambda c: c["_x0"])
+            lines_chars.append([ch])
+    if lines_chars:
+        lines_chars[-1].sort(key=lambda c: c["_x0"])
+
+    block_lines: list[dict[str, Any]] = []
+    found_header = False
+    for line in lines_chars:
+        spans = _merge_line_to_spans(line)
+        if not found_header:
+            for span in spans:
+                if canon_cat((span.get("text") or "").strip()) in CATEGORY_CANON_SET:
+                    found_header = True
+                    break
+        spans = _dedup_header_spans(spans)
+        block_lines.append({"spans": spans})
+
+    if HEADER_AUGMENT_IF_MISSING and not found_header:
+        try:
+            words = pl_page.extract_words(
+                x_tolerance=1.0,
+                y_tolerance=1.0,
+                keep_blank_chars=False,
+                use_text_flow=True,
+            )
+        except Exception:
+            words = []
+        for word in words:
+            canon = canon_cat(str(word.get("text", "")).strip())
+            if canon not in CATEGORY_CANON_SET:
+                continue
+            wx0 = float(word["x0"])
+            wx1 = float(word["x1"])
+            wy = float(word["top"])
+            wb = float(word["bottom"])
+            if block_lines:
+                line_index = min(
+                    range(len(block_lines)),
+                    key=lambda idx: abs(_line_center_y(block_lines[idx]) - 0.5 * (wy + wb)),
+                )
+            else:
+                line_index = 0
+                block_lines.append({"spans": []})
+            if not _line_has_header(block_lines[line_index], canon, near_x=wx0):
+                span = {
+                    "text": canon,
+                    "bbox": [wx0, wy, wx1, wb],
+                    "size": float(word.get("size", 0.0)),
+                    "font": str(word.get("fontname", "")),
+                }
+                block_lines[line_index].setdefault("spans", []).append(span)
+                block_lines[line_index]["spans"].sort(key=lambda s: float(s["bbox"][0]))
+
+    return {"blocks": [{"lines": block_lines}]}
+
+
+class _Rect:
+    __slots__ = ("_h", "_w")
+
+    def __init__(self, width: float, height: float) -> None:
+        self._w = float(width)
+        self._h = float(height)
+
+    @property
+    def width(self) -> float:
+        return self._w
+
+    @property
+    def height(self) -> float:
+        return self._h
+
+
+class _PageCompat:
+    __slots__ = ("_cache", "_pl", "_rect")
+
+    def __init__(self, pl_page: PdfPage) -> None:
+        self._pl = pl_page
+        self._rect = _Rect(pl_page.width, pl_page.height)
+        self._cache: dict[str, Any] | None = None
+
+    @property
+    def rect(self) -> _Rect:
+        return self._rect
+
+    def get_text(self, mode: str) -> dict[str, Any]:
+        if mode != "dict":
+            msg = 'Only get_text("dict") is supported.'
+            raise NotImplementedError(msg)
+        if self._cache is None:
+            self._cache = _build_text_dict_from_pdfplumber(self._pl)
+        return self._cache
+
+
+class _DocumentCompat:
+    def __init__(self, pl_doc: pdfplumber.PDF) -> None:
+        self._doc = pl_doc
+
+    def __len__(self) -> int:
+        return len(self._doc.pages)
+
+    def __getitem__(self, index: int) -> _PageCompat:
+        return _PageCompat(self._doc.pages[index])
+
+    def close(self) -> None:
+        try:
+            self._doc.close()
+        except Exception:
+            pass
+
+
+class FitzCompat:
+    """Backend object exposing a PyMuPDF-like open()."""
+
+    @staticmethod
+    def open(path: str) -> _DocumentCompat:
+        return _DocumentCompat(pdfplumber.open(path))
+
+
+class _PageLike(Protocol):
+    @property
+    def rect(self) -> _Rect: ...
+
+    def get_text(self, mode: str) -> dict[str, Any]: ...
+
+
+fitz = FitzCompat
+
+
 def _nearest_index(value: float, candidates: Sequence[float]) -> int:
     return min(range(len(candidates)), key=lambda idx: abs(value - candidates[idx]))
 
 
-def page_spans(page: fitz.Page) -> list[dict[str, Any]]:
+def page_spans(page: _PageLike) -> list[dict[str, Any]]:
     d = page.get_text("dict")
     out: list[dict[str, Any]] = []
     for b in d.get("blocks", []):
@@ -185,8 +466,8 @@ def find_footer_page_y(lines: list[list[dict[str, Any]]], page_height: float) ->
         if "page" in txt:
             for sp in ln:
                 if "page" in sp["t"].lower():
-                    return sp["y0"]
-            return min(s["y0"] for s in ln)
+                    return float(sp["y0"])
+            return min(float(s["y0"]) for s in ln)
     return page_height
 
 
@@ -336,11 +617,11 @@ def kmeans1d_median(xs: list[float], k: int = 4, iters: int = 20) -> list[float]
     qs = [(i + 0.5) / k for i in range(k)]
     centers = quantiles(xs_sorted, qs)
     for _ in range(iters):
-        buckets = [[] for _ in range(k)]
+        buckets: list[list[float]] = [[] for _ in range(k)]
         for x in xs_sorted:
             idx = min(range(k), key=lambda i: abs(x - centers[i]))
             buckets[idx].append(x)
-        new_centers = []
+        new_centers: list[float] = []
         for b in buckets:
             new_centers.append(statistics.median(b) if b else statistics.median(xs_sorted))
         if all(abs(new_centers[i] - centers[i]) < 0.25 for i in range(k)):
@@ -383,7 +664,7 @@ def header_has_items(
 
 
 def decide_order_mode(
-    items_xy: list[dict[str, float]],
+    items_xy: list[tuple[float, float]],
     row_groups: list[list[dict[str, float]]],
 ) -> str:
     if not items_xy:
@@ -465,7 +746,8 @@ def parse_pdf(
                 if any(h["name"] in ("HeavyMetals", "Lectins") for h in valid_headers)
                 else "Foods"
             )
-            page_obj = {"page": pno, "section": section, "categories": []}
+            categories: list[dict[str, Any]] = []
+            page_obj = {"page": pno, "section": section, "categories": categories}
 
             for h in headers_by_y:
                 cname = h["name"]
@@ -474,7 +756,7 @@ def parse_pdf(
 
                 scores = find_scores_in_box(lines, x0, x1, y0, y1)
                 if not scores:
-                    page_obj["categories"].append({"name": cname, "items": []})
+                    categories.append({"name": cname, "items": []})
                     continue
                 row_groups = cluster_score_rows(scores, tol=ROW_CLUSTER_TOL)
                 row_centers = [sum(s["y"] for s in g) / len(g) for g in row_groups]
@@ -484,11 +766,12 @@ def parse_pdf(
                     bt, bb = bands[0]
                     bands[0] = (max(bt, hy1 + 1.0), bb)
 
-                tmp = []
+                tmp: list[dict[str, Any]] = []
                 for g, (band_top, band_bot) in zip(row_groups, bands, strict=False):
                     g = sorted(g, key=lambda s: s["x"])
-                    xs = [sc["x"] for sc in g]
+                    xs = [float(sc["x"]) for sc in g]
                     for idx, sc in enumerate(g):
+                        x_coord = float(sc["x"])
                         win_l = max(x0, xs[idx] + WINDOW_LEFT_PAD)
                         win_r = min(
                             x1, (xs[idx + 1] - WINDOW_RIGHT_PAD) if idx + 1 < len(xs) else x1
@@ -510,43 +793,44 @@ def parse_pdf(
                             score_val = int(sc["t"])
                         except ValueError:
                             continue
+                        row_avg = float(sum(s["y"] for s in g) / len(g))
                         tmp.append(
                             {
                                 "name": label,
                                 "score": score_val,
                                 "severity": severity(score_val),
-                                "_x": sc["x"],
-                                "_ry": sum(s["y"] for s in g) / len(g),
+                                "_x": x_coord,
+                                "_ry": row_avg,
                             }
                         )
 
                 if not tmp:
-                    page_obj["categories"].append({"name": cname, "items": []})
+                    categories.append({"name": cname, "items": []})
                     continue
 
                 # Decide per-category ordering
                 mode = order_mode
                 if order_mode == "auto":
-                    items_xy = [(it["_x"], it["_ry"]) for it in tmp]
+                    items_xy = [(float(it["_x"]), float(it["_ry"])) for it in tmp]
                     mode = decide_order_mode(items_xy, row_groups)
 
                 if mode == "row":
                     ordered = sorted(tmp, key=lambda r: (r["_ry"], r["_x"]))
                 else:
-                    xs_all = [it["_x"] for it in tmp]
+                    xs_all = [float(it["_x"]) for it in tmp]
                     centers = kmeans1d_median(xs_all, k=4, iters=25)
-                    uniq_rows = sorted({round(v, 2) for v in (it["_ry"] for it in tmp)})
+                    uniq_rows = sorted({round(float(it["_ry"]), 2) for it in tmp})
 
                     for it in tmp:
-                        it["_col"] = _nearest_index(it["_x"], centers)
-                        it["_row"] = _nearest_index(it["_ry"], uniq_rows)
+                        it["_col"] = _nearest_index(float(it["_x"]), centers)
+                        it["_row"] = _nearest_index(float(it["_ry"]), uniq_rows)
                     ordered = sorted(tmp, key=lambda r: (r["_col"], r["_row"]))
 
                 items = [
                     {"name": it["name"], "score": it["score"], "severity": it["severity"]}
                     for it in ordered
                 ]
-                page_obj["categories"].append({"name": cname, "items": items})
+                categories.append({"name": cname, "items": items})
 
             out_pages.append(page_obj)
 

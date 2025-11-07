@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, IO, Protocol, cast
+from typing import IO, Any, Protocol, cast
+
+
+class DocumentLike(Protocol):
+    paragraphs: list[Any]
+    tables: list[Any]
+
 
 class DocumentLoader(Protocol):
-    def __call__(self, docx: str | IO[bytes] | None = None) -> Any:  # pragma: no cover - protocol
-        ...
+    def __call__(self, docx: str | IO[bytes] | None = None) -> DocumentLike: ...
 
 
 Document: DocumentLoader | None

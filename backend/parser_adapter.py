@@ -2,21 +2,20 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+
 class FoodParser(Protocol):
     def __call__(
         self, pdf_path: str, start_page: int = ..., end_page: int = ..., order_mode: str = ...
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...
 
 
 class SimpleParser(Protocol):
-    def __call__(self, pdf_path: str) -> dict[str, Any]:
-        ...
+    def __call__(self, pdf_path: str) -> dict[str, Any]: ...
 
 
 class PeekParser(Protocol):
-    def __call__(self, pdf_path: Path) -> dict[str, Any]:
-        ...
+    def __call__(self, pdf_path: Path) -> dict[str, Any]: ...
+
 
 parse_food_pdf: FoodParser | None = None
 parse_nutrition_pdf: SimpleParser | None = None

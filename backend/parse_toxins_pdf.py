@@ -7,7 +7,9 @@ import os
 import re
 from typing import Any
 
-import fitz  # PyMuPDF
+import pdfplumber
+from pdfplumber import PDF
+from pdfplumber.page import Page as PdfPage
 
 ITEM_LINE_RE = re.compile(
     r"^\s*(?P<item>[A-Za-z0-9][A-Za-z0-9\s\-\(\)/\.]+?[A-Za-z0-9\)])\s*\[\s*(?P<value>-?\d+(?:\.\d+)?)\s*\]\s*$"
@@ -27,8 +29,8 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip()).lower()
 
 
-def _page_lines(page: fitz.Page) -> list[str]:
-    text = str(page.get_text("text"))
+def _page_lines(page: PdfPage) -> list[str]:
+    text = str(page.extract_text())
     if not text:
         return []
     return text.splitlines()
@@ -53,8 +55,8 @@ def _parse_items(lines: list[str]) -> list[tuple[str, float]]:
     return items
 
 
-def _extract_candidates(doc: fitz.Document) -> list[tuple[str, float]]:
-    for page in doc:
+def _extract_candidates(doc: PDF) -> list[tuple[str, float]]:
+    for page in doc.pages:
         lines = _page_lines(page)
         if not lines:
             continue
@@ -77,11 +79,8 @@ def _extract_candidates(doc: fitz.Document) -> list[tuple[str, float]]:
 
 
 def parse_pdf(input_path: str) -> dict[str, Any]:
-    doc = fitz.open(input_path)
-    try:
+    with pdfplumber.open(input_path) as doc:
         items = _extract_candidates(doc)
-    finally:
-        doc.close()
 
     if not items:
         raise ValueError("Unable to locate toxins items in supplied PDF.")

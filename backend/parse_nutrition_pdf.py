@@ -8,7 +8,8 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-import fitz  # PyMuPDF
+import pdfplumber
+from pdfplumber import PDF
 
 ITEM_RE = re.compile(
     r"""
@@ -25,9 +26,9 @@ def _norm_name(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip()).lower()
 
 
-def _iter_page_lines(doc: fitz.Document) -> Iterable[str]:
-    for page in doc:
-        text = page.get_text("text")
+def _iter_page_lines(doc: PDF) -> Iterable[str]:
+    for page in doc.pages:
+        text = page.extract_text()
         if not text:
             continue
         for raw_line in text.splitlines():
@@ -69,16 +70,13 @@ def _parse_line(line: str) -> list[tuple[str, Number]]:
 
 
 def _extract_items(path: str) -> list[tuple[str, Number]]:
-    doc = fitz.open(path)
-    try:
+    with pdfplumber.open(path) as doc:
         items: list[tuple[str, Number]] = []
         for line in _iter_page_lines(doc):
             if "[" not in line or "]" not in line:
                 continue
             items.extend(_parse_line(line))
         return items
-    finally:
-        doc.close()
 
 
 def parse_pdf(input_path: str) -> dict[str, Any]:

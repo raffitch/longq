@@ -19,7 +19,7 @@ try:
 except ModuleNotFoundError:
     app_module = import_module("backend.app")
 
-app = cast(FastAPI, getattr(app_module, "app"))
+app = cast(FastAPI, app_module.app)
 
 
 def main() -> None:

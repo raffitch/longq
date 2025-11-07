@@ -7,7 +7,8 @@ import os
 import re
 from typing import Any
 
-import fitz  # PyMuPDF
+import pdfplumber
+from pdfplumber.page import Page as PdfPage
 
 
 def _norm_spaces(s: str) -> str:
@@ -27,8 +28,8 @@ FIRST_B = _norm_key("Silicon")
 LAST_B = _norm_key("Zirconium")
 
 
-def _rate_block(page: fitz.Page) -> str | None:
-    text = page.get_text("text")
+def _rate_block(page: PdfPage) -> str | None:
+    text = page.extract_text()
     if not text:
         return None
     m = RATE_BLOCK_RE.search(text)
@@ -54,9 +55,9 @@ def _parse_items(block_text: str) -> list[tuple[str, float]]:
     return items
 
 
-def _collect_blocks(doc: fitz.Document) -> list[list[tuple[str, float]]]:
+def _collect_blocks(doc: pdfplumber.PDF) -> list[list[tuple[str, float]]]:
     blocks: list[list[tuple[str, float]]] = []
-    for page in doc:
+    for page in doc.pages:
         blk = _rate_block(page)
         if not blk:
             continue
@@ -89,11 +90,8 @@ def _match_blocks(
 
 
 def parse_pdf(input_path: str) -> dict[str, Any]:
-    doc = fitz.open(input_path)
-    try:
+    with pdfplumber.open(input_path) as doc:
         blocks = _collect_blocks(doc)
-    finally:
-        doc.close()
 
     match = _match_blocks(blocks)
     if not match:
