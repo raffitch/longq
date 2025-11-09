@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-import { readFile, writeFile, readdir } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-
-const LICENSE_REGEX = /^(license|licence|copying)(\.[^.]+)?$/i;
 
 function parseArgs(argv) {
   const args = { project: null, output: null };
@@ -27,27 +25,6 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
-async function findLicenseText(dir) {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (!LICENSE_REGEX.test(entry.name)) continue;
-    try {
-      const text = (await readFile(path.join(dir, entry.name), "utf8")).trim();
-      if (text) {
-        return text;
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
 
 function cleanLicense(license) {
   if (!license) return "Unknown";
@@ -60,39 +37,40 @@ async function main() {
   const { project, output } = parseArgs(process.argv);
   const projectRoot = path.resolve(process.cwd(), project);
   const lockPath = path.join(projectRoot, "package-lock.json");
-  const nodeModules = path.join(projectRoot, "node_modules");
   const lock = await readJson(lockPath);
   const packages = lock.packages || {};
 
   const results = [];
   for (const [pkgPath, info] of Object.entries(packages)) {
-    const rel = pkgPath || "";
-    if (!rel.startsWith("node_modules")) {
-      continue;
+    // We only care about actual dependencies listed under node_modules
+    if (!pkgPath || !pkgPath.startsWith("node_modules")) continue;
+
+    // Derive package name from the path segment after the last `node_modules/`
+    const parts = pkgPath.split("/");
+    let name = null;
+    for (let i = parts.length - 1; i >= 0; i -= 1) {
+      if (parts[i] === "node_modules") {
+        const next = parts[i + 1];
+        if (!next) break;
+        if (next.startsWith("@")) {
+          const scoped = parts[i + 2];
+          if (scoped) name = `${next}/${scoped}`;
+        } else {
+          name = next;
+        }
+        break;
+      }
     }
-    const segments = rel.split("/").filter(Boolean);
-    if (segments.length === 0) continue;
-    const pkgRoot = path.join(projectRoot, ...segments);
-    let pkgJson;
-    try {
-      pkgJson = await readJson(path.join(pkgRoot, "package.json"));
-    } catch {
-      continue;
-    }
-    const repo =
-      (pkgJson.repository && (pkgJson.repository.url || pkgJson.repository)) ||
-      pkgJson.homepage ||
-      "";
+    if (!name) continue;
+
     const entry = {
-      name: pkgJson.name || segments.at(-1),
-      version: pkgJson.version || info.version || "0.0.0",
-      license: cleanLicense(pkgJson.license || pkgJson.licenses),
-      repository: repo,
+      name,
+      version: info.version || "0.0.0",
+      // Prefer license from lockfile when present; otherwise mark Unknown
+      license: cleanLicense(info.license),
+      // Use resolved tarball URL as a best-effort reference if available
+      repository: info.resolved || "",
     };
-    const text = await findLicenseText(pkgRoot);
-    if (text) {
-      entry.licenseText = text;
-    }
     results.push(entry);
   }
 
