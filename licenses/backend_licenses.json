@@ -24,15 +24,15 @@
     "name": "cffi",
     "version": "2.0.0",
     "license": "Unknown",
-    "summary": "",
-    "home_page": ""
+    "summary": "Foreign Function Interface for Python calling C code.",
+    "home_page": "https://cffi.readthedocs.io/"
   },
   {
     "name": "charset-normalizer",
     "version": "3.4.4",
-    "license": "Unknown",
-    "summary": "",
-    "home_page": ""
+    "license": "MIT",
+    "summary": "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet.",
+    "home_page": "https://github.com/jawah/charset_normalizer/blob/master/CHANGELOG.md"
   },
   {
     "name": "click",
@@ -45,22 +45,22 @@
     "name": "cryptography",
     "version": "46.0.3",
     "license": "Unknown",
-    "summary": "",
-    "home_page": ""
+    "summary": "cryptography is a package which provides cryptographic recipes and primitives to Python developers.",
+    "home_page": "https://github.com/pyca/cryptography"
   },
   {
     "name": "fastapi",
     "version": "0.121.0",
-    "license": "MIT License",
+    "license": "Unknown",
     "summary": "FastAPI framework, high performance, easy to learn, fast to code, ready for production",
     "home_page": "https://github.com/fastapi/fastapi"
   },
   {
     "name": "greenlet",
     "version": "3.2.4",
-    "license": "Unknown",
-    "summary": "",
-    "home_page": ""
+    "license": "MIT AND Python-2.0",
+    "summary": "Lightweight in-process concurrent programming",
+    "home_page": "https://greenlet.readthedocs.io/"
   },
   {
     "name": "h11",
@@ -108,21 +108,21 @@
     "name": "pdfminer-six",
     "version": "20250506",
     "license": "Unknown",
-    "summary": "",
-    "home_page": ""
+    "summary": "PDF parser and analyzer",
+    "home_page": "https://github.com/pdfminer/pdfminer.six"
   },
   {
     "name": "pdfplumber",
     "version": "0.11.7",
-    "license": "Unknown",
-    "summary": "",
-    "home_page": ""
+    "license": "MIT License",
+    "summary": "Plumb a PDF for detailed information about each char, rectangle, and line.",
+    "home_page": "https://github.com/jsvine/pdfplumber"
   },
   {
     "name": "pillow",
     "version": "12.0.0",
     "license": "Unknown",
-    "summary": "Python Imaging Library (Fork)",
+    "summary": "Python Imaging Library (fork)",
     "home_page": "https://github.com/python-pillow/Pillow/releases"
   },
   {
@@ -136,15 +136,15 @@
     "name": "prometheus-client",
     "version": "0.23.1",
     "license": "Unknown",
-    "summary": "",
-    "home_page": ""
+    "summary": "Python client for the Prometheus monitoring system.",
+    "home_page": "https://github.com/prometheus/client_python"
   },
   {
     "name": "pycparser",
     "version": "2.23",
-    "license": "Unknown",
-    "summary": "",
-    "home_page": ""
+    "license": "BSD-3-Clause",
+    "summary": "C parser in Python",
+    "home_page": "https://github.com/eliben/pycparser"
   },
   {
     "name": "pydantic",
@@ -170,9 +170,9 @@
   {
     "name": "pypdfium2",
     "version": "5.0.0",
-    "license": "Unknown",
-    "summary": "",
-    "home_page": ""
+    "license": "BSD-3-Clause, Apache-2.0, dependency licenses",
+    "summary": "Python bindings to PDFium",
+    "home_page": "https://github.com/pypdfium2-team/pypdfium2"
   },
   {
     "name": "pytest",
@@ -240,7 +240,7 @@
   {
     "name": "starlette",
     "version": "0.49.3",
-    "license": "BSD License",
+    "license": "Unknown",
     "summary": "The little ASGI library that shines.",
     "home_page": "https://github.com/Kludex/starlette"
   },
