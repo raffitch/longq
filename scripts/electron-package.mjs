@@ -10,7 +10,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { rmSync, existsSync, statSync } from 'node:fs';
+import { rmSync, existsSync, statSync, copyFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -125,12 +125,32 @@ function buildFrontend() {
   run(npmCommand(), ['run', 'build'], { cwd: frontendDir });
 }
 
+function generateLicenseData(pythonBinary) {
+  const scriptsDir = join(repoRoot, 'scripts');
+  run(pythonBinary, [join(scriptsDir, 'generate_backend_licenses.py'), '--output', join(repoRoot, 'licenses/backend_licenses.json')], {
+    cwd: repoRoot,
+  });
+  run('node', [join(scriptsDir, 'generate_js_licenses.mjs'), '--project', 'frontend', '--output', 'licenses/frontend_licenses.json'], {
+    cwd: repoRoot,
+  });
+  run('node', [join(scriptsDir, 'generate_js_licenses.mjs'), '--project', 'electron', '--output', 'licenses/electron_licenses.json'], {
+    cwd: repoRoot,
+  });
+  try {
+    copyFileSync(join(repoRoot, 'THIRD_PARTY_NOTICES.md'), join(repoRoot, 'licenses', 'THIRD_PARTY_NOTICES.md'));
+  } catch (err) {
+    console.warn('Unable to copy THIRD_PARTY_NOTICES.md into licenses/', err);
+  }
+}
+
 function packageElectron() {
   ensureNpmInstall(electronDir);
   const script = process.platform === 'darwin' ? 'dist:mac' : process.platform === 'win32' ? 'dist:win' : null;
   if (!script) {
     fail(`Electron packaging not configured for platform: ${process.platform}`);
   }
+  const pythonBinary = runtimePythonPath();
+  generateLicenseData(pythonBinary);
   run(npmCommand(), ['run', script], { cwd: electronDir });
 }
 

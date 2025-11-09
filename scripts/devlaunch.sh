@@ -145,6 +145,23 @@ ensure_python
 ensure_frontend_deps
 ensure_electron_deps
 
+generate_licenses() {
+  echo "Generating backend license inventory..."
+  (cd "$ROOT_DIR" && "$BACKEND_PYTHON" scripts/generate_backend_licenses.py --output licenses/backend_licenses.json || true)
+  if command -v node >/dev/null 2>&1; then
+    echo "Generating frontend license inventory..."
+    (cd "$ROOT_DIR" && node scripts/generate_js_licenses.mjs --project frontend --output licenses/frontend_licenses.json || true)
+    echo "Generating electron license inventory..."
+    (cd "$ROOT_DIR" && node scripts/generate_js_licenses.mjs --project electron --output licenses/electron_licenses.json || true)
+  else
+    echo "Skipping frontend/electron license generation (node not found)."
+  fi
+  if [[ -f "$ROOT_DIR/THIRD_PARTY_NOTICES.md" ]]; then
+    cp "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$ROOT_DIR/licenses/THIRD_PARTY_NOTICES.md"
+  fi
+}
+generate_licenses
+
 ensure_port_free "$BACKEND_PORT" "Backend"
 ensure_port_free "$FRONTEND_PORT" "Frontend"
 

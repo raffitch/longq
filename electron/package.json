@@ -23,7 +23,8 @@
     "files": [
       "**/*",
       "../backend/**/*",
-      "../frontend/dist/**/*"
+      "../frontend/dist/**/*",
+      "../licenses/**/*"
     ],
     "extraResources": [
       {
@@ -37,6 +38,14 @@
       {
         "from": "../frontend/dist",
         "to": "frontend/dist"
+      },
+      {
+        "from": "../licenses",
+        "to": "licenses"
+      },
+      {
+        "from": "../frontend/public/quantum-qi-logo.png",
+        "to": "assets/quantum-qi-logo.png"
       }
     ],
     "directories": {

@@ -1,6 +1,7 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const http = require('http');
 const net = require('net');
 const { spawn } = require('child_process');
@@ -13,6 +14,8 @@ let staticServer = null;
 let staticPort = null;
 let operatorWindow = null;
 let guestWindow = null;
+let aboutWindow = null;
+let aboutTempFile = null;
 let backendLogPath = null;
 let isAppQuitting = false;
 let backendPort = Number(process.env.LONGQ_BACKEND_PORT || 0);
@@ -387,6 +390,236 @@ function recordDiagnosticEvent(event) {
 
 ipcMain.handle('diagnostics:get-history', () => diagnosticEventHistory);
 
+function readJsonFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (err) {
+    console.warn('[longq] failed to read JSON file', filePath, err);
+    return null;
+  }
+}
+
+function readTextFile(filePath) {
+  try {
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, 'utf8');
+    }
+  } catch (err) {
+    console.warn('[longq] failed to read text file', filePath, err);
+  }
+  return null;
+}
+
+function getLicenseBasePaths() {
+  const bases = [];
+  if (process.resourcesPath) {
+    bases.push(path.join(process.resourcesPath, 'licenses'));
+  }
+  bases.push(path.join(repoRoot, 'licenses'));
+  return bases;
+}
+
+function loadLicenseEntries() {
+  const combined = new Map();
+  for (const base of getLicenseBasePaths()) {
+    const targets = [
+      path.join(base, 'backend_licenses.json'),
+      path.join(base, 'frontend_licenses.json'),
+      path.join(base, 'electron_licenses.json'),
+    ];
+    for (const file of targets) {
+      const data = readJsonFile(file);
+      if (Array.isArray(data)) {
+        for (const entry of data) {
+          const key = `${entry.name || ''}::${entry.version || ''}`;
+          if (!combined.has(key)) {
+            combined.set(key, entry);
+          }
+        }
+      }
+    }
+    if (combined.size > 0) {
+      break;
+    }
+  }
+
+  if (combined.size === 0) {
+    for (const base of getLicenseBasePaths()) {
+      const markdown = readTextFile(path.join(base, 'THIRD_PARTY_NOTICES.md')) || readTextFile(path.join(repoRoot, 'THIRD_PARTY_NOTICES.md'));
+      if (markdown) {
+        return [
+          {
+            name: 'Third-Party Notices',
+            version: '',
+            license: '',
+            repository: '',
+            licenseText: markdown,
+          },
+        ];
+      }
+    }
+  }
+
+  return Array.from(combined.values());
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function loadLogoDataUrl() {
+  const candidates = [];
+  if (process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, 'assets', 'quantum-qi-logo.png'));
+  }
+  candidates.push(path.join(repoRoot, 'frontend', 'public', 'quantum-qi-logo.png'));
+  candidates.push(path.join(repoRoot, 'electron', 'build', 'icons', 'icon.png'));
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        const buffer = fs.readFileSync(candidate);
+        const base64 = buffer.toString('base64');
+        return `data:image/png;base64,${base64}`;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+function groupEntriesByLicense(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = entry.license || 'Unknown';
+    if (!groups.has(key)) {
+      groups.set(key, {
+        license: key,
+        entries: [],
+        licenseText: entry.licenseText || null,
+      });
+    }
+    const group = groups.get(key);
+    group.entries.push(entry);
+    if (!group.licenseText && entry.licenseText) {
+      group.licenseText = entry.licenseText;
+    }
+  }
+  return Array.from(groups.values()).sort((a, b) => a.license.localeCompare(b.license));
+}
+
+function buildAboutHtml(entries) {
+  const appVersion = app.getVersion ? app.getVersion() : '';
+  const logoData = loadLogoDataUrl();
+  const grouped = groupEntriesByLicense(entries);
+  const body = grouped
+    .map((group) => {
+      const packageItems = group.entries
+        .map((pkg) => {
+          const repo = pkg.repository
+            ? `<span class="repo"> • <a href="${escapeHtml(pkg.repository)}" target="_blank" rel="noreferrer">${escapeHtml(pkg.repository)}</a></span>`
+            : '';
+          return `<li>${escapeHtml(pkg.name || 'Unknown')} <span class="version">${escapeHtml(pkg.version || '')}</span>${repo}</li>`;
+        })
+        .join('');
+      const licenseText = group.licenseText
+        ? `\n<details><summary>View license text</summary><pre>${escapeHtml(group.licenseText)}</pre></details>`
+        : '';
+      return `
+        <section>
+          <h3>${escapeHtml(group.license)}</h3>
+          <ul>${packageItems}</ul>
+          ${licenseText}
+        </section>`;
+    })
+    .join('\n');
+  return `<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>About Quantum Qi™</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #0c0c0c; color: #f5f5f5; overflow-x: hidden; }
+        h1 { margin: 0; }
+        section { border-bottom: 1px solid #2a2a2a; padding: 12px 0; }
+        section:last-child { border-bottom: none; }
+        h3 { margin: 0 0 6px 0; font-size: 15px; }
+        ul { list-style: disc; padding-left: 20px; margin: 0 0 6px 12px; color: #ddd; }
+        li { font-size: 13px; margin-bottom: 2px; word-break: break-word; }
+        .version { color: #aaa; margin-left: 6px; font-size: 12px; }
+        .repo { color: #7cb1ff; font-size: 11px; }
+        details { margin-top: 6px; }
+        details summary { cursor: pointer; font-size: 12px; color: #7cb1ff; }
+        pre { white-space: pre-wrap; word-break: break-word; background: #181818; padding: 8px; border-radius: 4px; font-size: 12px; line-height: 1.4; }
+        p.meta { color: #bbb; font-size: 12px; margin: 4px 0 12px 0; }
+      </style>
+    </head>
+    <body>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+        ${logoData ? `<img src="${logoData}" alt="Quantum Qi Logo" style="width:48px;height:48px;border-radius:8px;" />` : ''}
+        <div>
+          <h1 style="font-size:20px;">Quantum Qi™ Operator</h1>
+          <div style="font-size:13px;color:#bbb;">Version ${escapeHtml(appVersion)}</div>
+        </div>
+      </div>
+      <p class="meta">Open-source components bundled with this application:</p>
+      <div>${body || '<p>No license data found. Generate JSON summaries under the licenses/ directory.</p>'}</div>
+    </body>
+  </html>`;
+}
+
+function cleanupAboutTempFile() {
+  if (aboutTempFile) {
+    try {
+      fs.unlinkSync(aboutTempFile);
+    } catch {
+      /* ignore */
+    }
+    aboutTempFile = null;
+  }
+}
+
+function showAboutWindow() {
+  const entries = loadLicenseEntries();
+  const display = screen.getPrimaryDisplay();
+  const size = display && display.workAreaSize ? display.workAreaSize : { width: 1280, height: 720 };
+  const winWidth = Math.max(360, Math.round(size.width * 0.25));
+  const winHeight = Math.max(320, Math.round(size.height * 0.35));
+
+  if (aboutWindow && !aboutWindow.isDestroyed()) {
+    aboutWindow.focus();
+    return;
+  }
+  aboutWindow = new BrowserWindow({
+    width: winWidth,
+    height: winHeight,
+    title: 'About Quantum Qi™',
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    webPreferences: {
+      contextIsolation: true,
+    },
+  });
+  aboutWindow.setMenuBarVisibility(false);
+  const html = buildAboutHtml(entries);
+  cleanupAboutTempFile();
+  const tempDir = app.getPath('temp') || os.tmpdir();
+  aboutTempFile = path.join(tempDir, `longq-about-${Date.now()}.html`);
+  fs.writeFileSync(aboutTempFile, html, 'utf8');
+  aboutWindow.loadFile(aboutTempFile);
+  aboutWindow.on('closed', () => {
+    aboutWindow = null;
+    cleanupAboutTempFile();
+  });
+}
+
 function setupMenu() {
   const template = [
     {
@@ -395,13 +628,7 @@ function setupMenu() {
         {
           label: 'About Quantum Qi™',
           click: () => {
-            dialog.showMessageBox({
-              type: 'info',
-              buttons: ['OK'],
-              title: 'About Quantum Qi™',
-              message: 'Quantum Qi™ Operator Portal',
-              detail: 'Desktop shell for managing guest sessions.',
-            });
+            showAboutWindow();
           },
         },
         { type: 'separator' },

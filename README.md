@@ -131,6 +131,26 @@ Useful environment overrides (place in `backend/.env` or export before running):
 
 - Observability endpoints: `GET /metrics` exposes Prometheus counters/gauges/histograms for uploads and parse activity, while `GET /diagnostics` returns the most recent backend error entries surfaced inside the Operator Console diagnostics pane.
 
+### License tracking
+
+Commercial builds ship with a complete list of third-party acknowledgements. Run
+the helper scripts whenever dependency lockfiles change to keep the inventory in
+`licenses/` up to date:
+
+```bash
+# Backend (Python)
+python scripts/generate_backend_licenses.py --output licenses/backend_licenses.json
+
+# Frontend React app
+node scripts/generate_js_licenses.mjs --project frontend --output licenses/frontend_licenses.json
+
+# Electron shell
+node scripts/generate_js_licenses.mjs --project electron --output licenses/electron_licenses.json
+```
+
+Each JSON document is structured for easy rendering inside the Electron About
+dialog. See `licenses/README.md` for details.
+
 ### Frontend (React + Vite)
 
 ```bash

@@ -53,6 +53,23 @@ jobs:
           pip install -r backend/requirements.txt
           pip install black==24.10.0 ruff==0.6.9 mypy==1.11.2
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            electron/package-lock.json
+
+      - name: Install frontend dependencies (for license audit)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install electron dependencies (for license audit)
+        working-directory: electron
+        run: npm ci
+
       - name: Ruff lint
         run: ruff check backend
 
@@ -64,3 +81,20 @@ jobs:
 
       - name: Pytest
         run: pytest
+
+      - name: Generate backend license inventory
+        run: python scripts/generate_backend_licenses.py --output licenses/backend_licenses.json
+
+      - name: Generate frontend license inventory
+        run: node scripts/generate_js_licenses.mjs --project frontend --output licenses/frontend_licenses.json
+
+      - name: Generate electron license inventory
+        run: node scripts/generate_js_licenses.mjs --project electron --output licenses/electron_licenses.json
+
+      - name: Ensure license artifacts are current
+        run: |
+          if ! git diff --quiet licenses; then
+            echo "::error ::License manifests changed. Run the license scripts locally and commit the updated files.";
+            git status licenses
+            exit 1
+          fi
