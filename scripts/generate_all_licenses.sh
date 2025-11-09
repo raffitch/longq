@@ -35,14 +35,34 @@ fi
 node scripts/generate_js_licenses.mjs --project frontend --output licenses/frontend_licenses.json
 node scripts/generate_js_licenses.mjs --project electron --output licenses/electron_licenses.json
 
-# Backend
+# Backend (ensure consistent Python version)
+PY_VERSION_FILE=".python-version"
+if [ -f "$PY_VERSION_FILE" ]; then
+  PY_SPEC="$(cat $PY_VERSION_FILE | tr -d '\n')"
+else
+  PY_SPEC="3.13"
+fi
+
+if command -v pyenv >/dev/null 2>&1; then
+  if ! pyenv versions --bare | grep -q "^${PY_SPEC}$"; then
+    echo "pyenv is missing Python ${PY_SPEC}; install it (pyenv install ${PY_SPEC})" >&2
+  fi
+  echo "Using pyenv Python ${PY_SPEC}"; 
+  PYEXEC="$(pyenv which python || echo python3)"
+else
+  # Fallback: prefer python3.13 then python3.
+  PYEXEC="$(command -v python${PY_SPEC} || command -v python3 || command -v python)"
+fi
+
 if [ -z "${VIRTUAL_ENV:-}" ]; then
   if [ ! -d backend/.venv ]; then
-    echo "Creating backend virtualenv..."
-    python3 -m venv backend/.venv
+    echo "Creating backend virtualenv with $PYEXEC..."
+    "$PYEXEC" -m venv backend/.venv
   fi
+  # shellcheck disable=SC1091
   source backend/.venv/bin/activate
 fi
+python -m pip install --upgrade pip
 pip install --require-hashes -r backend/requirements.txt
 python scripts/generate_backend_licenses.py --output licenses/backend_licenses.json
 

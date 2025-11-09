@@ -81,3 +81,25 @@ Flags:
 A GitHub Actions workflow (`.github/workflows/licenses.yml`) regenerates all
 license files on every push/PR and fails if anything under `licenses/` would
 change. If CI fails, run the commands above locally and commit the updates.
+
+### Python version
+
+The backend (and license generation) is standardized on **Python 3.13**:
+
+- Tooling targets (`black`, `ruff`, `mypy`) are set to 3.13 in `pyproject.toml`.
+- CI uses `actions/setup-python` with `python-version: 3.13`.
+- A `.python-version` file (pyenv compatible) pins the version for developers.
+
+If you don't have 3.13 installed yet:
+
+```bash
+pyenv install 3.13.0
+pyenv local 3.13.0
+```
+
+Recompile backend locks after upgrading Python:
+
+```bash
+pip install --upgrade pip
+pip-compile --generate-hashes backend/requirements.in
+```
