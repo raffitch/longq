@@ -7,7 +7,8 @@
     "start": "electron .",
     "build:frontend": "npm run build --prefix ../frontend",
     "dist:mac": "npm run build:frontend && electron-builder --mac",
-    "dist:win": "npm run build:frontend && electron-builder --win"
+    "dist:win": "npm run build:frontend && electron-builder --win",
+    "licenses": "bash ../scripts/generate_all_licenses.sh --group-by-license"
   },
   "dependencies": {
     "mime": "^3.0.0",

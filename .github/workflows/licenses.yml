@@ -1,0 +1,63 @@
+name: Licenses up-to-date
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  check-licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            electron/package-lock.json
+
+      - name: Install JS deps (frontend)
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Install JS deps (electron)
+        working-directory: electron
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate frontend licenses
+        run: node scripts/generate_js_licenses.mjs --project frontend --output licenses/frontend_licenses.json
+
+      - name: Generate electron licenses
+        run: node scripts/generate_js_licenses.mjs --project electron --output licenses/electron_licenses.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r backend/requirements.txt
+
+      - name: Generate backend licenses
+        run: python scripts/generate_backend_licenses.py --output licenses/backend_licenses.json
+
+      - name: Generate consolidated THIRD_PARTY_NOTICES.md
+        run: python scripts/generate_third_party_notice.py --output licenses/THIRD_PARTY_NOTICES.md
+
+      - name: Fail if licenses changed
+        shell: bash
+        run: |
+          if ! git diff --quiet licenses; then
+            echo "::error ::License manifests changed. Run the license scripts locally and commit the updated files.";
+            git status licenses
+            git --no-pager diff -- licenses | head -n 200
+            exit 1
+          fi

@@ -61,3 +61,23 @@ licenses/electron_licenses.json
 
 Commit the regenerated files alongside dependency updates so builds and release
 artifacts always include the latest license inventory.
+
+### One-liner (recommended)
+
+You can use the convenience script to regenerate everything and update the
+consolidated notice:
+
+```bash
+./scripts/generate_all_licenses.sh --group-by-license
+```
+
+Flags:
+
+- `--full-text`: include (truncated) license texts in the notice
+- `--group-by-license`: include a summary table grouped by license identifier
+
+### CI enforcement
+
+A GitHub Actions workflow (`.github/workflows/licenses.yml`) regenerates all
+license files on every push/PR and fails if anything under `licenses/` would
+change. If CI fails, run the commands above locally and commit the updates.
