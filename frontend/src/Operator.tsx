@@ -2126,13 +2126,26 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   };
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const liveMonitorUrl = origin ? `${origin}/guest?monitor=1` : "/guest?monitor=1";
+  const runtimeToken = getApiToken();
+  const appendTokenParam = useCallback(
+    (url: string | null) => {
+      if (!url || !runtimeToken) {
+        return url;
+      }
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}apiToken=${encodeURIComponent(runtimeToken)}`;
+    },
+    [runtimeToken],
+  );
+  const liveMonitorUrl = appendTokenParam(origin ? `${origin}/guest?monitor=1` : "/guest?monitor=1") ?? undefined;
   const stagedPreviewUrl =
-    stagedPreviewSessionId !== null
-      ? origin
-        ? `${origin}/guest?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
-        : `/guest?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
-      : null;
+    appendTokenParam(
+      stagedPreviewSessionId !== null
+        ? origin
+          ? `${origin}/guest?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
+          : `/guest?session=${stagedPreviewSessionId}&preview=1&v=${stagedPreviewVersion}`
+        : null,
+    ) ?? null;
   const hasStagedData = Boolean(stagedPreviewSessionId && stagedPreviewUrl);
   const showStagedPreviewBlock = Boolean(session && hasStagedData);
   const stagedPreviewVisible = showStagedPreviewBlock && !hasShownOnGuest;

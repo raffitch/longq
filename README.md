@@ -25,6 +25,8 @@ The script checks dependencies, frees the default ports, installs anything that 
 
 > **Heads up:** `devlaunch.sh` bootstraps virtualenvs and `node_modules` automatically if they are absent. The first run after a cleanup will take noticeably longer while dependencies install.
 
+> **Secrets:** For local work `scripts/devlaunch.sh` automatically creates/updates `backend/auth_token.json` and exports the token to both backend and frontend—no manual edits required. For shared/staging/prod environments copy `.env.example` to `.env` only if you need to pin a specific `LONGQ_API_TOKEN` override, and keep both files out of source control.
+
 Prereqs: Python 3.13 and Node.js 18+ in your `PATH`. The script exits with guidance if they are missing.
 
 Need a clean slate? Use:
@@ -128,6 +130,23 @@ Useful environment overrides (place in `backend/.env` or export before running):
 | `LONGQ_API_TOKEN` | _(required)_ | Bearer token clients must send with API/WebSocket requests (`Authorization: Bearer …`). Generate a strong random value for production. |
 | `LONGQ_ALLOW_INSECURE` | unset | Set to `1` only for local experiments to bypass auth (not recommended). |
 | `SESSION_FILE_RETENTION_HOURS` | `168` | Hours to retain per-session upload directories before maintenance purges them. |
+| `MAX_UPLOAD_BYTES` | `2097152` | Maximum allowed upload size in bytes (defaults to 2 MiB). Requests exceeding this return HTTP 413. |
+
+### Secrets & token rotation
+
+1. Local/dev: `./scripts/devlaunch.sh` ensures `backend/auth_token.json` exists, generating a random token when necessary and exporting it as `LONGQ_API_TOKEN` for both the backend and Vite. Remove the file (or the entire `LONGQ_ROOT`) to force a new token.
+2. Shared/prod: copy `.env.example` to `.env` only if you want to pin a specific token. Otherwise let the backend auto-generate `backend/auth_token.json` on first boot and distribute that value via secure channels (1Password, SOPS, etc.).
+3. On startup the backend always persists the active token to `backend/auth_token.json`; the file is authoritative so rotations survive restarts.
+4. Rotate credentials without redeploying via the authenticated endpoints:
+   - `POST /auth/token/rotate` (body: `{ "token": "<custom>", "grace_seconds": 0, "persist": true }`) immediately switches to a provided token.
+   - `POST /auth/token/renew` (body: `{ "grace_seconds": 60 }`) auto-generates a new token and keeps the previous value valid for the grace window so clients can swap without disconnects.
+5. Electron and `scripts/devlaunch.sh` inject tokens via environment variables; the frontend never stores them in `localStorage` and only reads from preload injection, `.env`, or dev query params.
+6. For production, distribute the rotated token to operators via secure channels and remove `LONGQ_ALLOW_INSECURE` from the environment.
+
+### Ephemeral sandboxes
+
+- Every run of `./scripts/devlaunch.sh` wipes the configured `LONGQ_ROOT` (defaults to `./data/`) so databases, uploads, and logs never leak between sessions. Set `LONGQ_PERSIST=1` before launching only if you intentionally want to keep state.
+- The Electron shell behaves the same way: unless `LONGQ_PERSIST=1`, it clears its per-user `LongQ` directory on startup before launching the backend. This matches the production requirement that each session starts from a clean slate.
 
 - Observability endpoints: `GET /metrics` exposes Prometheus counters/gauges/histograms for uploads and parse activity, while `GET /diagnostics` returns the most recent backend error entries surfaced inside the Operator Console diagnostics pane.
 

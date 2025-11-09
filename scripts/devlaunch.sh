@@ -7,12 +7,15 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 ELECTRON_DIR="$ROOT_DIR/electron"
 BACKEND_VENV="$BACKEND_DIR/.venv"
 BACKEND_PYTHON="$BACKEND_VENV/bin/python"
+LONGQ_ROOT="${LONGQ_ROOT:-$ROOT_DIR/data}"
+LONGQ_PERSIST="${LONGQ_PERSIST:-0}"
+export LONGQ_ROOT
+export LONGQ_PERSIST
+export PYTHONPATH="$ROOT_DIR:$ROOT_DIR/backend:${PYTHONPATH:-}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 IDLE_SHUTDOWN_DELAY="${IDLE_SHUTDOWN_DELAY:-5}"
-LONGQ_API_TOKEN="${LONGQ_API_TOKEN:-dev-longq-token}"
-export LONGQ_API_TOKEN
 
 resolve_host_python() {
   local candidate
@@ -44,6 +47,16 @@ resolve_host_python() {
 HOST_PYTHON=""
 resolve_host_python
 
+resolve_auth_token_file() {
+  (cd "$ROOT_DIR" && "$HOST_PYTHON" - <<'PY'
+from paths import backend_dir
+print(backend_dir() / "auth_token.json")
+PY
+  )
+}
+
+AUTH_TOKEN_FILE="$(resolve_auth_token_file)"
+
 if ! "$HOST_PYTHON" - <<'PY' >/dev/null 2>&1; then
 import sys
 if (sys.version_info.major, sys.version_info.minor) >= (3, 13):
@@ -55,6 +68,57 @@ PY
 fi
 
 : "${LONGQ_PYTHON:=$HOST_PYTHON}"
+
+reset_runtime_root() {
+  if [[ "${LONGQ_PERSIST}" == "1" ]]; then
+    return
+  fi
+  if [[ -d "$LONGQ_ROOT" ]]; then
+    echo "Clearing runtime data under $LONGQ_ROOT"
+    rm -rf "$LONGQ_ROOT"
+  fi
+}
+
+read_token_file() {
+  if [[ ! -f "$AUTH_TOKEN_FILE" ]]; then
+    return 0
+  fi
+  "$HOST_PYTHON" - "$AUTH_TOKEN_FILE" <<'PY'
+import json, sys, pathlib
+path = pathlib.Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    print("")
+else:
+    token = (data.get("token") or "").strip()
+    print(token)
+PY
+}
+
+write_token_file() {
+  "$HOST_PYTHON" - "$AUTH_TOKEN_FILE" <<'PY'
+import json, pathlib, secrets, sys
+path = pathlib.Path(sys.argv[1])
+path.parent.mkdir(parents=True, exist_ok=True)
+token = secrets.token_hex(24)
+path.write_text(json.dumps({"token": token}, indent=2), encoding="utf-8")
+print(token)
+PY
+}
+
+ensure_api_token() {
+  local token="${LONGQ_API_TOKEN:-}"
+  if [[ -z "$token" ]]; then
+    token="$(read_token_file)"
+  fi
+  if [[ -z "$token" ]]; then
+    token="$(write_token_file)"
+    echo "Generated new API token and wrote to backend/auth_token.json"
+  fi
+  LONGQ_API_TOKEN="$token"
+  export LONGQ_API_TOKEN
+}
 
 ensure_python() {
   if [[ ! -x "$BACKEND_PYTHON" ]]; then
@@ -184,6 +248,8 @@ PY
 }
 
 ensure_python
+reset_runtime_root
+ensure_api_token
 ensure_frontend_deps
 ensure_electron_deps
 

@@ -31,7 +31,7 @@ session_fs, app_root = _import_backend_modules()
 def _reset_app_root(
     monkeypatch: MonkeyPatch,
     tmp_path: Path,
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     monkeypatch.setenv("LONGQ_ROOT", str(tmp_path))
     app_root.cache_clear()
     yield

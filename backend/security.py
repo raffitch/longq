@@ -7,16 +7,18 @@ from starlette import status
 from starlette.responses import Response
 from starlette.websockets import WebSocket
 
-_token_env = os.getenv("LONGQ_API_TOKEN")
+from token_manager import current_token, is_token_valid
+from token_manager import initialize as initialize_tokens
+
 _allow_insecure = os.getenv("LONGQ_ALLOW_INSECURE", "false").lower() in {"1", "true", "yes", "on"}
 
-if _token_env is None and not _allow_insecure:
-    raise RuntimeError(
-        "LONGQ_API_TOKEN is not set. Set LONGQ_API_TOKEN or use LONGQ_ALLOW_INSECURE=1 "
-        "for local testing."
-    )
+initialize_tokens()
 
-API_TOKEN = _token_env
+if current_token() is None and not _allow_insecure:
+    raise RuntimeError(
+        "Authentication token is not configured. Set LONGQ_API_TOKEN, place auth_token.json under "
+        "backend/, or use LONGQ_ALLOW_INSECURE=1 for local testing."
+    )
 
 
 def _extract_bearer_value(raw: str | None) -> str | None:
@@ -28,13 +30,16 @@ def _extract_bearer_value(raw: str | None) -> str | None:
 
 
 def _token_matches(candidate: str | None) -> bool:
-    if API_TOKEN is None:
+    if _allow_insecure:
         return True
-    return candidate == API_TOKEN
+    token = current_token()
+    if token is None:
+        return True
+    return bool(is_token_valid(candidate))
 
 
 def enforce_http_middleware(request: Request) -> Response | None:
-    if API_TOKEN is None:
+    if _allow_insecure or current_token() is None:
         return None
     if request.method.upper() == "OPTIONS":
         return None
@@ -45,7 +50,7 @@ def enforce_http_middleware(request: Request) -> Response | None:
 
 
 async def ensure_websocket_authorized(ws: WebSocket) -> bool:
-    if API_TOKEN is None:
+    if _allow_insecure or current_token() is None:
         return True
     token = ws.query_params.get("token")
     if not token:

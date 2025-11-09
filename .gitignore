@@ -21,6 +21,8 @@ frontend/tsconfig.tsbuildinfo
 # Runtime data
 data/
 backend/data/
+.env
+backend/auth_token.json
 
 # macOS
 .DS_Store

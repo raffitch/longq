@@ -76,3 +76,20 @@ class DisplaySet(BaseModel):
     staged_first_name: str | None = None
     staged_full_name: str | None = None
     staged_sex: Literal["male", "female"] | None = None
+
+
+class TokenRotateRequest(BaseModel):
+    token: str | None = None
+    grace_seconds: float | None = None
+    persist: bool = True
+
+
+class TokenRenewRequest(BaseModel):
+    grace_seconds: float | None = None
+    persist: bool = True
+
+
+class TokenRotateResponse(BaseModel):
+    token: str
+    grace_seconds: float
+    persisted: bool

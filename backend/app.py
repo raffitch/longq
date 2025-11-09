@@ -26,6 +26,7 @@ from fastapi import (
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
+    status,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -56,6 +57,9 @@ from schemas import (
     SessionCreate,
     SessionOut,
     SessionUpdate,
+    TokenRenewRequest,
+    TokenRotateRequest,
+    TokenRotateResponse,
 )
 from security import enforce_http_middleware, ensure_websocket_authorized
 from session_fs import (
@@ -69,6 +73,8 @@ from session_fs import (
     store_upload_bytes,
     touch_session_lock,
 )
+from token_manager import generate_token as generate_auth_token
+from token_manager import rotate_token as rotate_auth_token
 
 EXIT_WHEN_IDLE = os.getenv("EXIT_WHEN_IDLE", "false").lower() in {"1", "true", "yes", "on"}
 try:
@@ -94,6 +100,8 @@ SexLiteral = Literal["male", "female"]
 StateLiteral = Literal[
     "CREATED", "INGESTING", "VALIDATING", "PARSING", "READY", "PUBLISHED", "CLOSED"
 ]
+
+DEFAULT_MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MiB default ceiling
 
 
 _METRICS_REGISTRY = CollectorRegistry(auto_describe=True)
@@ -142,6 +150,10 @@ ACTIVE_JOBS_GAUGE = Gauge(
 DIAGNOSTICS_MAX_ENTRIES = max(1, int(os.getenv("DIAGNOSTICS_MAX_ENTRIES", "100")))
 DIAGNOSTICS_BUFFER: deque[dict[str, object]] = deque(maxlen=DIAGNOSTICS_MAX_ENTRIES)
 _LOGGING_CONFIGURED = False
+
+
+class UploadTooLargeError(Exception):
+    """Raised when an uploaded file exceeds the configured byte limit."""
 
 
 class DiagnosticsHandler(logging.Handler):
@@ -268,6 +280,53 @@ ensure_app_dirs()
 _configure_logging()
 
 logger = logging.getLogger("longevityq.backend")
+
+
+def _parse_max_upload_bytes(raw: str | None) -> int:
+    if raw is None or raw.strip() == "":
+        return DEFAULT_MAX_UPLOAD_BYTES
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("MAX_UPLOAD_BYTES must be an integer number of bytes.") from exc
+    if value <= 0:
+        raise RuntimeError("MAX_UPLOAD_BYTES must be greater than zero.")
+    return value
+
+
+MAX_UPLOAD_BYTES = _parse_max_upload_bytes(os.getenv("MAX_UPLOAD_BYTES"))
+
+
+def _format_bytes(num_bytes: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(num_bytes)
+    idx = 0
+    while value >= 1024 and idx < len(units) - 1:
+        value /= 1024
+        idx += 1
+    precision = 1 if idx > 0 else 0
+    return f"{value:.{precision}f} {units[idx]}"
+
+
+def _detect_uploaded_size(upload: UploadFile, fallback: int) -> int:
+    raw = upload.file
+    if not hasattr(raw, "tell") or not hasattr(raw, "seek"):
+        return fallback
+    try:
+        position = raw.tell()
+    except Exception:
+        return fallback
+    try:
+        raw.seek(0, os.SEEK_END)
+        total = raw.tell()
+    except Exception:
+        total = fallback
+    finally:
+        try:
+            raw.seek(position, os.SEEK_SET)
+        except Exception:
+            pass
+    return total if total > 0 else fallback
 
 
 def _parse_allowed_origins(raw: str | None) -> list[str]:
@@ -493,6 +552,29 @@ def _validate_uploaded_filename(session: SessionRow, kind: str, filename: str) -
 
 def _log(message: str) -> None:
     logger.info(message)
+
+
+def _read_upload_payload(upload: UploadFile, *, max_bytes: int) -> bytes:
+    """Read an upload stream while enforcing a byte ceiling."""
+    raw = upload.file
+    total = 0
+    chunks: list[bytes] = []
+    while True:
+        chunk = raw.read(65536)
+        if not chunk:
+            break
+        if isinstance(chunk, str):
+            chunk = chunk.encode()
+        total += len(chunk)
+        if total > max_bytes:
+            reported_total = _detect_uploaded_size(upload, fallback=total)
+            human_total = _format_bytes(reported_total)
+            human_limit = _format_bytes(max_bytes)
+            raise UploadTooLargeError(
+                f"Upload size {human_total} exceeds the {human_limit} limit."
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _run_in_loop(callback: Callable[..., None], *args: object) -> None:
@@ -907,7 +989,13 @@ def upload_report(
             raise HTTPException(400, "Uploaded file name is missing.")
         _validate_uploaded_filename(s, kind, filename)
 
-        payload = file.file.read()
+        try:
+            payload = _read_upload_payload(file, max_bytes=MAX_UPLOAD_BYTES)
+        except UploadTooLargeError as exc:
+            raise HTTPException(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=str(exc),
+            ) from exc
         if not payload:
             raise HTTPException(400, "Uploaded file is empty.")
 
@@ -1219,3 +1307,21 @@ def close_session(
     db.add(s)
     db.commit()
     return {"ok": True}
+
+
+# ----------------- Token management -----------------
+@app.post("/auth/token/rotate", response_model=TokenRotateResponse)
+def rotate_token_endpoint(payload: TokenRotateRequest) -> TokenRotateResponse:
+    grace = max(0.0, float(payload.grace_seconds or 0.0))
+    token = payload.token or generate_auth_token()
+    rotate_auth_token(token, grace_seconds=grace, persist=payload.persist)
+    return TokenRotateResponse(token=token, grace_seconds=grace, persisted=payload.persist)
+
+
+@app.post("/auth/token/renew", response_model=TokenRotateResponse)
+def renew_token_endpoint(payload: TokenRenewRequest) -> TokenRotateResponse:
+    grace_default = 60.0
+    grace = max(0.0, float(payload.grace_seconds or grace_default))
+    token = generate_auth_token()
+    rotate_auth_token(token, grace_seconds=grace, persist=payload.persist)
+    return TokenRotateResponse(token=token, grace_seconds=grace, persisted=payload.persist)

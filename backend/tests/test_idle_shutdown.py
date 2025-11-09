@@ -16,7 +16,7 @@ class DummyServer:
 
 
 @pytest_asyncio.fixture
-async def idle_app(monkeypatch: MonkeyPatch) -> AsyncGenerator[ModuleType, None]:
+async def idle_app(monkeypatch: MonkeyPatch) -> AsyncGenerator[ModuleType]:
     monkeypatch.setenv("EXIT_WHEN_IDLE", "true")
     monkeypatch.setenv("EXIT_IDLE_DEBOUNCE_SEC", "0.05")
     monkeypatch.setenv("LONGQ_API_TOKEN", "test-token")

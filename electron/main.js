@@ -28,6 +28,8 @@ const MAX_BACKEND_LOG_BYTES = 4 * 1024 * 1024;
 const MAX_DIAGNOSTIC_EVENTS = 32;
 const diagnosticEventHistory = [];
 let trimPending = false;
+let userRootPrepared = false;
+const shouldPersistRuntime = () => (process.env.LONGQ_PERSIST === '1');
 
 if (!apiToken) {
   apiToken = randomUUID();
@@ -177,6 +179,15 @@ function resolvePythonExecutable() {
 function getUserRoot() {
   const base = app.getPath('userData');
   const root = path.join(base, 'LongQ');
+  if (!userRootPrepared && !shouldPersistRuntime()) {
+    try {
+      fs.rmSync(root, { recursive: true, force: true });
+      console.log('[longq] reset user data root at', root);
+    } catch (err) {
+      console.warn('[longq] failed to reset user data root', err);
+    }
+    userRootPrepared = true;
+  }
   fs.mkdirSync(root, { recursive: true });
   return root;
 }
