@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""Collect backend Python dependency licenses into a JSON file."""
+"""Collect backend Python dependency licenses into a JSON file.
+
+Deterministic mode: we base the inventory on pinned entries in
+`backend/requirements.txt` (names and versions), ensuring stability across OSes.
+We still attempt to enrich with installed metadata (license fields and LICENSE*
+contents) when available, but absence of a package in the active environment
+won't drop it from the output; it will be emitted with `license: Unknown`.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
-import textwrap
+import re
 from email.message import Message
-from importlib.metadata import Distribution, distributions
+from importlib.metadata import PackageNotFoundError, metadata
 from pathlib import Path
 from typing import Any
 
@@ -25,52 +32,66 @@ def _guess_license(meta: Message) -> str | None:
     return None
 
 
-def _license_text(dist: Distribution) -> str | None:
-    """Attempt to read the LICENSE file bundled with the distribution."""
-    files = getattr(dist, "files", None)
-    if not files:
-        return None
+REQ_LINE = re.compile(r"^([a-zA-Z0-9._-]+)\s*==\s*([^\s;]+)")
 
-    candidates = [f for f in files if f.name.lower().startswith("license")]
-    for candidate in candidates:
-        try:
-            text = Path(dist.locate_file(candidate)).read_text(encoding="utf-8")
-            stripped = textwrap.dedent(text).strip()
-            if stripped:
-                return stripped
-        except OSError:
+
+def _parse_requirements(req_path: Path) -> list[tuple[str, str]]:
+    items: list[tuple[str, str]] = []
+    for raw in req_path.read_text(encoding="utf-8").splitlines():
+        raw = raw.strip()
+        if not raw or raw.startswith("#"):
             continue
-    return None
-
-
-def collect_licenses() -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for dist in distributions():
-        meta = dist.metadata
-        name = meta.get("Name")
-        version = dist.version
-        if not name or not version:
+        m = REQ_LINE.match(raw)
+        if m:
+            name, version = m.group(1), m.group(2)
+            items.append((name, version))
+    # de-duplicate while preserving order
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for name, version in items:
+        key = name.lower()
+        if key in seen:
             continue
-        license_name = _guess_license(meta)
-        project_urls = meta.get_all("Project-URL") or []
+        seen.add(key)
+        out.append((name, version))
+    return out
+
+
+def _entry_from_installed(name: str, version: str) -> dict[str, Any]:
+    try:
+        m = metadata(name)
+        # Version from installed may differ in rare cases; prefer pinned
+        license_name = _guess_license(m) or "Unknown"
+        project_urls = m.get_all("Project-URL") or []
         repo = None
-        if meta.get("Home-page"):
-            repo = meta.get("Home-page")
+        if m.get("Home-page"):
+            repo = m.get("Home-page")
         elif project_urls:
             repo = project_urls[0].split(",")[-1].strip()
-
+        # Skip license text extraction to keep JSON files compact
         entry: dict[str, Any] = {
             "name": name,
             "version": version,
-            "license": license_name or "Unknown",
-            "summary": meta.get("Summary") or "",
+            "license": license_name,
+            "summary": m.get("Summary") or "",
             "home_page": repo or "",
         }
-        text = _license_text(dist)
-        if text:
-            entry["license_text"] = text
-        entries.append(entry)
+        return entry
+    except PackageNotFoundError:
+        return {
+            "name": name,
+            "version": version,
+            "license": "Unknown",
+            "summary": "",
+            "home_page": "",
+        }
 
+
+def collect_licenses() -> list[dict[str, Any]]:
+    root = Path(__file__).resolve().parent.parent
+    req_path = root / "backend" / "requirements.txt"
+    pinned = _parse_requirements(req_path)
+    entries = [_entry_from_installed(name, version) for name, version in pinned]
     return sorted(entries, key=lambda item: item["name"].lower())
 
 
@@ -85,7 +106,10 @@ def main() -> None:
     args = parser.parse_args()
     licenses = collect_licenses()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(licenses, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(licenses, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
     print(f"Wrote {len(licenses)} backend license entries to {args.output}")
 
 

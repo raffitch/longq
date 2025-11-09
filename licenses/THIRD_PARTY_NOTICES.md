@@ -5,7 +5,30 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 
 * Frontend packages: 450
 * Electron packages: 284
-* Backend Python packages: 41
+* Backend Python packages: 40
+
+## License Summary
+
+| License | Count |
+| --- | --- |
+| MIT | 614 |
+| ISC | 69 |
+| Apache-2.0 | 24 |
+| Unknown | 21 |
+| BSD-2-Clause | 13 |
+| BSD-3-Clause | 10 |
+| BlueOak-1.0.0 | 6 |
+| MIT License | 5 |
+| Apache Software License | 2 |
+| Python-2.0 | 2 |
+| (MIT OR CC0-1.0) | 1 |
+| (WTFPL OR MIT) | 1 |
+| BSD License | 1 |
+| CC-BY-4.0 | 1 |
+| MIT AND ISC | 1 |
+| MIT OR Apache-2.0 | 1 |
+| WTFPL | 1 |
+| WTFPL OR ISC | 1 |
 
 ## Frontend (React app)
 
@@ -758,28 +781,28 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `annotated-doc` | `0.0.3` | MIT License | https://github.com/fastapi/annotated-doc/release-notes.md |
 | `annotated-types` | `0.7.0` | MIT License | https://github.com/annotated-types/annotated-types |
 | `anyio` | `4.11.0` | Unknown | https://anyio.readthedocs.io/en/latest/ |
-| `cffi` | `2.0.0` | Unknown | https://cffi.readthedocs.io/ |
-| `charset-normalizer` | `3.4.4` | MIT | https://github.com/jawah/charset_normalizer/blob/master/CHANGELOG.md |
+| `cffi` | `2.0.0` | Unknown |  |
+| `charset-normalizer` | `3.4.4` | Unknown |  |
 | `click` | `8.3.0` | Unknown | https://click.palletsprojects.com/page/changes/ |
-| `cryptography` | `46.0.3` | Unknown | https://github.com/pyca/cryptography |
-| `fastapi` | `0.121.0` | Unknown | https://github.com/fastapi/fastapi |
-| `greenlet` | `3.2.4` | MIT AND Python-2.0 | https://greenlet.readthedocs.io/ |
+| `cryptography` | `46.0.3` | Unknown |  |
+| `fastapi` | `0.121.0` | MIT License | https://github.com/fastapi/fastapi |
+| `greenlet` | `3.2.4` | Unknown |  |
 | `h11` | `0.16.0` | MIT | https://github.com/python-hyper/h11 |
 | `httptools` | `0.7.1` | Unknown | https://github.com/MagicStack/httptools |
 | `idna` | `3.11` | Unknown | https://github.com/kjd/idna/blob/master/HISTORY.rst |
 | `iniconfig` | `2.3.0` | Unknown | https://github.com/pytest-dev/iniconfig |
 | `lxml` | `6.0.2` | BSD-3-Clause | https://lxml.de/ |
 | `packaging` | `25.0` | Apache Software License | https://packaging.pypa.io/ |
-| `pdfminer-six` | `20250506` | Unknown | https://github.com/pdfminer/pdfminer.six |
-| `pdfplumber` | `0.11.7` | MIT License | https://github.com/jsvine/pdfplumber |
+| `pdfminer-six` | `20250506` | Unknown |  |
+| `pdfplumber` | `0.11.7` | Unknown |  |
 | `pillow` | `12.0.0` | Unknown | https://github.com/python-pillow/Pillow/releases |
 | `pluggy` | `1.6.0` | MIT |  |
-| `prometheus-client` | `0.23.1` | Unknown | https://github.com/prometheus/client_python |
-| `pycparser` | `2.23` | BSD-3-Clause | https://github.com/eliben/pycparser |
+| `prometheus-client` | `0.23.1` | Unknown |  |
+| `pycparser` | `2.23` | Unknown |  |
 | `pydantic` | `2.12.4` | Unknown | https://github.com/pydantic/pydantic |
 | `pydantic-core` | `2.41.5` | Unknown | https://github.com/pydantic/pydantic-core |
 | `pygments` | `2.19.2` | BSD-2-Clause | https://pygments.org |
-| `pypdfium2` | `5.0.0` | BSD-3-Clause, Apache-2.0, dependency licenses | https://github.com/pypdfium2-team/pypdfium2 |
+| `pypdfium2` | `5.0.0` | Unknown |  |
 | `pytest` | `8.4.2` | MIT | https://docs.pytest.org/en/stable/changelog.html |
 | `pytest-asyncio` | `1.2.0` | Unknown | https://github.com/pytest-dev/pytest-asyncio/issues |
 | `python-docx` | `1.2.0` | MIT | https://github.com/python-openxml/python-docx/blob/master/HISTORY.rst |
@@ -789,10 +812,9 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `sniffio` | `1.3.1` | MIT OR Apache-2.0 | https://github.com/python-trio/sniffio |
 | `sqlalchemy` | `2.0.44` | MIT | https://www.sqlalchemy.org |
 | `sqlmodel` | `0.0.27` | MIT License | https://github.com/fastapi/sqlmodel |
-| `starlette` | `0.49.3` | Unknown | https://github.com/Kludex/starlette |
+| `starlette` | `0.49.3` | BSD License | https://github.com/Kludex/starlette |
 | `typing-extensions` | `4.15.0` | Unknown | https://github.com/python/typing_extensions/issues |
 | `typing-inspection` | `0.4.2` | Unknown | https://github.com/pydantic/typing-inspection |
-| `uvicorn` | `0.38.0` | Unknown | https://uvicorn.dev/release-notes |
 | `uvloop` | `0.22.1` | MIT License | https://github.com/MagicStack/uvloop |
 | `watchfiles` | `1.1.1` | MIT | https://github.com/samuelcolvin/watchfiles |
 | `websockets` | `15.0.1` | BSD-3-Clause | https://github.com/python-websockets/websockets |
