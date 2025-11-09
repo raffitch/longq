@@ -7,6 +7,30 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 * Electron packages: 284
 * Backend Python packages: 40
 
+## License Summary
+
+| License | Count |
+| --- | --- |
+| MIT | 615 |
+| ISC | 69 |
+| Apache-2.0 | 24 |
+| Unknown | 18 |
+| BSD-2-Clause | 13 |
+| BSD-3-Clause | 11 |
+| BlueOak-1.0.0 | 6 |
+| MIT License | 5 |
+| Apache Software License | 2 |
+| Python-2.0 | 2 |
+| (MIT OR CC0-1.0) | 1 |
+| (WTFPL OR MIT) | 1 |
+| BSD-3-Clause, Apache-2.0, dependency licenses | 1 |
+| CC-BY-4.0 | 1 |
+| MIT AND ISC | 1 |
+| MIT AND Python-2.0 | 1 |
+| MIT OR Apache-2.0 | 1 |
+| WTFPL | 1 |
+| WTFPL OR ISC | 1 |
+
 ## Frontend (React app)
 
 | Package | Version | License | Repository/Homepage |

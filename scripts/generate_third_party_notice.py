@@ -85,6 +85,11 @@ def main() -> None:
         action="store_true",
         help="Include (truncated) license text blocks",
     )
+    parser.add_argument(
+        "--group-by-license",
+        action="store_true",
+        help="Add a summary section grouping counts by license identifier",
+    )
     args = parser.parse_args()
 
     frontend = load_json(FRONTEND_JSON)
@@ -126,6 +131,20 @@ def main() -> None:
     ]
 
     include_text = bool(args.full_text)
+    if args.group_by_license:
+        from collections import Counter
+        all_entries = frontend + electron + backend
+        counter = Counter(
+            (e.get("license") or e.get("licenses") or "Unknown") for e in all_entries
+        )
+        lines.append("## License Summary")
+        lines.append("")
+        lines.append("| License | Count |")
+        lines.append("| --- | --- |")
+        for license_name, count in sorted(counter.items(), key=lambda x: (-x[1], x[0].lower())):
+            lines.append(f"| {license_name} | {count} |")
+        lines.append("")
+
     lines.extend(build_section("Frontend (React app)", frontend, include_text))
     lines.extend(build_section("Electron (Desktop shell)", electron, include_text))
     lines.extend(build_section("Backend (Python)", backend, include_text))

@@ -58,7 +58,7 @@ jobs:
         run: python scripts/generate_backend_licenses.py --output licenses/backend_licenses.json
 
       - name: Generate consolidated THIRD_PARTY_NOTICES.md
-        run: python scripts/generate_third_party_notice.py --output licenses/THIRD_PARTY_NOTICES.md
+        run: python scripts/generate_third_party_notice.py --output licenses/THIRD_PARTY_NOTICES.md --group-by-license
 
       - name: Fail if licenses changed
         shell: bash

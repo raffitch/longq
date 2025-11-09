@@ -13,11 +13,12 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 FULL_TEXT=""
-GROUP_BY=""
+GROUP_BY="--group-by-license"
 for arg in "$@"; do
   case "$arg" in
     --full-text) FULL_TEXT="--full-text" ;;
     --group-by-license) GROUP_BY="--group-by-license" ;;
+    --no-group-summary) GROUP_BY="" ;;
   esac
   shift || true
 done

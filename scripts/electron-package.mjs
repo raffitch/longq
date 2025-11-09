@@ -10,7 +10,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { rmSync, existsSync, statSync, copyFileSync } from 'node:fs';
+import { rmSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,29 +41,52 @@ function run(command, args = [], options = {}) {
   }
 }
 
-function commandWorks(command, args = []) {
-  const result = spawnSync(command, args, { stdio: 'ignore' });
-  return result.status === 0;
+function probePython(command, args = []) {
+  const result = spawnSync(command, [...args, '--version'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+  const output = `${result.stdout || ''}${result.stderr || ''}`.trim();
+  const match = output.match(/Python\s+(\d+)\.(\d+)/i);
+  if (!match) {
+    return null;
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  if (Number.isNaN(major) || Number.isNaN(minor)) {
+    return null;
+  }
+  if (major === 3 && minor >= 13) {
+    return { command, args };
+  }
+  return null;
 }
 
 function detectPythonLauncher() {
   const candidates = isWindows
     ? [
+        { command: 'py', args: ['-3.13'] },
         { command: 'py', args: ['-3'] },
+        { command: 'python3.13', args: [] },
         { command: 'python3', args: [] },
         { command: 'python', args: [] },
       ]
     : [
+        { command: 'python3.13', args: [] },
         { command: 'python3', args: [] },
         { command: 'python', args: [] },
       ];
   for (const candidate of candidates) {
-    if (commandWorks(candidate.command, [...candidate.args, '--version'])) {
+    const match = probePython(candidate.command, candidate.args);
+    if (match) {
       console.log(`Detected Python launcher: ${candidate.command} ${candidate.args.join(' ')}`.trim());
-      return candidate;
+      return match;
     }
   }
-  fail('Unable to locate a Python 3 interpreter. Ensure Python 3.11+ is installed and on PATH.');
+  fail('Unable to locate a Python 3.13 interpreter. Install Python 3.13 and ensure it is on PATH (or set LONGQ_PYTHON).');
 }
 
 function runtimePythonPath() {
@@ -136,11 +159,9 @@ function generateLicenseData(pythonBinary) {
   run('node', [join(scriptsDir, 'generate_js_licenses.mjs'), '--project', 'electron', '--output', 'licenses/electron_licenses.json'], {
     cwd: repoRoot,
   });
-  try {
-    copyFileSync(join(repoRoot, 'THIRD_PARTY_NOTICES.md'), join(repoRoot, 'licenses', 'THIRD_PARTY_NOTICES.md'));
-  } catch (err) {
-    console.warn('Unable to copy THIRD_PARTY_NOTICES.md into licenses/', err);
-  }
+  run(pythonBinary, [join(scriptsDir, 'generate_third_party_notice.py'), '--output', join(repoRoot, 'licenses/THIRD_PARTY_NOTICES.md'), '--group-by-license'], {
+    cwd: repoRoot,
+  });
 }
 
 function packageElectron() {

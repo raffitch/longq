@@ -14,10 +14,52 @@ IDLE_SHUTDOWN_DELAY="${IDLE_SHUTDOWN_DELAY:-5}"
 LONGQ_API_TOKEN="${LONGQ_API_TOKEN:-dev-longq-token}"
 export LONGQ_API_TOKEN
 
+resolve_host_python() {
+  local candidate
+  if [[ -n "${LONGQ_PYTHON:-}" ]]; then
+    candidate="${LONGQ_PYTHON}"
+    if [[ -x "$candidate" ]]; then
+      HOST_PYTHON="$candidate"
+      return
+    fi
+    if command -v "$candidate" >/dev/null 2>&1; then
+      HOST_PYTHON="$(command -v "$candidate")"
+      return
+    fi
+    echo "LONGQ_PYTHON points to '$candidate' but it is not executable." >&2
+    exit 1
+  fi
+
+  for candidate in python3.13 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      HOST_PYTHON="$(command -v "$candidate")"
+      return
+    fi
+  done
+
+  echo "Python 3.13 is required but was not found in PATH. Install python3.13 or set LONGQ_PYTHON." >&2
+  exit 1
+}
+
+HOST_PYTHON=""
+resolve_host_python
+
+if ! "$HOST_PYTHON" - <<'PY' >/dev/null 2>&1; then
+import sys
+if (sys.version_info.major, sys.version_info.minor) >= (3, 13):
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+  echo "Detected Python at '$HOST_PYTHON', but it is not Python 3.13+. Install Python 3.13 and rerun." >&2
+  exit 1
+fi
+
+: "${LONGQ_PYTHON:=$HOST_PYTHON}"
+
 ensure_python() {
   if [[ ! -x "$BACKEND_PYTHON" ]]; then
     echo "Creating backend virtualenv..."
-    (cd "$BACKEND_DIR" && python3 -m venv .venv)
+    (cd "$BACKEND_DIR" && "$HOST_PYTHON" -m venv .venv)
     (cd "$BACKEND_DIR" && "$BACKEND_PYTHON" -m pip install --upgrade pip)
   fi
   local requirements_file="$BACKEND_DIR/requirements.txt"
@@ -27,7 +69,7 @@ ensure_python() {
   fi
   local hash_file="$BACKEND_VENV/.requirements.sha256"
   local current_hash cached_hash=""
-  current_hash=$(python3 - <<'PY' "$requirements_file"
+  current_hash=$("$HOST_PYTHON" - <<'PY' "$requirements_file"
 import hashlib
 import pathlib
 import sys
@@ -112,7 +154,7 @@ ensure_port_free() {
       fi
     fi
   else
-    python3 - <<PY >/dev/null 2>&1 || exit 1
+    "$HOST_PYTHON" - <<PY >/dev/null 2>&1 || exit 1
 import socket
 s = socket.socket()
 try:
@@ -156,9 +198,7 @@ generate_licenses() {
   else
     echo "Skipping frontend/electron license generation (node not found)."
   fi
-  if [[ -f "$ROOT_DIR/THIRD_PARTY_NOTICES.md" ]]; then
-    cp "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$ROOT_DIR/licenses/THIRD_PARTY_NOTICES.md"
-  fi
+  (cd "$ROOT_DIR" && "$BACKEND_PYTHON" scripts/generate_third_party_notice.py --output licenses/THIRD_PARTY_NOTICES.md --group-by-license || true)
 }
 generate_licenses
 

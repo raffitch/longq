@@ -25,7 +25,7 @@ The script checks dependencies, frees the default ports, installs anything that 
 
 > **Heads up:** `devlaunch.sh` bootstraps virtualenvs and `node_modules` automatically if they are absent. The first run after a cleanup will take noticeably longer while dependencies install.
 
-Prereqs: Python 3.11+ and Node.js 18+ in your `PATH`. The script exits with guidance if they are missing.
+Prereqs: Python 3.13 and Node.js 18+ in your `PATH`. The script exits with guidance if they are missing.
 
 Need a clean slate? Use:
 
@@ -69,10 +69,10 @@ If you prefer to manage each service yourself instead of `scripts/devlaunch.sh`,
 
 ### Prerequisites
 
-- Python 3.12 (recommended)
+- Python 3.13 (required)
 - Node.js 18+ and npm
 
-> `scripts/devlaunch.sh` automatically prefers `python3.12`. On macOS it will attempt to install `python@3.12` via Homebrew if it is missing. To override the interpreter, export `LONGQ_PYTHON=/path/to/python` before running the script.
+> `scripts/devlaunch.sh` automatically prefers `python3.13`. On macOS it will attempt to install `python@3.13` via Homebrew if it is missing. To override the interpreter, export `LONGQ_PYTHON=/path/to/python` before running the script.
 
 ### Backend (FastAPI)
 
@@ -104,7 +104,7 @@ tox -e format   # Black
 tox -e type     # mypy
 ```
 
-> PyMuPDF currently publishes wheels for Python ≤ 3.12. Using 3.13 or newer will force a source build that requires manual TLS configuration. Stick to Python 3.12 unless you are prepared to compile MuPDF yourself.
+> PyMuPDF (pinned via `requirements.txt`) now ships universal wheels for Python 3.13. If you move past 3.13 you may fall back to source builds, so keep your local toolchain on 3.13 unless you're ready to compile MuPDF manually.
 
 Key paths:
 - SQLite database lives under `data/` (`sqlite:///./data/app.db` by default).

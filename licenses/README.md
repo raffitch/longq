@@ -75,6 +75,7 @@ Flags:
 
 - `--full-text`: include (truncated) license texts in the notice
 - `--group-by-license`: include a summary table grouped by license identifier
+  (enabled by default; pass `--no-group-summary` to skip)
 
 ### CI enforcement
 
