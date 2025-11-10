@@ -247,6 +247,50 @@ sys.exit(1)
 PY
 }
 
+license_state() {
+  local port="$1"
+  local state
+  state=$("$HOST_PYTHON" - "$port" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+port = int(sys.argv[1])
+url = f"http://127.0.0.1:{port}/license/status"
+try:
+    with urllib.request.urlopen(url, timeout=2) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+except Exception:
+    print("")
+else:
+    print(payload.get("state", ""))
+PY
+  )
+  printf '%s\n' "$state"
+}
+
+LICENSE_MONITOR_PID=""
+
+start_license_monitor() {
+  local host="$1"
+  local port="$2"
+  local backend_port="$3"
+  (
+    while true; do
+      sleep 4
+      local state
+      state="$(license_state "$backend_port")"
+      if [[ "$state" == "valid" || "$state" == "disabled" ]]; then
+        launch_browser "http://$host:$port/operator"
+        launch_browser "http://$host:$port/guest"
+        break
+      fi
+    done
+  ) &
+  LICENSE_MONITOR_PID=$!
+}
+
 ensure_python
 reset_runtime_root
 ensure_api_token
@@ -274,6 +318,9 @@ ensure_port_free "$FRONTEND_PORT" "Frontend"
 # Cleanup handler
 cleanup() {
   trap - INT TERM EXIT
+  if [[ -n "$LICENSE_MONITOR_PID" ]]; then
+    kill_process_tree "$LICENSE_MONITOR_PID"
+  fi
   kill_process_tree "$FRONTEND_PID"
   kill_process_tree "$BACKEND_PID"
 }
@@ -326,8 +373,14 @@ launch_browser() {
 
 (
   if wait_for_frontend "$FRONTEND_HOST" "$FRONTEND_PORT"; then
-    launch_browser "http://$FRONTEND_HOST:$FRONTEND_PORT/operator"
-    launch_browser "http://$FRONTEND_HOST:$FRONTEND_PORT/guest"
+    state="$(license_state "$BACKEND_PORT")"
+    if [[ "$state" == "valid" || "$state" == "disabled" ]]; then
+      launch_browser "http://$FRONTEND_HOST:$FRONTEND_PORT/operator"
+      launch_browser "http://$FRONTEND_HOST:$FRONTEND_PORT/guest"
+    else
+      launch_browser "http://$FRONTEND_HOST:$FRONTEND_PORT/activation"
+      start_license_monitor "$FRONTEND_HOST" "$FRONTEND_PORT" "$BACKEND_PORT"
+    fi
   fi
 ) &
 
