@@ -176,6 +176,22 @@ function resolvePythonExecutable() {
   return fallback;
 }
 
+function resolvePythonHome(pythonPath) {
+  if (!pythonPath) {
+    return null;
+  }
+  try {
+    const binDir = path.dirname(pythonPath);
+    const candidate = path.dirname(binDir);
+    if (fs.existsSync(path.join(candidate, 'pyvenv.cfg'))) {
+      return candidate;
+    }
+  } catch (err) {
+    console.warn('[longq] failed to resolve PYTHONHOME for', pythonPath, err);
+  }
+  return null;
+}
+
 function getUserRoot() {
   const base = app.getPath('userData');
   const root = path.join(base, 'LongQ');
@@ -210,12 +226,17 @@ function ensureMaintenance(root) {
     if (process.env.LONGQ_SESSION_RETENTION_HOURS) {
       maintenanceArgs.push('--session-max-age-hours', String(process.env.LONGQ_SESSION_RETENTION_HOURS));
     }
+    const env = { ...process.env, LONGQ_ROOT: root, PYTHONPATH: buildPythonPath(process.env.PYTHONPATH) };
+    const pythonHome = resolvePythonHome(python);
+    if (pythonHome) {
+      env.PYTHONHOME = pythonHome;
+    }
     const child = spawn(
       python,
       maintenanceArgs,
       {
         cwd: repoRoot,
-        env: { ...process.env, LONGQ_ROOT: root, PYTHONPATH: buildPythonPath(process.env.PYTHONPATH) },
+        env,
         stdio: 'ignore',
       },
     );
@@ -663,6 +684,10 @@ function launchBackend(root, port) {
       BACKEND_PORT: String(port),
       PYTHONPATH: buildPythonPath(process.env.PYTHONPATH),
     };
+    const pythonHome = resolvePythonHome(python);
+    if (pythonHome) {
+      env.PYTHONHOME = pythonHome;
+    }
     const allowedOrigins = computeAllowedOrigins();
     env.ALLOWED_ORIGINS = allowedOrigins;
     console.log('[longq] backend allowed origins:', allowedOrigins);

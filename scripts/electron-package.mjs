@@ -127,18 +127,66 @@ function npmCommand() {
   return isWindows ? 'npm.cmd' : 'npm';
 }
 
+function copyStdlibIntoRuntime(pythonBinary) {
+  const script = `
+import os
+import shutil
+import sys
+import sysconfig
+
+runtime = os.environ.get('LONGQ_RUNTIME_DIR')
+if not runtime:
+    raise SystemExit('LONGQ_RUNTIME_DIR is not set')
+runtime = os.path.abspath(runtime)
+stdlib = sysconfig.get_path('stdlib')
+runtime_abs = os.path.abspath(runtime)
+stdlib_abs = os.path.abspath(stdlib)
+
+if os.path.commonpath([runtime_abs, stdlib_abs]) == runtime_abs:
+    print(f'[longq:package] stdlib already resides inside runtime: {stdlib_abs}')
+    raise SystemExit(0)
+
+target = os.path.join(runtime_abs, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}')
+os.makedirs(target, exist_ok=True)
+
+skip = {'site-packages'}
+print(f'[longq:package] copying stdlib from {stdlib_abs} -> {target}')
+
+for entry in os.listdir(stdlib_abs):
+    if entry in skip:
+        continue
+    src = os.path.join(stdlib_abs, entry)
+    dst = os.path.join(target, entry)
+    if os.path.isdir(src):
+        if os.path.exists(dst):
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst, symlinks=True)
+    else:
+        parent = os.path.dirname(dst)
+        if parent and not os.path.exists(parent):
+            os.makedirs(parent, exist_ok=True)
+        if os.path.exists(dst):
+            os.remove(dst)
+        shutil.copy2(src, dst)
+
+print('[longq:package] stdlib copy complete')
+`;
+  const env = { ...process.env, LONGQ_RUNTIME_DIR: runtimeDir };
+  run(pythonBinary, ['-c', script], { cwd: backendDir, env });
+}
+
 function buildRuntime() {
   const launcher = detectPythonLauncher();
 
   removeDir(runtimeDir);
-  run(launcher.command, [...launcher.args, '-m', 'venv', 'runtime', '--upgrade-deps'], { cwd: backendDir });
+  run(launcher.command, [...launcher.args, '-m', 'venv', 'runtime', '--copies', '--upgrade-deps'], { cwd: backendDir });
 
   const python = runtimePythonPath();
 
   run(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], { cwd: backendDir });
   run(python, ['-m', 'pip', 'install', '-r', 'requirements.txt'], { cwd: backendDir });
 
-   // Make sure 'join' is imported at the top if not already
+  copyStdlibIntoRuntime(python);
 
   run(python, [join(backendDir, 'maintenance.py'), '--help']);
 }
