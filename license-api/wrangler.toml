@@ -1,0 +1,18 @@
+name = "license-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "ALLOW"
+# Replace with actual ID printed by `wrangler kv:namespace create ALLOW`
+id = "d02cf83ed9d44de182753131a02b000b"
+
+[[kv_namespaces]]
+binding = "LICENSES"
+# Replace with actual ID printed by `wrangler kv:namespace create LICENSES`
+id = "4ee190052d2e4cc3b3d0bf32fc808bf6"
+
+[[kv_namespaces]]
+binding = "INDEX"
+# Replace with actual ID printed by `wrangler kv:namespace create INDEX`
+id = "f320aaa0b87f4c9b98a17d271ad70199"

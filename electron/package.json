@@ -24,10 +24,11 @@
     "appId": "com.longq.operator",
     "productName": "Quantum Qi™ Operator",
     "files": [
-      "**/*",
-      "../backend/**/*",
-      "../frontend/dist/**/*",
-      "../licenses/**/*"
+      "main.js",
+      "preload.js",
+      "serve.js",
+      "build/**/*",
+      "package.json"
     ],
     "extraResources": [
       {

@@ -570,9 +570,7 @@ def _read_upload_payload(upload: UploadFile, *, max_bytes: int) -> bytes:
             reported_total = _detect_uploaded_size(upload, fallback=total)
             human_total = _format_bytes(reported_total)
             human_limit = _format_bytes(max_bytes)
-            raise UploadTooLargeError(
-                f"Upload size {human_total} exceeds the {human_limit} limit."
-            )
+            raise UploadTooLargeError(f"Upload size {human_total} exceeds the {human_limit} limit.")
         chunks.append(chunk)
     return b"".join(chunks)
 

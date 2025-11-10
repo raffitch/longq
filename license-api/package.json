@@ -1,0 +1,17 @@
+{
+  "name": "license-api",
+  "version": "0.1.0",
+  "description": "Cloudflare Worker that issues signed machine-bound licenses.",
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write \"src/**/*.js\" \"scripts/**/*.js\"",
+    "lint": "eslint src scripts"
+  },
+  "dependencies": {
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "eslint": "^9.11.1",
+    "prettier": "^3.3.2"
+  }
+}
