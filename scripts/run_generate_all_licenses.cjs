@@ -39,10 +39,43 @@ const pickBashExecutable = () => {
     candidatePaths.push(path.join(process.env.LOCALAPPDATA, 'Programs', 'Git', 'usr', 'bin', 'bash.exe'));
   }
 
+  const pathDirs = (process.env.PATH || '').split(path.delimiter);
+  for (const dir of pathDirs) {
+    if (!dir) continue;
+    const sanitizedDir = dir.replace(/^"|"$/g, '');
+    if (!sanitizedDir) continue;
+    candidatePaths.push(path.join(sanitizedDir, 'bash.exe'));
+  }
+
+  const seen = new Set();
   for (const candidate of candidatePaths) {
-    if (candidate && existsSync(candidate)) {
+    if (!candidate || seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+    if (existsSync(candidate)) {
       return candidate;
     }
+  }
+
+  try {
+    const whereResult = spawnSync('cmd', ['/c', 'where bash.exe'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    if (!whereResult.error && whereResult.status === 0) {
+      const locations = whereResult.stdout
+        .toString()
+        .split(/\r?\n/)
+        .map((entry) => entry.replace(/^"|"$/g, ''))
+        .filter(Boolean);
+      for (const location of locations) {
+        if (existsSync(location.trim())) {
+          return location.trim();
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Warning: failed to query "where bash.exe":', error.message);
   }
 
   return 'bash';

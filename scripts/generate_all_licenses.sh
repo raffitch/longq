@@ -66,13 +66,42 @@ else
   PYEXEC="$(command -v python${PY_SPEC} || command -v python3 || command -v python)"
 fi
 
+if [ -z "${PYEXEC:-}" ]; then
+  echo "Unable to locate a Python interpreter (looked for python${PY_SPEC}, python3, python)." >&2
+  exit 1
+fi
+
+VENV_DIR="backend/.venv"
 if [ -z "${VIRTUAL_ENV:-}" ]; then
-  if [ ! -d backend/.venv ]; then
+  if [ ! -d "$VENV_DIR" ]; then
     echo "Creating backend virtualenv with $PYEXEC..."
-    "$PYEXEC" -m venv backend/.venv
+    "$PYEXEC" -m venv "$VENV_DIR"
   fi
-  # shellcheck disable=SC1091
-  source backend/.venv/bin/activate
+
+  ACTIVATE_SCRIPT=""
+  if [ -f "$VENV_DIR/bin/activate" ]; then
+    ACTIVATE_SCRIPT="$VENV_DIR/bin/activate"
+  elif [ -f "$VENV_DIR/Scripts/activate" ]; then
+    ACTIVATE_SCRIPT="$VENV_DIR/Scripts/activate"
+  fi
+
+  if [ -z "$ACTIVATE_SCRIPT" ]; then
+    echo "Unable to locate an activation script in $VENV_DIR." >&2
+    echo "Consider removing the directory and re-running this script." >&2
+    exit 1
+  fi
+
+  if echo "$ACTIVATE_SCRIPT" | grep -q "/Scripts/activate$"; then
+    TEMP_ACTIVATE="$(mktemp)"
+    # Normalize CRLF endings when sourcing the Windows venv activation script.
+    tr -d '\r' < "$ACTIVATE_SCRIPT" > "$TEMP_ACTIVATE"
+    # shellcheck disable=SC1090
+    source "$TEMP_ACTIVATE"
+    rm -f "$TEMP_ACTIVATE"
+  else
+    # shellcheck disable=SC1090
+    source "$ACTIVATE_SCRIPT"
+  fi
 fi
 python -m pip install --upgrade pip
 pip install --require-hashes -r backend/requirements.txt
