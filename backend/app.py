@@ -410,7 +410,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Quantum Qi™ Backend", lifespan=lifespan)
-setattr(app.state, "license_manager", None)
+app.state.license_manager = None
 
 
 def _license_manager() -> LicenseManager:

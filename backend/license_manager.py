@@ -15,7 +15,8 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
-from typing import Any, Literal, cast
+from types import ModuleType
+from typing import Any, Literal, Self, cast
 
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
@@ -98,12 +99,12 @@ def _mac_computer_name() -> str | None:
     return socket.gethostname()
 
 
-def _winreg_module() -> Any | None:
+def _winreg_module() -> ModuleType | None:
     try:
         import winreg
     except ImportError:  # pragma: no cover - platform dependent
         return None
-    return winreg
+    return cast(ModuleType, winreg)
 
 
 def _winreg_value(root: object, path: str, name: str) -> str | None:
@@ -252,7 +253,7 @@ class LicenseSummary:
     key_version: int | None = None
     fingerprint_sha256: str | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self: Self) -> dict[str, Any]:
         return {
             "license_id": self.license_id,
             "product": self.product,
@@ -277,7 +278,7 @@ class LicenseStatus:
     license: LicenseSummary | None = None
     checked_at: float = field(default_factory=_current_ts)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self: Self) -> dict[str, Any]:
         return {
             "state": self.state,
             "message": self.message,
@@ -289,20 +290,25 @@ class LicenseStatus:
 
 
 class LicenseValidationError(Exception):
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self: Self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
 
 
 class ActivationError(Exception):
-    def __init__(self, code: str, message: str, status_code: int = 400) -> None:
+    def __init__(
+        self: Self,
+        code: str,
+        message: str,
+        status_code: int = 400,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.status_code = status_code
 
 
 class LicenseManager:
-    def __init__(self) -> None:
+    def __init__(self: Self) -> None:
         self._lock = Lock()
         self._last_check: float = 0.0
         self._status = LicenseStatus(state="missing")
@@ -314,12 +320,12 @@ class LicenseManager:
         else:
             self._status = self._verify_from_disk()
 
-    def _set_status(self, status: LicenseStatus) -> None:
+    def _set_status(self: Self, status: LicenseStatus) -> None:
         with self._lock:
             self._status = status
             self._last_check = status.checked_at
 
-    def status(self) -> LicenseStatus:
+    def status(self: Self) -> LicenseStatus:
         with self._lock:
             need_refresh = (
                 not LICENSE_DISABLED
@@ -333,19 +339,19 @@ class LicenseManager:
         self._set_status(refreshed)
         return refreshed
 
-    def verify_now(self) -> LicenseStatus:
+    def verify_now(self: Self) -> LicenseStatus:
         status = self._verify_from_disk()
         self._set_status(status)
         return status
 
-    def license_location(self) -> tuple[Path, bool]:
+    def license_location(self: Self) -> tuple[Path, bool]:
         path = license_file_path()
         return path, path.exists()
 
-    def is_valid(self) -> bool:
+    def is_valid(self: Self) -> bool:
         return self.status().state in {"valid", "disabled"}
 
-    def activate(self, email: str) -> LicenseStatus:
+    def activate(self: Self, email: str) -> LicenseStatus:
         email = (email or "").strip()
         if not email:
             raise ActivationError("email_required", "Email is required.", status_code=400)
@@ -363,7 +369,12 @@ class LicenseManager:
             )
         return status
 
-    def _issue_request(self, *, email: str, fingerprint: str) -> bytes:
+    def _issue_request(
+        self: Self,
+        *,
+        email: str,
+        fingerprint: str,
+    ) -> bytes:
         payload = json.dumps(
             {"email": email, "fingerprint_sha256": fingerprint, "product": PRODUCT_CODE},
         ).encode("utf-8")
@@ -420,7 +431,7 @@ class LicenseManager:
                 f"Unable to reach license server: {exc.reason}",
             ) from None
 
-    def _write_license_bytes(self, data: bytes) -> None:
+    def _write_license_bytes(self: Self, data: bytes) -> None:
         path = license_file_path()
         tmp_path = path.with_suffix(".tmp")
         try:
@@ -440,7 +451,7 @@ class LicenseManager:
                 500,
             ) from exc
 
-    def _verify_from_disk(self) -> LicenseStatus:
+    def _verify_from_disk(self: Self) -> LicenseStatus:
         if LICENSE_DISABLED:
             status = LicenseStatus(state="disabled", message="License checks disabled.")
             logger.info("[license] Verification result: %s", status.state)
