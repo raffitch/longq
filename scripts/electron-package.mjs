@@ -199,18 +199,23 @@ function createWindowsRequirements(originalPath) {
       skipBlock = false;
     }
 
+    if (trimmed.startsWith('--hash=')) {
+      continue;
+    }
+
     if (trimmed.startsWith('uvloop==')) {
       skipBlock = true;
       continue;
     }
 
     if (trimmed.startsWith('uvicorn[standard]==')) {
-      const replaced = line.replace('uvicorn[standard]==', 'uvicorn==');
+      const replaced = line.replace('uvicorn[standard]==', 'uvicorn==').replace(/\s*\\\s*$/, '');
       filtered.push(replaced);
       continue;
     }
 
-    filtered.push(line);
+    const withoutContinuation = line.replace(/\s*\\\s*$/, '');
+    filtered.push(withoutContinuation);
   }
 
   const tempDir = mkdtempSync(join(tmpdir(), 'longq-req-'));

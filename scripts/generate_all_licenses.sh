@@ -112,7 +112,7 @@ if ! pip install --require-hashes -r "$REQ_FILE"; then
     CYGWIN*|MINGW*|MSYS*|Windows*)
       echo "pip install failed; attempting to skip uvloop (unsupported on Windows)." >&2
       TMP_REQ="$(mktemp)"
-      python - "$REQ_FILE" "$TMP_REQ" <<'PY'
+    python - "$REQ_FILE" "$TMP_REQ" <<'PY'
 import sys
 from pathlib import Path
 
@@ -121,22 +121,35 @@ out_path = Path(sys.argv[2])
 
 skip_block = False
 
+def strip_continuation(text: str) -> str:
+  base = text.rstrip('\n')
+  if base.rstrip().endswith('\\'):
+    base = base.rstrip()
+    base = base[:-1].rstrip()
+  return base + '\n'
+
 with in_path.open('r', encoding='utf-8') as src, out_path.open('w', encoding='utf-8') as dst:
-    for line in src:
-        if skip_block:
-            stripped = line.strip()
-            if not stripped or line.startswith(' ') or line.startswith('\t') or stripped.startswith('#'):
-                continue
-            skip_block = False
-        stripped = line.strip()
+  for original in src:
+    stripped = original.strip()
+    if skip_block:
+      if not stripped or original.startswith((' ', '\t')) or stripped.startswith('#'):
+        continue
+      skip_block = False
+
+    if stripped.startswith('--hash='):
+      continue
+
+    if stripped.startswith('uvloop=='):
+      skip_block = True
+      continue
+
+    line = original
     if stripped.startswith('uvicorn[standard]=='):
-      line = line.replace('uvicorn[standard]==', 'uvicorn==')
-        if stripped.startswith('uvloop=='):
-            skip_block = True
-            continue
-        dst.write(line)
+      line = original.replace('uvicorn[standard]==', 'uvicorn==')
+
+    dst.write(strip_continuation(line))
 PY
-      if ! pip install --require-hashes -r "$TMP_REQ"; then
+    if ! pip install -r "$TMP_REQ"; then
         echo "pip install still failed after removing uvloop." >&2
         rm -f "$TMP_REQ"
         exit 1
