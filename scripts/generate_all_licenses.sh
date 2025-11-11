@@ -14,7 +14,13 @@ fi
 #  - backend/.venv or active Python env with dependencies from backend/requirements.txt
 # If backend venv isn't active this script will attempt to create one under backend/.venv.
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -n "${GENERATE_LICENSES_ROOT:-}" ]; then
+  ROOT_DIR="$GENERATE_LICENSES_ROOT"
+else
+  SCRIPT_SOURCE="${BASH_SOURCE[0]:-$0}"
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+  ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 cd "$ROOT_DIR"
 
 FULL_TEXT=""
