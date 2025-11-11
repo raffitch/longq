@@ -184,7 +184,9 @@ function resolveBundledPython() {
     roots.push(path.join(process.resourcesPath, 'backend-python'));
   }
   roots.push(path.join(repoRoot, 'backend', 'runtime'));
-  roots.push(path.join(repoRoot, 'backend', '.venv'));
+  if (!app.isPackaged) {
+    roots.push(path.join(repoRoot, 'backend', '.venv'));
+  }
 
   for (const root of roots) {
     for (const candidate of pythonCandidatesForRoot(root)) {
