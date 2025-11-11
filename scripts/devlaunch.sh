@@ -274,6 +274,23 @@ PY
   printf '%s\n' "$state"
 }
 
+wait_for_license_state() {
+  local port="$1"
+  local attempts="${2:-60}"
+  local delay="${3:-0.5}"
+  local state=""
+  for ((i = 0; i < attempts; i++)); do
+    state="$(license_state "$port")"
+    if [[ -n "$state" ]]; then
+      printf '%s\n' "$state"
+      return 0
+    fi
+    sleep "$delay"
+  done
+  printf '%s\n' ""
+  return 1
+}
+
 LICENSE_MONITOR_PID=""
 
 start_license_monitor() {
@@ -377,8 +394,12 @@ launch_browser() {
 
 (
   if wait_for_frontend "$FRONTEND_HOST" "$FRONTEND_PORT"; then
-    state="$(license_state "$BACKEND_PORT")"
+    state="$(wait_for_license_state "$BACKEND_PORT" 80 0.5)"
     if [[ "$state" == "valid" || "$state" == "disabled" ]]; then
+      launch_browser "http://$FRONTEND_HOST:$FRONTEND_PORT/operator"
+      launch_browser "http://$FRONTEND_HOST:$FRONTEND_PORT/guest"
+    elif [[ -z "$state" ]]; then
+      echo "License status still pending; backend not yet ready. Opening Operator and Guest without activation prompt."
       launch_browser "http://$FRONTEND_HOST:$FRONTEND_PORT/operator"
       launch_browser "http://$FRONTEND_HOST:$FRONTEND_PORT/guest"
     else
