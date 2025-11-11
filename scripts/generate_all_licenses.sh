@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-set -euo pipefail
+
+set -e
+set -u
+if ! set -o pipefail 2>/dev/null; then
+  echo "Warning: shell does not support 'pipefail'; continuing without it." >&2
+fi
 
 # Regenerate all license inventories and consolidated notice.
 # Usage: ./scripts/generate_all_licenses.sh [--full-text] [--group-by-license]
