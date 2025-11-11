@@ -6,7 +6,7 @@ import "./index.css";
 import { ActivationPage } from "./license/ActivationView";
 
 export default function App() {
-  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [, setSessionId] = useState<number | null>(null);
   return (
     <BrowserRouter>
       <Routes>

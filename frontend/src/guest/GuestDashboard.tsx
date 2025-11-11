@@ -100,7 +100,7 @@ const formatDate = (input?: string | null): string => {
 const computeEnergyStatus = (counts: PriorityCounts) =>
   counts.highCount + counts.veryHighCount > 2 ? "Imbalanced" : "Stable";
 
-const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportDate, aggregated, isPreview, sex }) => {
+const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportDate, aggregated, sex }) => {
   const {
     categories,
     nutrition,

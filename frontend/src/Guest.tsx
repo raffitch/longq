@@ -100,11 +100,12 @@ export default function Guest() {
     const trimmed = raw.trim();
     if (trimmed.startsWith("{")) {
       try {
-        const parsed = JSON.parse(trimmed);
+        const parsed: unknown = JSON.parse(trimmed);
         if (parsed && typeof parsed === "object") {
-          if (typeof parsed.detail === "string") return parsed.detail;
-          const values = Object.values(parsed)
-            .filter((value) => typeof value === "string")
+          const detail = (parsed as { detail?: unknown }).detail;
+          if (typeof detail === "string") return detail;
+          const values = Object.values(parsed as Record<string, unknown>)
+            .filter((value): value is string => typeof value === "string")
             .join(" • ");
           if (values) return values;
         }
@@ -115,18 +116,18 @@ export default function Guest() {
     return trimmed || "Preview unavailable.";
   };
 
-  const isNetworkError = (err: unknown): boolean => {
+  const isNetworkError = useCallback((err: unknown): boolean => {
     if (err instanceof TypeError) return true;
     if (err && typeof err === "object" && "message" in err) {
-      const msg = (err as any).message;
-      if (typeof msg === "string" && /network|fetch/i.test(msg)) {
+      const { message } = err as { message?: unknown };
+      if (typeof message === "string" && /network|fetch/i.test(message)) {
         return true;
       }
     }
     return false;
-  };
+  }, []);
 
-  async function refreshOnce() {
+  const refreshOnce = useCallback(async () => {
     if (isPreview || !licenseReady) return;
     try {
       const d = await getDisplay();
@@ -212,7 +213,7 @@ export default function Guest() {
       setEnergyMap(null);
       setSex("male");
     }
-  }
+  }, [isPreview, isNetworkError, licenseReady]);
 
   useEffect(() => {
     if (!licenseReady) {
@@ -286,14 +287,16 @@ export default function Guest() {
       try {
         ws = new WebSocket(wsUrl);
         ws.onopen = () => { noteServerState(false); };
-        ws.onmessage = () => { refreshOnce(); };
+        ws.onmessage = () => { void refreshOnce(); };
         ws.onclose = () => {
           noteServerState(true);
           reconnectTimer = window.setTimeout(attemptConnect, 3000);
         };
         ws.onerror = () => {
           noteServerState(true);
-          try { ws?.close(); } catch {}
+          try { ws?.close(); } catch {
+            /* noop */
+          }
         };
       } catch {
         noteServerState(true);
@@ -314,16 +317,18 @@ export default function Guest() {
     };
 
     attemptConnect();
-    const t = window.setInterval(refreshOnce, 30000);
-    refreshOnce();
+    const t = window.setInterval(() => { void refreshOnce(); }, 30000);
+    void refreshOnce();
 
     return () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       clearInterval(t);
-      try { ws?.close(); } catch {}
+      try { ws?.close(); } catch {
+        /* noop */
+      }
     };
-  }, [base, buildWebSocketUrl, isPreview, licenseReady]);
+  }, [base, buildWebSocketUrl, isPreview, licenseReady, refreshOnce]);
 
   useEffect(() => {
     if (!isMonitor) {
@@ -423,13 +428,13 @@ export default function Guest() {
       }
     }
 
-    loadPreview();
-    const timer = window.setInterval(loadPreview, 15000);
+    void loadPreview();
+    const timer = window.setInterval(() => { void loadPreview(); }, 15000);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [isPreview, previewSessionId, licenseReady]);
+  }, [isPreview, previewSessionId, licenseReady, isNetworkError]);
 
   if (!licenseReady) {
     if (waitingForLicense) {

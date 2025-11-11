@@ -225,6 +225,7 @@ export default function CardEnergyMap({
   const resolvedShowOnlyMale = Boolean(showOnlyMale);
   const effectiveShowOnlyMale = resolvedSex === "female" ? false : resolvedShowOnlyMale;
   const resolvedSectionTitle = organSectionTitle ?? "Organs";
+  void _status;
 
   const organValueMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -390,7 +391,7 @@ export default function CardEnergyMap({
         rawValue = raw;
       } else if (raw && typeof raw === "object") {
         if ("value" in raw) {
-          rawValue = raw.value as number | null | undefined;
+          rawValue = raw.value;
         }
         if ("label" in raw && raw.label != null) {
           rawLabel = String(raw.label);

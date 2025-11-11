@@ -8,7 +8,6 @@ import type {
   ToxinItem,
 } from "./components";
 import {
-  GENERAL_SEVERITY_META,
   GENERAL_SEVERITY_ORDER,
   GENERAL_SEVERITY_THRESHOLDS,
   FOOD_SEVERITY_THRESHOLDS as SHARED_FOOD_SEVERITY_THRESHOLDS,
@@ -352,6 +351,7 @@ export function transformFoodData(raw: RawFoodData | null | undefined): Map<stri
 }
 
 export function transformNutritionData(raw: RawNutritionData | null | undefined, limit = 10): NutritionData {
+  void limit;
   const items: NutrientItem[] = (raw?.items ?? [])
     .map((item) => ({
       name: item.name.trim(),
@@ -593,10 +593,9 @@ export function aggregateInsights(
       if (typeof rawValue === "number") {
         numericInput = rawValue;
       } else if (rawValue && typeof rawValue === "object") {
-        numericInput =
-          "value" in rawValue ? (rawValue.value as number | null | undefined) : undefined;
-        label = "label" in rawValue ? (rawValue.label as string | null | undefined) : undefined;
-        name = "name" in rawValue ? (rawValue.name as string | null | undefined) : undefined;
+        numericInput = "value" in rawValue ? rawValue.value : undefined;
+        label = "label" in rawValue ? rawValue.label : undefined;
+        name = "name" in rawValue ? rawValue.name : undefined;
       } else {
         continue;
       }

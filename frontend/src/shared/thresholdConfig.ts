@@ -113,9 +113,12 @@ const readVisibleFromStorage = (): VisibleArray => {
   try {
     const stored = win.localStorage.getItem(VISIBLE_KEY);
     if (!stored) return DEFAULT_VISIBLE;
-    const parsed = JSON.parse(stored);
+    const parsed: unknown = JSON.parse(stored);
     if (Array.isArray(parsed)) {
-      return normalizeVisible(parsed);
+      const values = parsed.filter((value): value is string => typeof value === "string");
+      if (values.length) {
+        return normalizeVisible(values);
+      }
     }
   } catch {
     /* ignore malformed storage */

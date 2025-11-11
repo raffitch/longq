@@ -390,6 +390,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [backendDown, setBackendDown] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [shouldPulsePublish, setShouldPulsePublish] = useState(false);
+  const [shouldPulseUpload, setShouldPulseUpload] = useState(false);
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
   const [fitPreview, setFitPreview] = useState(true);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
@@ -415,6 +417,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const thresholdMax = useThresholdMaxValue();
   const visibleSeverities = useVisibleSeverities();
   const visibleSeveritiesSet = new Set<GeneralSeverity>(visibleSeverities as GeneralSeverity[]);
+  const hasAnyUploads = useMemo(() => Object.values(uploads).some(Boolean), [uploads]);
   const [showThresholdControls, setShowThresholdControls] = useState(false);
   const viewportWidth = PREVIEW_VIEWPORT.width;
   const viewportHeight = PREVIEW_VIEWPORT.height;
@@ -502,6 +505,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const presetSessionRef = useRef<number | null>(null);
   const diagnosticsPollRef = useRef<number | null>(null);
   const electronDiagnosticsSeenRef = useRef<Set<string>>(new Set());
+  const uploadPulseSessionRef = useRef<number | null>(null);
 
   type OperationContext = { seq: number; signal: AbortSignal };
 
@@ -555,6 +559,51 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setThresholdLimit(maxAllowed);
     }
   }, [thresholdMax, thresholdLimit]);
+
+  useEffect(() => {
+    if (!hasPendingChanges) {
+      setShouldPulsePublish(false);
+      return;
+    }
+    setShouldPulsePublish(true);
+    if (typeof window === "undefined") {
+      return;
+    }
+    const pulseTimer = window.setTimeout(() => {
+      setShouldPulsePublish(false);
+    }, 2600);
+    return () => {
+      window.clearTimeout(pulseTimer);
+    };
+  }, [hasPendingChanges]);
+
+  useEffect(() => {
+    const sessionId = session?.id ?? null;
+    if (!sessionId) {
+      uploadPulseSessionRef.current = null;
+      setShouldPulseUpload(false);
+      return;
+    }
+    if (hasAnyUploads) {
+      setShouldPulseUpload(false);
+      uploadPulseSessionRef.current = sessionId;
+      return;
+    }
+    if (uploadPulseSessionRef.current === sessionId) {
+      return;
+    }
+    uploadPulseSessionRef.current = sessionId;
+    setShouldPulseUpload(true);
+    if (typeof window === "undefined") {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setShouldPulseUpload(false);
+    }, 2600);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [session?.id, hasAnyUploads]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -853,6 +902,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setLastDroppedFiles([]);
     setHasPendingChanges(false);
     setIsUploading(false);
+    setShouldPulseUpload(false);
   }
 
   function resetSession() {
@@ -1440,7 +1490,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       applyState(setSession, (prev) => (prev ? { ...prev, published: result.published } : prev), operation);
       applyState(setStagedPreviewSessionId, sessionId, operation);
       applyState(setStagedPreviewVersion, (v) => v + 1, operation);
-      applyState(setHasShownOnGuest, false, operation);
       markBackendUp(operation);
       applyState(setStatus, "Session is live. Staged preview refreshed below.", operation);
       applyState(setHasPendingChanges, false, operation);
@@ -1824,7 +1873,15 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         },
       )}
     >
-      <Button type="button" variant="primary" onClick={onBrowse} className="px-[14px] py-1.5 text-[12px]">
+        <Button
+          type="button"
+          variant="primary"
+          onClick={onBrowse}
+          className={cn(
+            "px-[14px] py-1.5 text-[12px] transition-shadow",
+            shouldPulseUpload && session && "animate-[pulse_1.3s_ease-in-out_2] shadow-[0_0_18px_rgba(59,130,246,0.45)]",
+          )}
+        >
         Upload
       </Button>
       <div className="flex min-w-0 flex-1 items-center justify-end text-right">
@@ -1849,7 +1906,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     const publishLocked = session.published && !hasPendingChanges;
     const disablePublish = (!hasSelectedReports && !canPublishWithoutSelection) || isUploading || publishLocked;
     const publishLabel = session.published ? (hasPendingChanges ? "Update" : "Published") : "Publish";
-    const publishButtonVariant: React.ComponentProps<typeof Button>["variant"] = publishLocked ? "secondary" : "primary";
+  const publishButtonVariant: React.ComponentProps<typeof Button>["variant"] = publishLocked ? "secondary" : "primary";
+  const publishShouldPulse = shouldPulsePublish && !disablePublish;
     const publishStatusText = hasSelectedReports
       ? session.published
         ? publishLocked
@@ -1890,7 +1948,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   onClick={() => onPublish()}
                   disabled={disablePublish}
                   variant={publishButtonVariant}
-                  className="px-[18px]"
+                  className={cn(
+                    "px-[18px] transition-shadow",
+                    publishShouldPulse && "animate-[pulse_1.3s_ease-in-out_2] shadow-[0_0_18px_rgba(59,130,246,0.45)]",
+                  )}
                 >
                   {publishLabel}
                 </Button>

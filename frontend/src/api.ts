@@ -28,9 +28,9 @@ function detectRuntimeApiBase(): string {
       /* ignore malformed search params */
     }
   }
-  const fallback = import.meta.env.VITE_API_BASE;
-  if (typeof fallback === "string" && fallback.startsWith("http")) {
-    return fallback;
+  const fallbackRaw: unknown = import.meta.env.VITE_API_BASE;
+  if (typeof fallbackRaw === "string" && fallbackRaw.startsWith("http")) {
+    return fallbackRaw;
   }
   return "http://localhost:8000";
 }
@@ -51,9 +51,9 @@ function detectInitialApiToken(): string | null {
       /* ignore malformed params */
     }
   }
-  const envToken = import.meta.env.VITE_LONGQ_API_TOKEN;
-  if (typeof envToken === "string" && envToken.length > 0) {
-    return envToken;
+  const envTokenRaw: unknown = import.meta.env.VITE_LONGQ_API_TOKEN;
+  if (typeof envTokenRaw === "string" && envTokenRaw.length > 0) {
+    return envTokenRaw;
   }
   return null;
 }
@@ -92,7 +92,7 @@ export type ReportKind = "food" | "heavy-metals" | "hormones" | "nutrition" | "t
 export type Sex = "male" | "female";
 export type Session = { id:number; code:string; client_name:string; first_name:string|null; last_name:string|null; folder_name:string|null; state:string; published:boolean; sex: Sex };
 export type FileOut = { id:number; kind:string; filename:string; status:string; error?:string };
-export type ParsedOut<T=any> = { session_id:number; kind:string; data:T };
+export type ParsedOut<T=unknown> = { session_id:number; kind:string; data:T };
 export type BannerOut = { message:string };
 export type ParsedBundleOut = { session_id:number; reports:Record<string, unknown> };
 export type DiagnosticEntry = {
@@ -136,7 +136,13 @@ export type LicenseLocation = {
   exists: boolean;
 };
 
-async function ok<T>(r: Response): Promise<T> { if (!r.ok) throw new Error(await r.text()); return r.json(); }
+async function ok<T>(r: Response): Promise<T> {
+  if (!r.ok) {
+    throw new Error(await r.text());
+  }
+  const parsed: unknown = await r.json();
+  return parsed as T;
+}
 
 export async function createSession(first_name: string, last_name: string, sex: Sex): Promise<Session> {
   return ok(
@@ -224,7 +230,8 @@ export async function setDisplaySession(payload: DisplaySessionPayload): Promise
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const responsePayload: unknown = await r.json();
+  return responsePayload as { ok: boolean };
 }
 
 export async function getDisplay(): Promise<{
@@ -241,7 +248,19 @@ export async function getDisplay(): Promise<{
 }> {
   const r = await fetch(`${BASE}/display/current`, { headers: authHeaders() });
   if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const payload: unknown = await r.json();
+  return payload as {
+    session_id: number | null;
+    client_name?: string;
+    first_name?: string;
+    last_name?: string;
+    published?: boolean;
+    staged_session_id?: number | null;
+    staged_first_name?: string | null;
+    staged_full_name?: string | null;
+    sex?: Sex | null;
+    staged_sex?: Sex | null;
+  };
 }
 
 export async function notifyOperatorWindowOpen(): Promise<void> {
@@ -287,9 +306,10 @@ export async function getDiagnostics(limit = 20): Promise<DiagnosticEntry[]> {
   if (!r.ok) {
     throw new Error(await r.text());
   }
-  const payload = await r.json();
-  const entries = Array.isArray(payload?.entries) ? payload.entries : [];
-  return entries as DiagnosticEntry[];
+  const payload: unknown = await r.json();
+  const maybeEntries = (payload as { entries?: unknown }).entries;
+  const entries = Array.isArray(maybeEntries) ? (maybeEntries as DiagnosticEntry[]) : [];
+  return entries;
 }
 
 export async function getLicenseStatus(): Promise<LicenseStatus> {
@@ -297,7 +317,8 @@ export async function getLicenseStatus(): Promise<LicenseStatus> {
   if (!r.ok) {
     throw new Error(await r.text());
   }
-  return r.json();
+  const payload: unknown = await r.json();
+  return payload as LicenseStatus;
 }
 
 function buildLicenseError(status: number, detail: unknown): LicenseApiError {
@@ -333,7 +354,8 @@ async function sendLicenseRequest(pathname: string, email: string): Promise<Lice
     }
     throw buildLicenseError(r.status, detail);
   }
-  return r.json();
+  const payload: unknown = await r.json();
+  return payload as LicenseStatus;
 }
 
 export async function activateLicense(email: string): Promise<LicenseStatus> {
@@ -349,5 +371,6 @@ export async function getLicenseLocation(): Promise<LicenseLocation> {
   if (!r.ok) {
     throw new Error(await r.text());
   }
-  return r.json();
+  const payload: unknown = await r.json();
+  return payload as LicenseLocation;
 }
