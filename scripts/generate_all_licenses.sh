@@ -129,6 +129,8 @@ with in_path.open('r', encoding='utf-8') as src, out_path.open('w', encoding='ut
                 continue
             skip_block = False
         stripped = line.strip()
+    if stripped.startswith('uvicorn[standard]=='):
+      line = line.replace('uvicorn[standard]==', 'uvicorn==')
         if stripped.startswith('uvloop=='):
             skip_block = True
             continue

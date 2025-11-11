@@ -10,9 +10,10 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { rmSync, existsSync, statSync } from 'node:fs';
+import { rmSync, existsSync, statSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const backendDir = join(repoRoot, 'backend');
@@ -28,6 +29,13 @@ function fail(message, error) {
     console.error(error instanceof Error ? error.message : String(error));
   }
   process.exit(1);
+}
+
+function runWithStatus(command, args = [], options = {}) {
+  return spawnSync(command, args, {
+    stdio: 'inherit',
+    ...options,
+  });
 }
 
 function run(command, args = [], options = {}) {
@@ -175,6 +183,51 @@ print('[longq:package] stdlib copy complete')
   run(pythonBinary, ['-c', script], { cwd: backendDir, env });
 }
 
+function createWindowsRequirements(originalPath) {
+  const content = readFileSync(originalPath, 'utf8');
+  const lines = content.split(/\r?\n/);
+  let skipBlock = false;
+  const filtered = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (skipBlock) {
+      if (!trimmed || line.startsWith(' ') || line.startsWith('\t') || trimmed.startsWith('#')) {
+        continue;
+      }
+      skipBlock = false;
+    }
+
+    if (trimmed.startsWith('uvloop==')) {
+      skipBlock = true;
+      continue;
+    }
+
+    if (trimmed.startsWith('uvicorn[standard]==')) {
+      const replaced = line.replace('uvicorn[standard]==', 'uvicorn==');
+      filtered.push(replaced);
+      continue;
+    }
+
+    filtered.push(line);
+  }
+
+  const tempDir = mkdtempSync(join(tmpdir(), 'longq-req-'));
+  const tempFile = join(tempDir, 'requirements.txt');
+  writeFileSync(tempFile, filtered.join('\n'), 'utf8');
+  return {
+    path: tempFile,
+    cleanup: () => {
+      try {
+        rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        /* ignore cleanup errors */
+      }
+    },
+  };
+}
+
 function buildRuntime() {
   const launcher = detectPythonLauncher();
 
@@ -184,7 +237,23 @@ function buildRuntime() {
   const python = runtimePythonPath();
 
   run(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], { cwd: backendDir });
-  run(python, ['-m', 'pip', 'install', '-r', 'requirements.txt'], { cwd: backendDir });
+
+  const installResult = runWithStatus(python, ['-m', 'pip', 'install', '-r', 'requirements.txt'], { cwd: backendDir });
+  if (installResult.status !== 0) {
+    if (!isWindows) {
+      fail('pip install failed while building runtime. See log above.');
+    }
+    console.warn('pip install failed; retrying without uvloop (unsupported on Windows).');
+    const adjusted = createWindowsRequirements(join(backendDir, 'requirements.txt'));
+    try {
+      const retry = runWithStatus(python, ['-m', 'pip', 'install', '-r', adjusted.path], { cwd: backendDir });
+      if (retry.status !== 0) {
+        fail('pip install failed again after removing uvloop.');
+      }
+    } finally {
+      adjusted.cleanup();
+    }
+  }
 
   copyStdlibIntoRuntime(python);
 

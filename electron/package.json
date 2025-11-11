@@ -8,9 +8,10 @@
     "build:frontend": "npm run build --prefix ../frontend",
     "dist:mac": "npm run build:frontend && electron-builder --mac",
     "dist:win": "npm run build:frontend && electron-builder --win",
+    "build:runtime": "node ../scripts/electron-package.mjs build-runtime",
   "licenses": "node ../scripts/run_generate_all_licenses.cjs --group-by-license",
-    "predist:mac": "npm run licenses",
-    "predist:win": "npm run licenses"
+    "predist:mac": "npm run build:runtime && npm run licenses",
+    "predist:win": "npm run build:runtime && npm run licenses"
   },
   "dependencies": {
     "mime": "^3.0.0",
