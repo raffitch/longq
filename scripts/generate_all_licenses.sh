@@ -120,6 +120,7 @@ in_path = Path(sys.argv[1])
 out_path = Path(sys.argv[2])
 
 skip_block = False
+has_colorama = False
 
 def strip_continuation(text: str) -> str:
   base = text.rstrip('\n')
@@ -147,7 +148,13 @@ with in_path.open('r', encoding='utf-8') as src, out_path.open('w', encoding='ut
     if stripped.startswith('uvicorn[standard]=='):
       line = original.replace('uvicorn[standard]==', 'uvicorn==')
 
+    if stripped.startswith('colorama=='):
+      has_colorama = True
+
     dst.write(strip_continuation(line))
+
+  if not has_colorama:
+    dst.write('colorama==0.4.6\n')
 PY
     if ! pip install -r "$TMP_REQ"; then
         echo "pip install still failed after removing uvloop." >&2

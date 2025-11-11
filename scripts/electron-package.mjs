@@ -188,6 +188,7 @@ function createWindowsRequirements(originalPath) {
   const lines = content.split(/\r?\n/);
   let skipBlock = false;
   const filtered = [];
+  let hasColorama = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -214,8 +215,16 @@ function createWindowsRequirements(originalPath) {
       continue;
     }
 
+     if (trimmed.startsWith('colorama==')) {
+       hasColorama = true;
+     }
+
     const withoutContinuation = line.replace(/\s*\\\s*$/, '');
     filtered.push(withoutContinuation);
+  }
+
+  if (!hasColorama) {
+    filtered.push('colorama==0.4.6');
   }
 
   const tempDir = mkdtempSync(join(tmpdir(), 'longq-req-'));
