@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Ensure scripts keep LF endings so Git Bash on Windows runs them correctly.
+*.sh text eol=lf
