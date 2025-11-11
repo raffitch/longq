@@ -106,6 +106,36 @@ export type DiagnosticEntry = {
   lineno?: number;
 };
 
+export type LicenseState = "missing" | "invalid" | "valid" | "activating" | "error" | "disabled";
+
+export type LicenseSummary = {
+  license_id: string | null;
+  product: string | null;
+  issued_at: string | null;
+  not_before: string | null;
+  never_expires: boolean | null;
+  features: string[] | null;
+  key_version: number | null;
+  fingerprint_sha256: string | null;
+};
+
+export type LicenseStatus = {
+  state: LicenseState;
+  message: string | null;
+  error_code: string | null;
+  fingerprint_sha256: string | null;
+  license: LicenseSummary | null;
+  checked_at: number;
+};
+
+export type LicenseApiError = Error & { code?: string; status?: number };
+
+export type LicenseLocation = {
+  path: string;
+  directory: string;
+  exists: boolean;
+};
+
 async function ok<T>(r: Response): Promise<T> { if (!r.ok) throw new Error(await r.text()); return r.json(); }
 
 export async function createSession(first_name: string, last_name: string, sex: Sex): Promise<Session> {
@@ -260,4 +290,64 @@ export async function getDiagnostics(limit = 20): Promise<DiagnosticEntry[]> {
   const payload = await r.json();
   const entries = Array.isArray(payload?.entries) ? payload.entries : [];
   return entries as DiagnosticEntry[];
+}
+
+export async function getLicenseStatus(): Promise<LicenseStatus> {
+  const r = await fetch(`${BASE}/license/status`, { headers: authHeaders() });
+  if (!r.ok) {
+    throw new Error(await r.text());
+  }
+  return r.json();
+}
+
+function buildLicenseError(status: number, detail: unknown): LicenseApiError {
+  let message = "License activation failed.";
+  let code: string | undefined;
+  if (detail && typeof detail === "object") {
+    const maybe = detail as Record<string, unknown>;
+    if (typeof maybe.message === "string" && maybe.message.trim()) {
+      message = maybe.message;
+    }
+    if (typeof maybe.code === "string") {
+      code = maybe.code;
+    }
+  }
+  const error = new Error(message) as LicenseApiError;
+  error.code = code;
+  error.status = status;
+  return error;
+}
+
+async function sendLicenseRequest(pathname: string, email: string): Promise<LicenseStatus> {
+  const r = await fetch(`${BASE}${pathname}`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ email }),
+  });
+  if (!r.ok) {
+    let detail: unknown = null;
+    try {
+      detail = await r.json();
+    } catch {
+      /* ignore detail parsing */
+    }
+    throw buildLicenseError(r.status, detail);
+  }
+  return r.json();
+}
+
+export async function activateLicense(email: string): Promise<LicenseStatus> {
+  return sendLicenseRequest("/license/activate", email);
+}
+
+export async function refreshLicense(email: string): Promise<LicenseStatus> {
+  return sendLicenseRequest("/license/refresh", email);
+}
+
+export async function getLicenseLocation(): Promise<LicenseLocation> {
+  const r = await fetch(`${BASE}/license/location`, { headers: authHeaders() });
+  if (!r.ok) {
+    throw new Error(await r.text());
+  }
+  return r.json();
 }

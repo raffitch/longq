@@ -5,15 +5,15 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 
 * Frontend packages: 450
 * Electron packages: 284
-* Backend Python packages: 40
+* Backend Python packages: 43
 
 ## License Summary
 
 | License | Count |
 | --- | --- |
 | MIT | 615 |
-| ISC | 69 |
-| Apache-2.0 | 24 |
+| ISC | 70 |
+| Apache-2.0 | 25 |
 | Unknown | 18 |
 | BSD-2-Clause | 13 |
 | BSD-3-Clause | 11 |
@@ -28,6 +28,7 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | MIT AND ISC | 1 |
 | MIT AND Python-2.0 | 1 |
 | MIT OR Apache-2.0 | 1 |
+| Unlicense | 1 |
 | WTFPL | 1 |
 | WTFPL OR ISC | 1 |
 
@@ -786,6 +787,8 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `charset-normalizer` | `3.4.4` | MIT | https://github.com/jawah/charset_normalizer/blob/master/CHANGELOG.md |
 | `click` | `8.3.0` | Unknown | https://click.palletsprojects.com/page/changes/ |
 | `cryptography` | `46.0.3` | Unknown | https://github.com/pyca/cryptography |
+| `dnspython` | `2.8.0` | ISC | https://www.dnspython.org |
+| `email-validator` | `2.3.0` | Unlicense | https://github.com/JoshData/python-email-validator |
 | `fastapi` | `0.121.0` | Unknown | https://github.com/fastapi/fastapi |
 | `greenlet` | `3.2.4` | MIT AND Python-2.0 | https://greenlet.readthedocs.io/ |
 | `h11` | `0.16.0` | MIT | https://github.com/python-hyper/h11 |
@@ -803,6 +806,7 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `pydantic` | `2.12.4` | Unknown | https://github.com/pydantic/pydantic |
 | `pydantic-core` | `2.41.5` | Unknown | https://github.com/pydantic/pydantic-core |
 | `pygments` | `2.19.2` | BSD-2-Clause | https://pygments.org |
+| `pynacl` | `1.6.1` | Apache-2.0 | https://github.com/pyca/pynacl/ |
 | `pypdfium2` | `5.0.0` | BSD-3-Clause, Apache-2.0, dependency licenses | https://github.com/pypdfium2-team/pypdfium2 |
 | `pytest` | `8.4.2` | MIT | https://docs.pytest.org/en/stable/changelog.html |
 | `pytest-asyncio` | `1.2.0` | Unknown | https://github.com/pytest-dev/pytest-asyncio/issues |

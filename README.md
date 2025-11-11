@@ -150,6 +150,31 @@ Useful environment overrides (place in `backend/.env` or export before running):
 
 - Observability endpoints: `GET /metrics` exposes Prometheus counters/gauges/histograms for uploads and parse activity, while `GET /diagnostics` returns the most recent backend error entries surfaced inside the Operator Console diagnostics pane.
 
+### Desktop license activation
+
+Commercial builds now require a signed license before the Operator and Guest screens unlock. The activation UI rides on both the dev launcher and the Electron shell:
+
+1. The backend looks for `client.lic` in an OS-specific directory (`~/Library/Application Support/QuantumQi/` on macOS, `%APPDATA%\LongQ\QuantumQi\` on Windows). No license file → only the activation window opens.
+2. Operators enter the provisioned email address. The app computes a deterministic device fingerprint (IOPlatformUUID/ComputerName/CPU on macOS, MachineGuid/COMPUTERNAME/CPU on Windows), POSTs it to Cloudflare, saves the JSON response verbatim, and immediately re-validates it offline.
+3. Validation checks:
+   - canonical JSON payload (signature excluded) is verified with Ed25519 using `PUBLIC_KEY_HEX`.
+   - fingerprint matches the current machine.
+   - product code equals `quantum_qi`.
+4. On success the Operator + Guest windows launch (Electron) or the dev launcher opens both browser tabs. Offline restarts read the saved license and run the same verification path before bringing the UI up.
+
+**Key constants**
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LICENSE_API_BASE` | `https://license-api.hello-326.workers.dev` | Cloudflare Worker hostname |
+| `ISSUE_PATH` | `/issue` | Worker endpoint used by the client |
+| `PRODUCT_CODE` | `quantum_qi` | Ties licenses to this desktop app |
+| `PUBLIC_KEY_HEX` | `763f46418ac4ffe0214dbfb766f3b8d8406a7aab0e248519593797c8571b2af9` | Ed25519 public key shipped with the client |
+| `LONGQ_LICENSE_DIR` | unset | Override the per-user license directory (useful for tests) |
+| `LONGQ_LICENSE_DISABLE` | unset | Set to `1` to bypass license enforcement (CI/unit tests only) |
+
+> Tip: `scripts/devlaunch.sh` automatically opens `/activation` when no license is present and polls `/license/status`. When the license flips to `valid`, it launches the Operator + Guest tabs. The Electron shell follows the same pattern and exposes “Manage License…” under the app menu so operators can refresh a seat without quitting.
+
 ### License tracking
 
 Commercial builds ship with a complete list of third-party acknowledgements. Run

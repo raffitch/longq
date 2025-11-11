@@ -6,6 +6,12 @@ declare global {
       subscribe: (handler: (event: ElectronDiagnosticsEvent) => void) => (() => void) | void;
       getHistory?: () => Promise<ElectronDiagnosticsEvent[]>;
     };
+    longqLicense?: {
+      onManageRequest?: (handler: () => void) => (() => void) | void;
+      openPath?: (targetPath: string) => Promise<{ ok: boolean; error?: string }>;
+      openDirectory?: (targetPath: string) => Promise<{ ok: boolean; error?: string }>;
+      notifyActivated?: () => void;
+    };
   }
 }
 

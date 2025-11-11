@@ -49,6 +49,20 @@
     "home_page": "https://github.com/pyca/cryptography"
   },
   {
+    "name": "dnspython",
+    "version": "2.8.0",
+    "license": "ISC",
+    "summary": "DNS toolkit",
+    "home_page": "https://www.dnspython.org"
+  },
+  {
+    "name": "email-validator",
+    "version": "2.3.0",
+    "license": "Unlicense",
+    "summary": "A robust email address syntax and deliverability validation library.",
+    "home_page": "https://github.com/JoshData/python-email-validator"
+  },
+  {
     "name": "fastapi",
     "version": "0.121.0",
     "license": "Unknown",
@@ -166,6 +180,13 @@
     "license": "BSD-2-Clause",
     "summary": "Pygments is a syntax highlighting package written in Python.",
     "home_page": "https://pygments.org"
+  },
+  {
+    "name": "pynacl",
+    "version": "1.6.1",
+    "license": "Apache-2.0",
+    "summary": "Python binding to the Networking and Cryptography (NaCl) library",
+    "home_page": "https://github.com/pyca/pynacl/"
   },
   {
     "name": "pypdfium2",

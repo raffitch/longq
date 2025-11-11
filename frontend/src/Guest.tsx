@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { API_BASE, getApiToken, getDisplay, getParsedBundle, getSession, type Sex } from "./api";
+import { useLicense } from "./license/LicenseContext";
 
 import GuestDashboard from "./guest/GuestDashboard";
 import "./guest/guest.css";
@@ -22,6 +23,7 @@ import type {
 } from "./guest/types";
 
 export default function Guest() {
+  const { status: licenseStatus, loading: licenseLoading } = useLicense();
   const [firstName, setFirstName] = useState<string | null>(null);
   const [clientFullName, setClientFullName] = useState<string | null>(null);
   const [data, setData] = useState<RawFoodData | null>(null);
@@ -42,8 +44,14 @@ export default function Guest() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [serverDown, setServerDown] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
+  const licenseReady = licenseStatus ? licenseStatus.state === "valid" || licenseStatus.state === "disabled" : false;
+  const waitingForLicense = licenseLoading && !licenseReady;
+  const needsActivation = !licenseLoading && !licenseReady;
 
   const buildWebSocketUrl = useCallback((): string | null => {
+    if (!licenseReady) {
+      return null;
+    }
     const token = getApiToken();
     if (!token) {
       return null;
@@ -53,7 +61,7 @@ export default function Guest() {
     url.pathname = `${url.pathname.replace(/\/$/, "")}/ws/guest`;
     url.searchParams.set("token", token);
     return url.toString();
-  }, [base]);
+  }, [base, licenseReady]);
 
   useEffect(() => {
     document.title = "Quantum Qi™ - Guest Portal";
@@ -119,7 +127,7 @@ export default function Guest() {
   };
 
   async function refreshOnce() {
-    if (isPreview) return;
+    if (isPreview || !licenseReady) return;
     try {
       const d = await getDisplay();
       setServerDown(false);
@@ -207,6 +215,16 @@ export default function Guest() {
   }
 
   useEffect(() => {
+    if (!licenseReady) {
+      setData(null);
+      setNutrition(null);
+      setHormones(null);
+      setHeavyMetals(null);
+      setToxins(null);
+      setEnergyMap(null);
+      setPreviewError(null);
+      return;
+    }
     if (isPreview) {
       setData(null);
       setNutrition(null);
@@ -217,10 +235,10 @@ export default function Guest() {
     } else {
       setPreviewError(null);
     }
-  }, [isPreview]);
+  }, [isPreview, licenseReady]);
 
   useEffect(() => {
-    if (isPreview || isMonitor) {
+    if (isPreview || isMonitor || !licenseReady) {
       return;
     }
     const key = "longevityq_guest_heartbeat";
@@ -249,10 +267,10 @@ export default function Guest() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       clear();
     };
-  }, [isPreview, isMonitor]);
+  }, [isPreview, isMonitor, licenseReady]);
 
   useEffect(() => {
-    if (isPreview) {
+    if (isPreview || !licenseReady) {
       return;
     }
     const attemptConnect = () => {
@@ -305,7 +323,7 @@ export default function Guest() {
       clearInterval(t);
       try { ws?.close(); } catch {}
     };
-  }, [base, buildWebSocketUrl, isPreview]);
+  }, [base, buildWebSocketUrl, isPreview, licenseReady]);
 
   useEffect(() => {
     if (!isMonitor) {
@@ -332,7 +350,7 @@ export default function Guest() {
   }, [isMonitor, aggregated]);
 
   useEffect(() => {
-    if (!isPreview || previewSessionId === null) {
+    if (!isPreview || previewSessionId === null || !licenseReady) {
       return;
     }
     let cancelled = false;
@@ -411,7 +429,32 @@ export default function Guest() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [isPreview, previewSessionId]);
+  }, [isPreview, previewSessionId, licenseReady]);
+
+  if (!licenseReady) {
+    if (waitingForLicense) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-logo-background text-text-primary">
+          <div className="text-center text-[15px] font-semibold tracking-[0.3em] uppercase text-teal-200">
+            Checking license…
+          </div>
+        </div>
+      );
+    }
+    if (needsActivation) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-center text-text-primary">
+          <div className="max-w-[460px] space-y-3">
+            <h1 className="text-[28px] font-semibold">Activation Required</h1>
+            <p className="text-[15px] text-text-secondary">
+              The operator license has not been activated on this workstation. Please return to the Operator
+              Console window, complete activation, and relaunch the guest display.
+            </p>
+          </div>
+        </div>
+      );
+    }
+  }
 
   if (serverDown) {
     if (!hasConnected) {

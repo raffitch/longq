@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class SessionCreate(BaseModel):
@@ -93,3 +93,33 @@ class TokenRotateResponse(BaseModel):
     token: str
     grace_seconds: float
     persisted: bool
+
+
+class LicenseSummaryOut(BaseModel):
+    license_id: str | None = None
+    product: str | None = None
+    issued_at: str | None = None
+    not_before: str | None = None
+    never_expires: bool | None = None
+    features: list[str] | None = None
+    key_version: int | None = None
+    fingerprint_sha256: str | None = None
+
+
+class LicenseStatusOut(BaseModel):
+    state: Literal["missing", "invalid", "valid", "activating", "error", "disabled"]
+    message: str | None = None
+    error_code: str | None = None
+    fingerprint_sha256: str | None = None
+    license: LicenseSummaryOut | None = None
+    checked_at: float
+
+
+class LicenseActivateRequest(BaseModel):
+    email: EmailStr
+
+
+class LicenseLocationOut(BaseModel):
+    path: str
+    directory: str
+    exists: bool

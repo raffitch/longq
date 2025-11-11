@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -8,6 +8,8 @@ const { spawn } = require('child_process');
 const { createStaticServer } = require('./serve');
 const { randomUUID } = require('node:crypto');
 const preloadPath = path.join(__dirname, 'preload.js');
+const APP_VENDOR = process.env.LONGQ_LICENSE_VENDOR || 'LongQ';
+const APP_NAME = process.env.LONGQ_LICENSE_APP_NAME || 'QuantumQi';
 
 let backendProcess = null;
 let staticServer = null;
@@ -16,16 +18,22 @@ let operatorWindow = null;
 let guestWindow = null;
 let aboutWindow = null;
 let aboutTempFile = null;
+let activationWindow = null;
+let licensePollTimer = null;
+let pendingLicenseModal = false;
 let backendLogPath = null;
 let isAppQuitting = false;
 let backendPort = Number(process.env.LONGQ_BACKEND_PORT || 0);
 let apiToken = process.env.LONGQ_API_TOKEN || null;
+let currentLicenseState = null;
+let currentApiBase = null;
 const DEFAULT_BACKEND_PORT = 8000;
 const UI_PORT = Number(process.env.LONGQ_UI_PORT || 5173);
 const HEALTH_TIMEOUT_MS = 200;
 const HEALTH_RETRIES = 80;
 const MAX_BACKEND_LOG_BYTES = 4 * 1024 * 1024;
 const MAX_DIAGNOSTIC_EVENTS = 32;
+const LICENSE_POLL_INTERVAL_MS = 4000;
 const diagnosticEventHistory = [];
 let trimPending = false;
 let userRootPrepared = false;
@@ -62,6 +70,33 @@ try {
 } catch (err) {
   console.error('[longq] failed to resolve repo root', err);
   repoRoot = path.resolve(__dirname);
+}
+
+function resolveLicenseDirectory() {
+  const override = process.env.LONGQ_LICENSE_DIR;
+  if (override) {
+    return path.resolve(override);
+  }
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', APP_NAME);
+  }
+  if (process.platform === 'win32') {
+    const base = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+    return path.join(base, APP_VENDOR, APP_NAME);
+  }
+  return path.join(os.homedir(), `.${APP_NAME.toLowerCase()}`);
+}
+
+function getLicenseFilePath() {
+  return path.join(resolveLicenseDirectory(), 'client.lic');
+}
+
+function licenseFileExists() {
+  try {
+    return fs.existsSync(getLicenseFilePath());
+  } catch {
+    return false;
+  }
 }
 
 function isPortAvailable(port) {
@@ -422,6 +457,66 @@ function recordDiagnosticEvent(event) {
 
 ipcMain.handle('diagnostics:get-history', () => diagnosticEventHistory);
 
+async function openLicensePath(_event, targetPath) {
+  if (!targetPath) {
+    return { ok: false, error: 'No path provided' };
+  }
+  try {
+    const resolved = path.resolve(targetPath);
+    if (fs.existsSync(resolved)) {
+      const stats = fs.statSync(resolved);
+      if (stats.isDirectory()) {
+        const result = await shell.openPath(resolved);
+        if (result) {
+          throw new Error(result);
+        }
+        return { ok: true, kind: 'directory' };
+      }
+      if (stats.isFile()) {
+        const result = await shell.openPath(resolved);
+        if (result) {
+          throw new Error(result);
+        }
+        return { ok: true, kind: 'file' };
+      }
+    }
+    const parent = path.dirname(resolved);
+    if (parent) {
+      const result = await shell.openPath(parent);
+      if (result) {
+        throw new Error(result);
+      }
+      return { ok: true, kind: 'directory' };
+    }
+  } catch (err) {
+    console.warn('[longq] failed to open license path', err);
+    return { ok: false, error: err && err.message ? err.message : String(err) };
+  }
+  return { ok: false, error: 'Unable to open path' };
+}
+
+ipcMain.handle('license:open-path', openLicensePath);
+ipcMain.handle('license:open-directory', openLicensePath);
+ipcMain.on('license:activated', async () => {
+  if (!currentApiBase) {
+    return;
+  }
+  try {
+    const status = await fetchLicenseStatus(currentApiBase);
+    if (status) {
+      currentLicenseState = status.state;
+    }
+    if (licenseStateAllowsUi(currentLicenseState)) {
+      closeActivationWindow();
+      if (!operatorWindow && !guestWindow) {
+        await createWindows();
+      }
+    }
+  } catch (err) {
+    console.warn('[longq] failed to handle renderer license activation signal', err);
+  }
+});
+
 function readJsonFile(filePath) {
   try {
     if (!fs.existsSync(filePath)) {
@@ -663,6 +758,12 @@ function setupMenu() {
             showAboutWindow();
           },
         },
+        {
+          label: 'Manage License…',
+          click: () => {
+            promptLicenseManagement();
+          },
+        },
         { type: 'separator' },
         { role: 'quit', label: process.platform === 'darwin' ? 'Quit' : 'Exit' },
       ],
@@ -859,6 +960,166 @@ function injectRuntimeConfig(win, apiBase, token) {
   });
 }
 
+function licenseStateAllowsUi(state) {
+  return state === 'valid' || state === 'disabled';
+}
+
+async function fetchLicenseStatus(apiBase) {
+  if (!apiBase || typeof fetch !== 'function') {
+    return null;
+  }
+  try {
+    const response = await fetch(`${apiBase}/license/status`, {
+      headers: { 'content-type': 'application/json' },
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return response.json();
+  } catch (err) {
+    console.warn('[longq] failed to fetch license status', err);
+    return null;
+  }
+}
+
+function stopLicenseWatcher() {
+  if (licensePollTimer) {
+    clearInterval(licensePollTimer);
+    licensePollTimer = null;
+  }
+}
+
+function closeActivationWindow() {
+  if (activationWindow && !activationWindow.isDestroyed()) {
+    activationWindow.close();
+  }
+  activationWindow = null;
+}
+
+async function openActivationWindow(apiBase, options = {}) {
+  const mode = options.mode || 'activate';
+  if (!apiBase) {
+    return null;
+  }
+  if (activationWindow && !activationWindow.isDestroyed()) {
+    activationWindow.focus();
+    return activationWindow;
+  }
+  const displayInfo = screen.getPrimaryDisplay();
+  const work = displayInfo && displayInfo.workAreaSize ? displayInfo.workAreaSize : { width: 1280, height: 800 };
+  const winWidth = Math.max(560, Math.min(Math.round(work.width * 0.35), 700));
+  const winHeight = Math.max(460, Math.min(Math.round(work.height * 0.5), 560));
+  activationWindow = new BrowserWindow({
+    width: winWidth,
+    height: winHeight,
+    useContentSize: true,
+    resizable: false,
+    title: 'Quantum Qi™ Activation',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: preloadPath,
+    },
+  });
+  activationWindow.on('closed', () => {
+    activationWindow = null;
+  });
+  await activationWindow.loadURL(buildWindowUrl('/activation', { apiBase, mode, view: 'compact' }));
+  injectRuntimeConfig(activationWindow, apiBase, apiToken);
+  return activationWindow;
+}
+
+function sendLicenseModalRequest() {
+  if (operatorWindow && !operatorWindow.isDestroyed()) {
+    operatorWindow.webContents.send('license:open-modal');
+    pendingLicenseModal = false;
+    return true;
+  }
+  pendingLicenseModal = true;
+  return false;
+}
+
+function promptLicenseManagement() {
+  if (sendLicenseModalRequest()) {
+    return;
+  }
+  if (licenseStateAllowsUi(currentLicenseState)) {
+    const ensureWindows = operatorWindow && !operatorWindow.isDestroyed() ? Promise.resolve() : createWindows();
+    ensureWindows
+      .then(() => {
+        sendLicenseModalRequest();
+      })
+      .catch((err) => {
+        console.error('[longq] failed to reopen windows for license modal', err);
+      });
+    return;
+  }
+  if (currentApiBase) {
+    openActivationWindow(currentApiBase, { mode: 'refresh' }).catch((err) => {
+      console.error('[longq] failed to open activation window for license management', err);
+    });
+  } else {
+    dialog.showMessageBox({
+      type: 'info',
+      message: 'Backend is still starting. Please try again once it is ready.',
+    });
+  }
+}
+
+function startLicenseWatcher(apiBase) {
+  stopLicenseWatcher();
+  if (!apiBase) {
+    return;
+  }
+  licensePollTimer = setInterval(async () => {
+    if (isAppQuitting) {
+      stopLicenseWatcher();
+      return;
+    }
+    const status = await fetchLicenseStatus(apiBase);
+    if (!status) {
+      return;
+    }
+    currentLicenseState = status.state;
+    if (licenseStateAllowsUi(currentLicenseState)) {
+      stopLicenseWatcher();
+      closeActivationWindow();
+      if (!operatorWindow && !guestWindow) {
+        createWindows()
+          .then(() => {
+            currentLicenseState = status.state;
+          })
+          .catch((err) => console.error('[longq] failed to launch windows after activation', err));
+      }
+    }
+  }, LICENSE_POLL_INTERVAL_MS);
+}
+
+async function bootstrapUi(apiBase) {
+  currentApiBase = apiBase;
+  const fileExists = licenseFileExists();
+  const status = await fetchLicenseStatus(apiBase);
+  if (status) {
+    currentLicenseState = status.state;
+  }
+  if (licenseStateAllowsUi(currentLicenseState)) {
+    await createWindows();
+    if (!fileExists) {
+      sendLicenseModalRequest();
+    }
+    startLicenseWatcher(apiBase);
+    return;
+  }
+  if (fileExists) {
+    await createWindows();
+    sendLicenseModalRequest();
+    startLicenseWatcher(apiBase);
+    return;
+  }
+  await openActivationWindow(apiBase, { mode: currentLicenseState === 'invalid' ? 'refresh' : 'activate' });
+  startLicenseWatcher(apiBase);
+}
+
 function computeAllowedOrigins() {
   const origins = [];
   const appendOrigin = (value) => {
@@ -930,6 +1191,9 @@ async function createWindows() {
   });
   await operatorWindow.loadURL(buildWindowUrl('/operator', query));
   injectRuntimeConfig(operatorWindow, apiBase, apiToken);
+  if (pendingLicenseModal) {
+    sendLicenseModalRequest();
+  }
 
   guestWindow = new BrowserWindow({
     width: 1280,
@@ -955,15 +1219,24 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isAppQuitting = true;
+  stopLicenseWatcher();
+  closeActivationWindow();
   stopBackend();
   stopStaticServer();
 });
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindows().catch((err) => {
-      console.error('[longq] failed to recreate windows:', err);
-    });
+    if (licenseStateAllowsUi(currentLicenseState)) {
+      createWindows().catch((err) => {
+        console.error('[longq] failed to recreate windows:', err);
+      });
+    } else if (currentApiBase) {
+      startLicenseWatcher(currentApiBase);
+      openActivationWindow(currentApiBase, { mode: 'refresh' }).catch((err) => {
+        console.error('[longq] failed to reopen activation window:', err);
+      });
+    }
   }
 });
 
@@ -985,6 +1258,7 @@ app.whenReady().then(async () => {
     return;
   }
   process.env.LONGQ_BACKEND_PORT = String(backendPort);
+  currentApiBase = `http://127.0.0.1:${backendPort}`;
   await ensureMaintenance(root);
   resetDatabaseIfRequested(root);
   try {
@@ -1006,16 +1280,20 @@ app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
-  await createWindows();
+  await bootstrapUi(currentApiBase);
 });
 
 process.on('exit', () => {
+  stopLicenseWatcher();
+  closeActivationWindow();
   stopBackend();
   stopStaticServer();
 });
 
 process.on('SIGINT', () => {
   isAppQuitting = true;
+  stopLicenseWatcher();
+  closeActivationWindow();
   stopBackend();
   stopStaticServer();
   process.exit(0);
@@ -1023,6 +1301,8 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   isAppQuitting = true;
+  stopLicenseWatcher();
+  closeActivationWindow();
   stopBackend();
   stopStaticServer();
   process.exit(0);

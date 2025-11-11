@@ -43,6 +43,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, select
 
 from db import engine, get_session, init_db
+from license_manager import ActivationError, LicenseManager, LicenseStatus
 from models import DisplayRow, FileRow, ParsedRow, SessionRow, SessionState
 from parser_adapter import parse_file
 from paths import ensure_app_dirs, logs_dir
@@ -51,6 +52,9 @@ from schemas import (
     DisplayOut,
     DisplaySet,
     FileOut,
+    LicenseActivateRequest,
+    LicenseLocationOut,
+    LicenseStatusOut,
     ParsedBundleOut,
     ParsedOut,
     PublishRequest,
@@ -384,6 +388,9 @@ async def on_startup() -> None:
         if not d:
             db.add(DisplayRow(code="main"))
             db.commit()
+    manager = _license_manager()
+    snapshot = manager.verify_now()
+    logger.info("License status at startup: %s", snapshot.state)
     return None
 
 
@@ -403,6 +410,16 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Quantum Qi™ Backend", lifespan=lifespan)
+setattr(app.state, "license_manager", None)
+
+
+def _license_manager() -> LicenseManager:
+    manager = cast(LicenseManager | None, getattr(app.state, "license_manager", None))
+    if manager is None:
+        manager = LicenseManager()
+        app.state.license_manager = manager
+    return manager
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -413,6 +430,12 @@ app.add_middleware(
 )
 
 _PUBLIC_HTTP_PATHS = {"/healthz"}
+_LICENSE_HTTP_PATHS = {
+    "/license/status",
+    "/license/activate",
+    "/license/refresh",
+    "/license/location",
+}
 
 
 @app.middleware("http")
@@ -420,12 +443,37 @@ async def _auth_middleware(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
-    if request.url.path in _PUBLIC_HTTP_PATHS:
+    if request.url.path in _PUBLIC_HTTP_PATHS or request.url.path in _LICENSE_HTTP_PATHS:
         return await call_next(request)
     unauthorized = enforce_http_middleware(request)
     if unauthorized is not None:
         return cast(Response, unauthorized)
     return await call_next(request)
+
+
+@app.middleware("http")
+async def _license_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    path = request.url.path
+    if path in _PUBLIC_HTTP_PATHS or path in _LICENSE_HTTP_PATHS:
+        return await call_next(request)
+    manager = cast(LicenseManager | None, getattr(app.state, "license_manager", None))
+    if manager is None or manager.is_valid():
+        return await call_next(request)
+    snapshot = manager.status()
+    payload = {
+        "error": "license_required",
+        "state": snapshot.state,
+        "message": snapshot.message,
+        "error_code": snapshot.error_code,
+    }
+    return Response(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content=json.dumps(payload),
+        media_type="application/json",
+    )
 
 
 @app.get("/healthz")
@@ -454,6 +502,43 @@ def _recent_diagnostics(limit: int) -> list[dict]:
 def diagnostics(limit: int = 20) -> dict[str, list[dict]]:
     limit = max(1, min(limit, DIAGNOSTICS_MAX_ENTRIES))
     return {"entries": _recent_diagnostics(limit)}
+
+
+def _status_response(status_obj: LicenseStatus) -> LicenseStatusOut:
+    return LicenseStatusOut(**status_obj.to_dict())
+
+
+def _activation_error_to_http(exc: ActivationError) -> HTTPException:
+    detail = {"code": exc.code, "message": str(exc)}
+    return HTTPException(status_code=exc.status_code, detail=detail)
+
+
+@app.get("/license/status", response_model=LicenseStatusOut)
+def license_status() -> LicenseStatusOut:
+    manager = _license_manager()
+    return _status_response(manager.status())
+
+
+@app.post("/license/activate", response_model=LicenseStatusOut)
+def license_activate(payload: LicenseActivateRequest) -> LicenseStatusOut:
+    manager = _license_manager()
+    try:
+        updated = manager.activate(str(payload.email))
+    except ActivationError as exc:
+        raise _activation_error_to_http(exc) from exc
+    return _status_response(updated)
+
+
+@app.post("/license/refresh", response_model=LicenseStatusOut)
+def license_refresh(payload: LicenseActivateRequest) -> LicenseStatusOut:
+    return license_activate(payload)
+
+
+@app.get("/license/location", response_model=LicenseLocationOut)
+def license_location() -> LicenseLocationOut:
+    manager = _license_manager()
+    path, exists = manager.license_location()
+    return LicenseLocationOut(path=str(path), directory=str(path.parent), exists=exists)
 
 
 def _ensure_display_table_columns() -> None:
@@ -710,8 +795,31 @@ def _on_client_disconnected(kind: str) -> None:
     _request_idle_check(f"{kind} disconnected")
 
 
+async def _ensure_license_ws(ws: WebSocket) -> bool:
+    manager = cast(LicenseManager | None, getattr(app.state, "license_manager", None))
+    if manager is None:
+        manager = _license_manager()
+    if manager.is_valid():
+        return True
+    snapshot = manager.status()
+    reason = snapshot.message or "License required."
+    try:
+        scope = getattr(ws, "scope", {}) or {}
+        path = scope.get("path", "/ws")
+    except Exception:  # pragma: no cover - defensive
+        path = "/ws"
+    logger.info("Rejecting websocket %s: %s", path, reason)
+    try:
+        await ws.close(code=4403, reason=reason[:120])
+    except Exception:  # pragma: no cover - best effort close
+        pass
+    return False
+
+
 @app.websocket("/ws/guest")
 async def ws_guest(ws: WebSocket) -> None:
+    if not await _ensure_license_ws(ws):
+        return
     if not await ensure_websocket_authorized(ws):
         return
     await ws.accept()
@@ -734,6 +842,8 @@ async def ws_guest(ws: WebSocket) -> None:
 
 @app.websocket("/ws/operator")
 async def ws_operator(ws: WebSocket) -> None:
+    if not await _ensure_license_ws(ws):
+        return
     if not await ensure_websocket_authorized(ws):
         return
     await ws.accept()

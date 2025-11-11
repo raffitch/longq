@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ManageLicenseModal } from "./license/ManageLicenseModal";
+import { useLicense } from "./license/LicenseContext";
 import { Button } from "./ui/Button";
 import { Chip } from "./ui/Chip";
 import { cn } from "./ui/cn";
@@ -391,6 +393,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
   const [fitPreview, setFitPreview] = useState(true);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [licenseModalOpen, setLicenseModalOpen] = useState(false);
+  const licenseModal = licenseModalOpen ? <ManageLicenseModal onClose={() => setLicenseModalOpen(false)} /> : null;
+  const { status: licenseStatus, loading: licenseLoading } = useLicense();
+  const licenseReady = licenseStatus ? licenseStatus.state === "valid" || licenseStatus.state === "disabled" : false;
+  const waitingForLicense = licenseLoading && !licenseReady;
+  const needsActivation = !licenseLoading && !licenseReady;
   const [diagnosticsEntries, setDiagnosticsEntries] = useState<DiagnosticEntry[]>([]);
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
   const [diagnosticsFetchError, setDiagnosticsFetchError] = useState<string | null>(null);
@@ -430,6 +438,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     }
   }, [session?.sex]);
   useEffect(() => {
+    if (!licenseReady) {
+      return undefined;
+    }
     let closeNotified = false;
 
     const notifyClose = () => {
@@ -462,7 +473,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       window.removeEventListener("pagehide", handlePageHide);
       notifyClose();
     };
-  }, []);
+  }, [licenseReady]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const guestWindowRef = useRef<Window | null>(null);
   const replaceInputsRef = useRef<Record<ReportKind, HTMLInputElement | null>>({} as Record<ReportKind, HTMLInputElement | null>);
@@ -962,6 +973,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   }, []);
 
   useEffect(() => {
+    if (!licenseReady) {
+      return undefined;
+    }
     const attemptConnect = () => {
       const wsUrl = buildWebSocketUrl("/ws/operator");
       if (!wsUrl) {
@@ -1008,7 +1022,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       try { ws?.close(); } catch {}
     };
-  }, [base, buildWebSocketUrl]);
+  }, [base, buildWebSocketUrl, licenseReady]);
 
   const handleDragLeaveArea = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
@@ -2324,6 +2338,17 @@ useEffect(() => {
   livePreviewUserScrolledRef.current = false;
 }, [fitPreview, previewScale, liveMonitorUrl, stagedPreviewVisible]);
 
+useEffect(() => {
+  const unsubscribe = window.longqLicense?.onManageRequest?.(() => {
+    setLicenseModalOpen(true);
+  });
+  return () => {
+    if (typeof unsubscribe === "function") {
+      unsubscribe();
+    }
+  };
+}, []);
+
   const diagnosticsModal = diagnosticsOpen ? (
     <div
       className="fixed inset-0 z-[999] flex items-center justify-center bg-black/65 px-4"
@@ -2402,6 +2427,49 @@ useEffect(() => {
     </div>
   ) : null;
 
+  if (!licenseReady) {
+    return (
+      <>
+        <div className="flex min-h-screen items-center justify-center bg-logo-background px-6 text-center text-text-primary">
+          <div className="space-y-5 max-w-[520px]">
+            {waitingForLicense ? (
+              <>
+                <div className="flex justify-center">
+                  <div
+                    className="h-12 w-12 animate-spin rounded-full border-4 border-teal-300 border-t-transparent"
+                    aria-hidden="true"
+                  />
+                </div>
+                <div>
+                  <div className="text-[18px] font-semibold tracking-[0.16em] text-teal-100 uppercase">
+                    Checking License
+                  </div>
+                  <p className="mt-2 text-[14px] text-slate-200">
+                    One moment while we verify the activation status on this device…
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-[20px] font-semibold">Activation Required</div>
+                <p className="text-[14px] text-text-secondary">
+                  The license file is missing or invalid. Use the Manage License button to refresh or re-import it,
+                  then reopen the Operator Console.
+                </p>
+                <div className="flex justify-center">
+                  <Button variant="primary" onClick={() => setLicenseModalOpen(true)}>
+                    Manage License
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        {licenseModal}
+      </>
+    );
+  }
+
   if (!backendReady) {
     return (
       <>
@@ -2422,6 +2490,7 @@ useEffect(() => {
           </div>
         </div>
         {diagnosticsModal}
+        {licenseModal}
       </>
     );
   }
@@ -2464,6 +2533,7 @@ useEffect(() => {
           </div>
         </div>
         {diagnosticsModal}
+        {licenseModal}
       </>
     );
   }
@@ -2498,11 +2568,13 @@ useEffect(() => {
                   </span>
                 </h1>
               </div>
-              {session && (
-                <Button onClick={resetSession} variant="danger" size="sm" className="px-3">
-                  Start Over
-                </Button>
-              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                {session && (
+                  <Button onClick={resetSession} variant="danger" size="sm" className="px-3">
+                    Start Over
+                  </Button>
+                )}
+              </div>
             </div>
             {session ? (
               <div className="flex flex-1 flex-col">
@@ -2633,13 +2705,21 @@ useEffect(() => {
                 </div>
               </div>
             )}
-            <div className="mt-auto flex items-center gap-2 text-[11px] text-text-secondary">
+            <div className="mt-auto flex flex-wrap items-center gap-2 text-[11px] text-text-secondary">
               <button
                 type="button"
                 className="text-accent-info underline-offset-2 hover:underline"
                 onClick={() => setDiagnosticsOpen(true)}
               >
                 Diagnostics
+              </button>
+              <span className="text-text-secondary/60">|</span>
+              <button
+                type="button"
+                className="text-accent-info underline-offset-2 hover:underline"
+                onClick={() => setLicenseModalOpen(true)}
+              >
+                Manage License
               </button>
               <span className="text-text-secondary/60">|</span>
               <span className="text-text-secondary/80">Quantum Qi™ Operator — v1</span>
@@ -2787,7 +2867,8 @@ useEffect(() => {
         </div>
       </div>
       </div>
-      {diagnosticsModal}
-    </>
-  );
+        {diagnosticsModal}
+        {licenseModal}
+      </>
+    );
 }
