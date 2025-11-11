@@ -8,7 +8,7 @@
     "build:frontend": "npm run build --prefix ../frontend",
     "dist:mac": "npm run build:frontend && electron-builder --mac",
     "dist:win": "npm run build:frontend && electron-builder --win",
-    "licenses": "bash ../scripts/generate_all_licenses.sh --group-by-license",
+  "licenses": "node ../scripts/run_generate_all_licenses.cjs --group-by-license",
     "predist:mac": "npm run licenses",
     "predist:win": "npm run licenses"
   },
