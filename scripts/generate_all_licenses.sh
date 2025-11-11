@@ -104,7 +104,49 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
   fi
 fi
 python -m pip install --upgrade pip
-pip install --require-hashes -r backend/requirements.txt
+
+REQ_FILE="backend/requirements.txt"
+if ! pip install --require-hashes -r "$REQ_FILE"; then
+  UNAME_OUT="$(uname -s 2>/dev/null || echo Windows_NT)"
+  case "$UNAME_OUT" in
+    CYGWIN*|MINGW*|MSYS*|Windows*)
+      echo "pip install failed; attempting to skip uvloop (unsupported on Windows)." >&2
+      TMP_REQ="$(mktemp)"
+      python - "$REQ_FILE" "$TMP_REQ" <<'PY'
+import sys
+from pathlib import Path
+
+in_path = Path(sys.argv[1])
+out_path = Path(sys.argv[2])
+
+skip_block = False
+
+with in_path.open('r', encoding='utf-8') as src, out_path.open('w', encoding='utf-8') as dst:
+    for line in src:
+        if skip_block:
+            stripped = line.strip()
+            if not stripped or line.startswith(' ') or line.startswith('\t') or stripped.startswith('#'):
+                continue
+            skip_block = False
+        stripped = line.strip()
+        if stripped.startswith('uvloop=='):
+            skip_block = True
+            continue
+        dst.write(line)
+PY
+      if ! pip install --require-hashes -r "$TMP_REQ"; then
+        echo "pip install still failed after removing uvloop." >&2
+        rm -f "$TMP_REQ"
+        exit 1
+      fi
+      rm -f "$TMP_REQ"
+      ;;
+    *)
+      echo "pip install failed; see logs above." >&2
+      exit 1
+      ;;
+  esac
+fi
 python scripts/generate_backend_licenses.py --output licenses/backend_licenses.json
 
 # Consolidated Notice
