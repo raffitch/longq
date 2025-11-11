@@ -264,11 +264,12 @@ function ensureMaintenance(root) {
     if (process.env.LONGQ_SESSION_RETENTION_HOURS) {
       maintenanceArgs.push('--session-max-age-hours', String(process.env.LONGQ_SESSION_RETENTION_HOURS));
     }
-    const env = { ...process.env, LONGQ_ROOT: root, PYTHONPATH: buildPythonPath(process.env.PYTHONPATH) };
+    const env = { ...process.env, LONGQ_ROOT: root };
     const pythonHome = resolvePythonHome(python);
     if (pythonHome) {
       env.PYTHONHOME = pythonHome;
     }
+    env.PYTHONPATH = buildPythonPath(process.env.PYTHONPATH, pythonHome);
     const child = spawn(
       python,
       maintenanceArgs,
@@ -314,10 +315,58 @@ function waitForHealth(port) {
   });
 }
 
-function buildPythonPath(existing) {
+function readPythonVersion(homeDir) {
+  if (!homeDir) {
+    return null;
+  }
+  try {
+    const cfgPath = path.join(homeDir, 'pyvenv.cfg');
+    const contents = fs.readFileSync(cfgPath, 'utf8');
+    const match = contents.match(/version\s*=\s*(\d+\.\d+)/i);
+    if (match) {
+      return match[1];
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function pythonStandardPaths(homeDir) {
+  if (!homeDir) {
+    return [];
+  }
+  const paths = [];
+  const version = readPythonVersion(homeDir);
+
+  if (process.platform === 'win32') {
+    const libDir = path.join(homeDir, 'Lib');
+    paths.push(libDir);
+    paths.push(path.join(libDir, 'site-packages'));
+    paths.push(path.join(homeDir, 'DLLs'));
+  } else {
+    const libRoot = path.join(homeDir, 'lib');
+    if (version) {
+      const versionDir = path.join(libRoot, `python${version}`);
+      paths.push(versionDir);
+      paths.push(path.join(versionDir, 'site-packages'));
+    } else {
+      paths.push(libRoot);
+    }
+  }
+
+  return paths;
+}
+
+function buildPythonPath(existing, pythonHome) {
   const parts = [];
   if (existing) parts.push(existing);
   parts.push(repoRoot);
+  for (const candidate of pythonStandardPaths(pythonHome)) {
+    if (candidate && !parts.includes(candidate)) {
+      parts.push(candidate);
+    }
+  }
   return parts.join(path.delimiter);
 }
 
@@ -786,12 +835,12 @@ function launchBackend(root, port) {
       EXIT_WHEN_IDLE: process.env.EXIT_WHEN_IDLE || 'true',
       EXIT_IDLE_DEBOUNCE_SEC: process.env.EXIT_IDLE_DEBOUNCE_SEC || '20',
       BACKEND_PORT: String(port),
-      PYTHONPATH: buildPythonPath(process.env.PYTHONPATH),
     };
     const pythonHome = resolvePythonHome(python);
     if (pythonHome) {
       env.PYTHONHOME = pythonHome;
     }
+    env.PYTHONPATH = buildPythonPath(process.env.PYTHONPATH, pythonHome);
     const allowedOrigins = computeAllowedOrigins();
     env.ALLOWED_ORIGINS = allowedOrigins;
     console.log('[longq] backend allowed origins:', allowedOrigins);
