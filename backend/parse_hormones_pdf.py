@@ -10,7 +10,7 @@ import pdfplumber
 from pdfplumber import PDF
 from pdfplumber.page import Page as PdfPage
 
-HYPHEN_CLASS = "[\-\u2010\u2011\u2012\u2013\u2014\u2212]"
+HYPHEN_CLASS = "[-\u2010\u2011\u2012\u2013\u2014\u2212]"
 
 
 def normalize_chars(s: str) -> str:

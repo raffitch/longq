@@ -27,6 +27,7 @@ let backendPort = Number(process.env.LONGQ_BACKEND_PORT || 0);
 let apiToken = process.env.LONGQ_API_TOKEN || null;
 let currentLicenseState = null;
 let currentApiBase = null;
+let lastLicensePromptState = null;
 const DEFAULT_BACKEND_PORT = 8000;
 const UI_PORT = Number(process.env.LONGQ_UI_PORT || 5173);
 const HEALTH_TIMEOUT_MS = 200;
@@ -1082,6 +1083,7 @@ function startLicenseWatcher(apiBase) {
     }
     currentLicenseState = status.state;
     if (licenseStateAllowsUi(currentLicenseState)) {
+      lastLicensePromptState = null;
       stopLicenseWatcher();
       closeActivationWindow();
       if (!operatorWindow && !guestWindow) {
@@ -1090,7 +1092,31 @@ function startLicenseWatcher(apiBase) {
             currentLicenseState = status.state;
           })
           .catch((err) => console.error('[longq] failed to launch windows after activation', err));
+      } else if (pendingLicenseModal) {
+        sendLicenseModalRequest();
       }
+      return;
+    }
+    if (lastLicensePromptState === currentLicenseState) {
+      return;
+    }
+    lastLicensePromptState = currentLicenseState;
+    if (licenseFileExists()) {
+      if (operatorWindow || guestWindow) {
+        sendLicenseModalRequest();
+        return;
+      }
+      if (!activationWindow) {
+        openActivationWindow(apiBase, { mode: currentLicenseState === 'invalid' ? 'refresh' : 'activate' }).catch(
+          (err) => console.error('[longq] failed to open activation window during watch', err),
+        );
+      }
+      return;
+    }
+    if (!activationWindow) {
+      openActivationWindow(apiBase, { mode: currentLicenseState === 'invalid' ? 'refresh' : 'activate' }).catch(
+        (err) => console.error('[longq] failed to open activation window during watch', err),
+      );
     }
   }, LICENSE_POLL_INTERVAL_MS);
 }
@@ -1103,6 +1129,7 @@ async function bootstrapUi(apiBase) {
     currentLicenseState = status.state;
   }
   if (licenseStateAllowsUi(currentLicenseState)) {
+    lastLicensePromptState = null;
     await createWindows();
     if (!fileExists) {
       sendLicenseModalRequest();
@@ -1110,13 +1137,20 @@ async function bootstrapUi(apiBase) {
     startLicenseWatcher(apiBase);
     return;
   }
-  if (fileExists) {
-    await createWindows();
-    sendLicenseModalRequest();
+  if (status) {
+    lastLicensePromptState = currentLicenseState;
+    await openActivationWindow(apiBase, { mode: currentLicenseState === 'invalid' ? 'refresh' : 'activate' });
     startLicenseWatcher(apiBase);
     return;
   }
-  await openActivationWindow(apiBase, { mode: currentLicenseState === 'invalid' ? 'refresh' : 'activate' });
+  if (fileExists) {
+    lastLicensePromptState = null;
+    await createWindows();
+    startLicenseWatcher(apiBase);
+    return;
+  }
+  lastLicensePromptState = currentLicenseState;
+  await openActivationWindow(apiBase, { mode: 'activate' });
   startLicenseWatcher(apiBase);
 }
 

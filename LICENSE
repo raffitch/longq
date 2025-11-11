@@ -1,21 +1,63 @@
-MIT License
+Quantum Qi™ Proprietary License
 
-Copyright (c) 2024 Quantum Qi Contributors
+Copyright (c) 2024 Quantum Qi Contributors. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This Software, including all source files, binaries, documentation, artwork,
+and related materials (collectively, the “Software”), is the confidential and
+proprietary property of Quantum Qi and may only be used in accordance with the
+terms expressly granted by Quantum Qi.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. License Grant
+   a. You are granted a limited, revocable, non-transferable license to install
+      and use the Software solely for internal evaluation and operation of the
+      Quantum Qi platform, and only in accordance with written authorization
+      provided directly by Quantum Qi.
+   b. No rights are granted to modify, copy (except for reasonable backup
+      copies), distribute, sublicense, create derivative works, reverse
+      engineer, or otherwise exploit the Software unless explicitly permitted
+      in a separate written agreement executed by Quantum Qi.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Restrictions
+   a. You may not remove, obscure, or alter any proprietary notices or branding.
+   b. You may not rent, lease, sell, assign, or otherwise transfer the Software
+      or any portion thereof to any third party without prior written consent
+      from Quantum Qi.
+   c. Any unauthorized use terminates the license automatically and may entitle
+      Quantum Qi to injunctive relief, damages, and any other remedies available
+      at law or in equity.
+
+3. Ownership
+   Quantum Qi retains all right, title, and interest in and to the Software,
+   including all intellectual property rights. No ownership rights are
+   transferred to you under this License.
+
+4. Confidentiality
+   The Software constitutes proprietary and confidential information of Quantum
+   Qi. You must protect the Software with at least the same degree of care that
+   you use to protect your own confidential information and in no event less
+   than reasonable care.
+
+5. No Warranty; Limitation of Liability
+   THE SOFTWARE IS PROVIDED “AS IS” WITHOUT WARRANTY OF ANY KIND, WHETHER
+   EXPRESS, IMPLIED, OR STATUTORY, INCLUDING WITHOUT LIMITATION ANY WARRANTIES
+   OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, OR
+   NON-INFRINGEMENT. IN NO EVENT WILL QUANTUM QI OR ITS CONTRIBUTORS BE LIABLE
+   FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE
+   DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, DATA, OR BUSINESS INTERRUPTION,
+   EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+6. Termination
+   Quantum Qi may terminate this License at any time upon notice if you breach
+   any term. Upon termination you must immediately cease all use of the
+   Software, destroy all copies in your possession or control, and certify such
+   destruction to Quantum Qi.
+
+7. Governing Law
+   This License will be governed by and construed in accordance with the laws of
+   the State of California, without regard to conflicts of law principles. Any
+   disputes will be subject to the exclusive jurisdiction of the state or
+   federal courts located in Los Angeles County, California.
+
+By installing, copying, or otherwise using the Software you acknowledge that you
+have read, understood, and agree to be bound by the terms of this License. If
+you do not agree to all of the terms, you must not install or use the Software.

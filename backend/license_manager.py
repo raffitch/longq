@@ -387,12 +387,11 @@ class LicenseManager:
         )
         try:
             with urllib.request.urlopen(request, timeout=15) as resp:
-                body = resp.read()
-                body = cast(bytes, body)
+                body_bytes = cast(bytes, resp.read())
                 logger.info(
                     "[license] License API response status=%s bytes=%s",
                     resp.status,
-                    len(body),
+                    len(body_bytes),
                 )
                 if resp.status not in {200, 201}:
                     raise ActivationError(
@@ -400,7 +399,7 @@ class LicenseManager:
                         f"Unexpected status {resp.status} from license API.",
                         resp.status,
                     )
-                return body
+                return body_bytes
         except urllib.error.HTTPError as exc:
             body = exc.read() if hasattr(exc, "read") else b""
             try:
