@@ -269,11 +269,11 @@ function buildRuntime() {
     }
   }
 
+  copyStdlibIntoRuntime(python);
+
   if (isWindows) {
     run(python, [join(repoRoot, 'scripts', 'fix_windows_stdlib.py')], { cwd: repoRoot, env: { ...process.env, LONGQ_RUNTIME_DIR: runtimeDir } });
   }
-
-  copyStdlibIntoRuntime(python);
 
   run(python, [join(backendDir, 'maintenance.py'), '--help']);
 }

@@ -266,10 +266,11 @@ function ensureMaintenance(root) {
     }
     const env = { ...process.env, LONGQ_ROOT: root };
     const pythonHome = resolvePythonHome(python);
-    if (pythonHome) {
+    const shouldSetHome = pythonHome && process.platform !== 'win32';
+    if (shouldSetHome) {
       env.PYTHONHOME = pythonHome;
     }
-    env.PYTHONPATH = buildPythonPath(process.env.PYTHONPATH, pythonHome);
+    env.PYTHONPATH = buildPythonPath(process.env.PYTHONPATH, shouldSetHome ? pythonHome : null);
     const child = spawn(
       python,
       maintenanceArgs,
@@ -837,10 +838,11 @@ function launchBackend(root, port) {
       BACKEND_PORT: String(port),
     };
     const pythonHome = resolvePythonHome(python);
-    if (pythonHome) {
+    const shouldSetHome = pythonHome && process.platform !== 'win32';
+    if (shouldSetHome) {
       env.PYTHONHOME = pythonHome;
     }
-    env.PYTHONPATH = buildPythonPath(process.env.PYTHONPATH, pythonHome);
+    env.PYTHONPATH = buildPythonPath(process.env.PYTHONPATH, shouldSetHome ? pythonHome : null);
     const allowedOrigins = computeAllowedOrigins();
     env.ALLOWED_ORIGINS = allowedOrigins;
     console.log('[longq] backend allowed origins:', allowedOrigins);
