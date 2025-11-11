@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const args = process.argv.slice(2);
 const scriptPath = path.resolve(__dirname, 'generate_all_licenses.sh');
+const repoRoot = path.resolve(__dirname, '..');
 
 let scriptContent = readFileSync(scriptPath, 'utf8');
 if (scriptContent.includes('\r')) {
@@ -14,6 +15,7 @@ if (scriptContent.includes('\r')) {
 }
 
 const child = spawn('bash', ['-s', '--', ...args], {
+  cwd: repoRoot,
   stdio: ['pipe', 'inherit', 'inherit'],
 });
 
