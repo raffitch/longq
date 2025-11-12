@@ -55,19 +55,37 @@ else
   PY_SPEC="3.13"
 fi
 
+# Detect Windows environment to use 'py' launcher
+UNAME_OUT="$(uname -s 2>/dev/null || echo Windows_NT)"
+IS_WINDOWS=false
+case "$UNAME_OUT" in
+  CYGWIN*|MINGW*|MSYS*|Windows*) IS_WINDOWS=true ;;
+esac
+
 if command -v pyenv >/dev/null 2>&1; then
   if ! pyenv versions --bare | grep -q "^${PY_SPEC}$"; then
     echo "pyenv is missing Python ${PY_SPEC}; install it (pyenv install ${PY_SPEC})" >&2
   fi
   echo "Using pyenv Python ${PY_SPEC}"; 
   PYEXEC="$(pyenv which python || echo python3)"
+elif [ "$IS_WINDOWS" = true ] && command -v py >/dev/null 2>&1; then
+  # On Windows, use 'py' launcher to find the right Python version
+  if py -${PY_SPEC} --version >/dev/null 2>&1; then
+    PYEXEC="py -${PY_SPEC}"
+    echo "Using Windows py launcher: $PYEXEC"
+  elif py -3 --version >/dev/null 2>&1; then
+    PYEXEC="py -3"
+    echo "Using Windows py launcher: $PYEXEC"
+  else
+    PYEXEC=""
+  fi
 else
   # Fallback: prefer python3.13 then python3.
   PYEXEC="$(command -v python${PY_SPEC} || command -v python3 || command -v python)"
 fi
 
 if [ -z "${PYEXEC:-}" ]; then
-  echo "Unable to locate a Python interpreter (looked for python${PY_SPEC}, python3, python)." >&2
+  echo "Unable to locate a Python interpreter (looked for python${PY_SPEC}, python3, python, or py launcher)." >&2
   exit 1
 fi
 
@@ -75,7 +93,7 @@ VENV_DIR="backend/.venv"
 if [ -z "${VIRTUAL_ENV:-}" ]; then
   if [ ! -d "$VENV_DIR" ]; then
     echo "Creating backend virtualenv with $PYEXEC..."
-    "$PYEXEC" -m venv "$VENV_DIR"
+    $PYEXEC -m venv "$VENV_DIR"
   fi
 
   ACTIVATE_SCRIPT=""
