@@ -408,20 +408,27 @@ class LicenseManager:
                 data = None
             code = "server_error"
             message = "License activation failed."
+            detail = data.get("error") if isinstance(data, dict) else None
             if exc.code == 403:
-                code = "email_forbidden"
-                message = "Email not allowed or seat limit reached."
+                if detail == "seat_limit_reached":
+                    code = detail
+                    message = "Seat limit reached for this email."
+                elif detail == "email_not_allowed":
+                    code = detail
+                    message = "This email is not allowed to activate licenses."
+                else:
+                    code = "email_forbidden"
+                    message = "Email not allowed or seat limit reached."
             elif exc.code == 400:
-                code = "invalid_request"
+                code = detail or "invalid_request"
                 message = "Validation error. Check the email and try again."
             elif exc.code == 409:
-                code = "conflict"
+                code = detail or "conflict"
                 message = "This device already has an assigned license."
             elif exc.code >= 500:
-                code = "server_error"
+                code = detail or "server_error"
                 message = "License server unavailable. Try again shortly."
-            detail = data.get("error") if isinstance(data, dict) else None
-            if detail and detail != code:
+            if detail and detail != code and detail not in {"seat_limit_reached", "email_not_allowed"}:
                 message = f"{message} ({detail})"
             raise ActivationError(code, message, status_code=exc.code or 400) from None
         except urllib.error.URLError as exc:  # pragma: no cover - network specific
