@@ -821,6 +821,25 @@ function setupMenu() {
         { role: 'quit', label: process.platform === 'darwin' ? 'Quit' : 'Exit' },
       ],
     },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Minimize Guest Window',
+          accelerator: 'CommandOrControl+Shift+M',
+          click: () => {
+            minimizeGuestWindow();
+          },
+        },
+        {
+          label: 'Restore Guest Fullscreen',
+          accelerator: 'CommandOrControl+Shift+F',
+          click: () => {
+            restoreGuestWindowFullscreen();
+          },
+        },
+      ],
+    },
   ];
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
@@ -1261,6 +1280,36 @@ function computeAllowedOrigins() {
   return origins.join(',');
 }
 
+function determineGuestDisplayBounds() {
+  const displays = typeof screen.getAllDisplays === 'function' ? screen.getAllDisplays() : [];
+  const primary = typeof screen.getPrimaryDisplay === 'function' ? screen.getPrimaryDisplay() : null;
+  if (!displays || displays.length === 0) {
+    return (primary && primary.bounds) || { x: 0, y: 0, width: 1280, height: 720 };
+  }
+  const external = primary ? displays.find((display) => display.id !== primary.id) : null;
+  const target = external || primary || displays[0];
+  return target.bounds || { x: 0, y: 0, width: 1280, height: 720 };
+}
+
+function minimizeGuestWindow() {
+  if (!guestWindow || guestWindow.isDestroyed()) {
+    return;
+  }
+  guestWindow.setFullScreen(false);
+  guestWindow.minimize();
+}
+
+function restoreGuestWindowFullscreen() {
+  if (!guestWindow || guestWindow.isDestroyed()) {
+    return;
+  }
+  if (guestWindow.isMinimized()) {
+    guestWindow.restore();
+  }
+  guestWindow.setFullScreen(true);
+  guestWindow.focus();
+}
+
 async function createWindows() {
   const apiBase = `http://127.0.0.1:${backendPort}`;
   const query = { apiBase };
@@ -1282,9 +1331,12 @@ async function createWindows() {
     sendLicenseModalRequest();
   }
 
+  const guestBounds = determineGuestDisplayBounds();
   guestWindow = new BrowserWindow({
-    width: 1280,
-    height: 720,
+    x: guestBounds.x,
+    y: guestBounds.y,
+    width: guestBounds.width,
+    height: guestBounds.height,
     fullscreen: true,
     frame: false,
     autoHideMenuBar: true,
@@ -1296,6 +1348,9 @@ async function createWindows() {
   });
   guestWindow.on('closed', () => {
     guestWindow = null;
+  });
+  guestWindow.on('restore', () => {
+    guestWindow.setFullScreen(true);
   });
   await guestWindow.loadURL(buildWindowUrl('/guest', query));
   injectRuntimeConfig(guestWindow, apiBase, apiToken);
