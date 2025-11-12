@@ -428,8 +428,11 @@ class LicenseManager:
             elif exc.code >= 500:
                 code = detail or "server_error"
                 message = "License server unavailable. Try again shortly."
-            if detail and detail != code and detail not in {"seat_limit_reached", 
-                                                            "email_not_allowed"}:
+            if (
+                detail
+                and detail != code
+                and detail not in {"seat_limit_reached", "email_not_allowed"}
+            ):
                 message = f"{message} ({detail})"
             raise ActivationError(code, message, status_code=exc.code or 400) from None
         except urllib.error.URLError as exc:  # pragma: no cover - network specific

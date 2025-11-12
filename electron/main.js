@@ -16,6 +16,8 @@ let staticServer = null;
 let staticPort = null;
 let operatorWindow = null;
 let guestWindow = null;
+let guestWindowConfig = null;
+let guestWindowQuery = null;
 let aboutWindow = null;
 let aboutTempFile = null;
 let activationWindow = null;
@@ -850,7 +852,7 @@ function registerDisplayListeners() {
     return;
   }
   const handleChange = () => {
-    adjustGuestWindowForDisplays();
+    void adjustGuestWindowForDisplays();
   };
   screen.on('display-added', handleChange);
   screen.on('display-removed', handleChange);
@@ -1313,6 +1315,50 @@ function determineGuestWindowConfig() {
   };
 }
 
+async function createGuestBrowserWindow(apiBase, config) {
+  const resolvedApiBase = apiBase || currentApiBase || `http://127.0.0.1:${backendPort || DEFAULT_BACKEND_PORT}`;
+  const query = { apiBase: resolvedApiBase };
+  guestWindowQuery = query;
+  guestWindowConfig = config;
+  guestWindow = new BrowserWindow({
+    x: config.bounds.x,
+    y: config.bounds.y,
+    width: config.bounds.width,
+    height: config.bounds.height,
+    fullscreen: config.fullscreen,
+    frame: config.fullscreen ? false : true,
+    resizable: !config.fullscreen,
+    autoHideMenuBar: config.fullscreen,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: preloadPath,
+    },
+  });
+  guestWindow.on('closed', () => {
+    guestWindow = null;
+  });
+  guestWindow.on('restore', () => {
+    void adjustGuestWindowForDisplays();
+  });
+  guestWindow.setMenuBarVisibility(!config.fullscreen);
+  await guestWindow.loadURL(buildWindowUrl('/guest', query));
+  injectRuntimeConfig(guestWindow, resolvedApiBase, apiToken);
+}
+
+async function rebuildGuestWindow(config) {
+  if (guestWindow && !guestWindow.isDestroyed()) {
+    const existing = guestWindow;
+    guestWindow = null;
+    try {
+      existing.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+  await createGuestBrowserWindow(currentApiBase, config);
+}
+
 function minimizeGuestWindow() {
   if (!guestWindow || guestWindow.isDestroyed()) {
     return;
@@ -1328,33 +1374,30 @@ function restoreGuestWindowFullscreen() {
   if (guestWindow.isMinimized()) {
     guestWindow.restore();
   }
-  adjustGuestWindowForDisplays();
+  void adjustGuestWindowForDisplays();
   guestWindow.focus();
 }
 
-function adjustGuestWindowForDisplays() {
+async function adjustGuestWindowForDisplays() {
   if (!guestWindow || guestWindow.isDestroyed()) {
     return;
   }
   const config = determineGuestWindowConfig();
-  const currentlyFullscreen = guestWindow.isFullScreen();
+  if (!guestWindowConfig || guestWindowConfig.fullscreen !== config.fullscreen) {
+    await rebuildGuestWindow(config);
+    return;
+  }
+  guestWindowConfig = config;
   if (config.fullscreen) {
-    if (!currentlyFullscreen) {
-      guestWindow.setBounds(config.bounds);
-      guestWindow.setFullScreen(true);
-    } else {
-      guestWindow.setFullScreen(false);
-      guestWindow.setBounds(config.bounds);
-      guestWindow.setFullScreen(true);
-    }
+    guestWindow.setFullScreen(true);
+    guestWindow.setMenuBarVisibility(false);
     guestWindow.setAutoHideMenuBar(true);
   } else {
-    if (currentlyFullscreen) {
-      guestWindow.setFullScreen(false);
-    }
-    guestWindow.setBounds(config.bounds);
+    guestWindow.setFullScreen(false);
+    guestWindow.setMenuBarVisibility(true);
     guestWindow.setAutoHideMenuBar(false);
   }
+  guestWindow.setBounds(config.bounds);
 }
 
 async function createWindows() {
@@ -1379,28 +1422,7 @@ async function createWindows() {
   }
 
   const guestConfig = determineGuestWindowConfig();
-  guestWindow = new BrowserWindow({
-    x: guestConfig.bounds.x,
-    y: guestConfig.bounds.y,
-    width: guestConfig.bounds.width,
-    height: guestConfig.bounds.height,
-    fullscreen: guestConfig.fullscreen,
-    frame: true,
-    autoHideMenuBar: guestConfig.fullscreen,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: preloadPath,
-    },
-  });
-  guestWindow.on('closed', () => {
-    guestWindow = null;
-  });
-  guestWindow.on('restore', () => {
-    adjustGuestWindowForDisplays();
-  });
-  await guestWindow.loadURL(buildWindowUrl('/guest', query));
-  injectRuntimeConfig(guestWindow, apiBase, apiToken);
+  await createGuestBrowserWindow(apiBase, guestConfig);
 }
 
 app.on('window-all-closed', () => {
