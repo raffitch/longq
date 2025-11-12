@@ -324,8 +324,15 @@ export async function getLicenseStatus(): Promise<LicenseStatus> {
 function buildLicenseError(status: number, detail: unknown): LicenseApiError {
   let message = "License activation failed.";
   let code: string | undefined;
-  if (detail && typeof detail === "object") {
-    const maybe = detail as Record<string, unknown>;
+  let payload = detail;
+  if (payload && typeof payload === "object" && "detail" in payload) {
+    const nested = (payload as Record<string, unknown>).detail;
+    if (nested && typeof nested === "object") {
+      payload = nested;
+    }
+  }
+  if (payload && typeof payload === "object") {
+    const maybe = payload as Record<string, unknown>;
     if (typeof maybe.message === "string" && maybe.message.trim()) {
       message = maybe.message;
     }

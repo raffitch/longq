@@ -3,7 +3,7 @@
 This document lists all third-party dependencies bundled with the Quantum Qi applications.
 It is generated from the JSON inventories committed under `licenses/`. Regenerate after dependency lock changes.
 
-* Frontend packages: 450
+* Frontend packages: 579
 * Electron packages: 284
 * Backend Python packages: 43
 
@@ -11,24 +11,26 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 
 | License | Count |
 | --- | --- |
-| MIT | 615 |
-| ISC | 70 |
-| Apache-2.0 | 25 |
-| Unknown | 18 |
-| BSD-2-Clause | 13 |
-| BSD-3-Clause | 11 |
+| MIT | 708 |
+| ISC | 89 |
+| Apache-2.0 | 33 |
+| Unknown | 19 |
+| BSD-3-Clause | 15 |
+| BSD-2-Clause | 14 |
 | BlueOak-1.0.0 | 6 |
 | MIT License | 5 |
 | Apache Software License | 2 |
 | Python-2.0 | 2 |
+| Unlicense | 2 |
+| (AFL-2.1 OR BSD-3-Clause) | 1 |
 | (MIT OR CC0-1.0) | 1 |
 | (WTFPL OR MIT) | 1 |
+| 0BSD | 1 |
 | BSD-3-Clause, Apache-2.0, dependency licenses | 1 |
 | CC-BY-4.0 | 1 |
 | MIT AND ISC | 1 |
 | MIT AND Python-2.0 | 1 |
 | MIT OR Apache-2.0 | 1 |
-| Unlicense | 1 |
 | WTFPL | 1 |
 | WTFPL OR ISC | 1 |
 
@@ -98,6 +100,8 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `@jridgewell/resolve-uri` | `3.1.2` | MIT | https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz |
 | `@jridgewell/sourcemap-codec` | `1.5.5` | MIT | https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz |
 | `@jridgewell/trace-mapping` | `0.3.31` | MIT | https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz |
+| `@kwsites/file-exists` | `1.1.1` | MIT | https://registry.npmjs.org/@kwsites/file-exists/-/file-exists-1.1.1.tgz |
+| `@kwsites/promise-deferred` | `1.1.1` | MIT | https://registry.npmjs.org/@kwsites/promise-deferred/-/promise-deferred-1.1.1.tgz |
 | `@nodelib/fs.scandir` | `2.1.5` | MIT | https://registry.npmjs.org/@nodelib/fs.scandir/-/fs.scandir-2.1.5.tgz |
 | `@nodelib/fs.stat` | `2.0.5` | MIT | https://registry.npmjs.org/@nodelib/fs.stat/-/fs.stat-2.0.5.tgz |
 | `@nodelib/fs.walk` | `1.2.8` | MIT | https://registry.npmjs.org/@nodelib/fs.walk/-/fs.walk-1.2.8.tgz |
@@ -161,14 +165,19 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `acorn` | `8.15.0` | MIT | https://registry.npmjs.org/acorn/-/acorn-8.15.0.tgz |
 | `acorn-jsx` | `5.3.2` | MIT | https://registry.npmjs.org/acorn-jsx/-/acorn-jsx-5.3.2.tgz |
 | `ajv` | `6.12.6` | MIT | https://registry.npmjs.org/ajv/-/ajv-6.12.6.tgz |
+| `ansi-escapes` | `3.2.0` | MIT | https://registry.npmjs.org/ansi-escapes/-/ansi-escapes-3.2.0.tgz |
 | `ansi-regex` | `6.2.2` | MIT | https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.2.2.tgz |
+| `ansi-regex` | `4.1.1` | MIT | https://registry.npmjs.org/ansi-regex/-/ansi-regex-4.1.1.tgz |
+| `ansi-regex` | `3.0.1` | MIT | https://registry.npmjs.org/ansi-regex/-/ansi-regex-3.0.1.tgz |
 | `ansi-regex` | `5.0.1` | MIT | https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz |
 | `ansi-styles` | `6.2.3` | MIT | https://registry.npmjs.org/ansi-styles/-/ansi-styles-6.2.3.tgz |
 | `ansi-styles` | `4.3.0` | MIT | https://registry.npmjs.org/ansi-styles/-/ansi-styles-4.3.0.tgz |
+| `ansi-styles` | `3.2.1` | MIT | https://registry.npmjs.org/ansi-styles/-/ansi-styles-3.2.1.tgz |
 | `any-promise` | `1.3.0` | MIT | https://registry.npmjs.org/any-promise/-/any-promise-1.3.0.tgz |
 | `anymatch` | `3.1.3` | ISC | https://registry.npmjs.org/anymatch/-/anymatch-3.1.3.tgz |
 | `arg` | `5.0.2` | MIT | https://registry.npmjs.org/arg/-/arg-5.0.2.tgz |
 | `argparse` | `2.0.1` | Python-2.0 | https://registry.npmjs.org/argparse/-/argparse-2.0.1.tgz |
+| `argparse` | `1.0.10` | MIT | https://registry.npmjs.org/argparse/-/argparse-1.0.10.tgz |
 | `array-buffer-byte-length` | `1.0.2` | MIT | https://registry.npmjs.org/array-buffer-byte-length/-/array-buffer-byte-length-1.0.2.tgz |
 | `array-includes` | `3.1.9` | MIT | https://registry.npmjs.org/array-includes/-/array-includes-3.1.9.tgz |
 | `array.prototype.findlast` | `1.2.5` | MIT | https://registry.npmjs.org/array.prototype.findlast/-/array.prototype.findlast-1.2.5.tgz |
@@ -176,11 +185,17 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `array.prototype.flatmap` | `1.3.3` | MIT | https://registry.npmjs.org/array.prototype.flatmap/-/array.prototype.flatmap-1.3.3.tgz |
 | `array.prototype.tosorted` | `1.1.4` | MIT | https://registry.npmjs.org/array.prototype.tosorted/-/array.prototype.tosorted-1.1.4.tgz |
 | `arraybuffer.prototype.slice` | `1.0.4` | MIT | https://registry.npmjs.org/arraybuffer.prototype.slice/-/arraybuffer.prototype.slice-1.0.4.tgz |
+| `asn1` | `0.2.6` | MIT | https://registry.npmjs.org/asn1/-/asn1-0.2.6.tgz |
+| `assert-plus` | `1.0.0` | MIT | https://registry.npmjs.org/assert-plus/-/assert-plus-1.0.0.tgz |
 | `async-function` | `1.0.0` | MIT | https://registry.npmjs.org/async-function/-/async-function-1.0.0.tgz |
+| `asynckit` | `0.4.0` | MIT | https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz |
 | `autoprefixer` | `10.4.21` | MIT | https://registry.npmjs.org/autoprefixer/-/autoprefixer-10.4.21.tgz |
 | `available-typed-arrays` | `1.0.7` | MIT | https://registry.npmjs.org/available-typed-arrays/-/available-typed-arrays-1.0.7.tgz |
+| `aws-sign2` | `0.7.0` | Apache-2.0 | https://registry.npmjs.org/aws-sign2/-/aws-sign2-0.7.0.tgz |
+| `aws4` | `1.13.2` | MIT | https://registry.npmjs.org/aws4/-/aws4-1.13.2.tgz |
 | `balanced-match` | `1.0.2` | MIT | https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz |
 | `baseline-browser-mapping` | `2.8.20` | Apache-2.0 | https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.8.20.tgz |
+| `bcrypt-pbkdf` | `1.0.2` | BSD-3-Clause | https://registry.npmjs.org/bcrypt-pbkdf/-/bcrypt-pbkdf-1.0.2.tgz |
 | `binary-extensions` | `2.3.0` | MIT | https://registry.npmjs.org/binary-extensions/-/binary-extensions-2.3.0.tgz |
 | `brace-expansion` | `1.1.12` | MIT | https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.12.tgz |
 | `brace-expansion` | `2.0.2` | MIT | https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.0.2.tgz |
@@ -190,17 +205,33 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `call-bind-apply-helpers` | `1.0.2` | MIT | https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz |
 | `call-bound` | `1.0.4` | MIT | https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz |
 | `callsites` | `3.1.0` | MIT | https://registry.npmjs.org/callsites/-/callsites-3.1.0.tgz |
+| `camelcase` | `5.3.1` | MIT | https://registry.npmjs.org/camelcase/-/camelcase-5.3.1.tgz |
 | `camelcase-css` | `2.0.1` | MIT | https://registry.npmjs.org/camelcase-css/-/camelcase-css-2.0.1.tgz |
 | `caniuse-lite` | `1.0.30001751` | CC-BY-4.0 | https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001751.tgz |
+| `caseless` | `0.12.0` | Apache-2.0 | https://registry.npmjs.org/caseless/-/caseless-0.12.0.tgz |
 | `chalk` | `4.1.2` | MIT | https://registry.npmjs.org/chalk/-/chalk-4.1.2.tgz |
+| `chalk` | `2.4.2` | MIT | https://registry.npmjs.org/chalk/-/chalk-2.4.2.tgz |
+| `chardet` | `0.7.0` | MIT | https://registry.npmjs.org/chardet/-/chardet-0.7.0.tgz |
 | `chokidar` | `3.6.0` | MIT | https://registry.npmjs.org/chokidar/-/chokidar-3.6.0.tgz |
+| `cli-cursor` | `2.1.0` | MIT | https://registry.npmjs.org/cli-cursor/-/cli-cursor-2.1.0.tgz |
+| `cli-spinners` | `2.9.2` | MIT | https://registry.npmjs.org/cli-spinners/-/cli-spinners-2.9.2.tgz |
+| `cli-table` | `0.3.11` | Unknown | https://registry.npmjs.org/cli-table/-/cli-table-0.3.11.tgz |
+| `cli-width` | `2.2.1` | ISC | https://registry.npmjs.org/cli-width/-/cli-width-2.2.1.tgz |
+| `cliui` | `5.0.0` | ISC | https://registry.npmjs.org/cliui/-/cliui-5.0.0.tgz |
+| `clone` | `1.0.4` | MIT | https://registry.npmjs.org/clone/-/clone-1.0.4.tgz |
 | `clsx` | `2.1.1` | MIT | https://registry.npmjs.org/clsx/-/clsx-2.1.1.tgz |
+| `color-convert` | `1.9.3` | MIT | https://registry.npmjs.org/color-convert/-/color-convert-1.9.3.tgz |
 | `color-convert` | `2.0.1` | MIT | https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz |
+| `color-name` | `1.1.3` | MIT | https://registry.npmjs.org/color-name/-/color-name-1.1.3.tgz |
 | `color-name` | `1.1.4` | MIT | https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz |
+| `colors` | `1.0.3` | MIT | https://registry.npmjs.org/colors/-/colors-1.0.3.tgz |
+| `combined-stream` | `1.0.8` | MIT | https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz |
 | `commander` | `4.1.1` | MIT | https://registry.npmjs.org/commander/-/commander-4.1.1.tgz |
+| `commander` | `2.20.3` | MIT | https://registry.npmjs.org/commander/-/commander-2.20.3.tgz |
 | `concat-map` | `0.0.1` | MIT | https://registry.npmjs.org/concat-map/-/concat-map-0.0.1.tgz |
 | `convert-source-map` | `2.0.0` | MIT | https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz |
 | `cookie` | `1.0.2` | MIT | https://registry.npmjs.org/cookie/-/cookie-1.0.2.tgz |
+| `core-util-is` | `1.0.2` | MIT | https://registry.npmjs.org/core-util-is/-/core-util-is-1.0.2.tgz |
 | `cross-spawn` | `7.0.6` | MIT | https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz |
 | `cssesc` | `3.0.0` | MIT | https://registry.npmjs.org/cssesc/-/cssesc-3.0.0.tgz |
 | `csstype` | `3.1.3` | MIT | https://registry.npmjs.org/csstype/-/csstype-3.1.3.tgz |
@@ -215,20 +246,26 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `d3-time` | `3.1.0` | ISC | https://registry.npmjs.org/d3-time/-/d3-time-3.1.0.tgz |
 | `d3-time-format` | `4.1.0` | ISC | https://registry.npmjs.org/d3-time-format/-/d3-time-format-4.1.0.tgz |
 | `d3-timer` | `3.0.1` | ISC | https://registry.npmjs.org/d3-timer/-/d3-timer-3.0.1.tgz |
+| `dashdash` | `1.14.1` | MIT | https://registry.npmjs.org/dashdash/-/dashdash-1.14.1.tgz |
 | `data-view-buffer` | `1.0.2` | MIT | https://registry.npmjs.org/data-view-buffer/-/data-view-buffer-1.0.2.tgz |
 | `data-view-byte-length` | `1.0.2` | MIT | https://registry.npmjs.org/data-view-byte-length/-/data-view-byte-length-1.0.2.tgz |
 | `data-view-byte-offset` | `1.0.1` | MIT | https://registry.npmjs.org/data-view-byte-offset/-/data-view-byte-offset-1.0.1.tgz |
 | `debug` | `4.4.3` | MIT | https://registry.npmjs.org/debug/-/debug-4.4.3.tgz |
+| `decamelize` | `1.2.0` | MIT | https://registry.npmjs.org/decamelize/-/decamelize-1.2.0.tgz |
 | `decimal.js-light` | `2.5.1` | MIT | https://registry.npmjs.org/decimal.js-light/-/decimal.js-light-2.5.1.tgz |
 | `deep-is` | `0.1.4` | MIT | https://registry.npmjs.org/deep-is/-/deep-is-0.1.4.tgz |
+| `defaults` | `1.0.4` | MIT | https://registry.npmjs.org/defaults/-/defaults-1.0.4.tgz |
 | `define-data-property` | `1.1.4` | MIT | https://registry.npmjs.org/define-data-property/-/define-data-property-1.1.4.tgz |
 | `define-properties` | `1.2.1` | MIT | https://registry.npmjs.org/define-properties/-/define-properties-1.2.1.tgz |
+| `delayed-stream` | `1.0.0` | MIT | https://registry.npmjs.org/delayed-stream/-/delayed-stream-1.0.0.tgz |
 | `didyoumean` | `1.2.2` | Apache-2.0 | https://registry.npmjs.org/didyoumean/-/didyoumean-1.2.2.tgz |
 | `dlv` | `1.1.3` | MIT | https://registry.npmjs.org/dlv/-/dlv-1.1.3.tgz |
 | `doctrine` | `2.1.0` | Apache-2.0 | https://registry.npmjs.org/doctrine/-/doctrine-2.1.0.tgz |
 | `dunder-proto` | `1.0.1` | MIT | https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz |
 | `eastasianwidth` | `0.2.0` | MIT | https://registry.npmjs.org/eastasianwidth/-/eastasianwidth-0.2.0.tgz |
+| `ecc-jsbn` | `0.1.2` | MIT | https://registry.npmjs.org/ecc-jsbn/-/ecc-jsbn-0.1.2.tgz |
 | `electron-to-chromium` | `1.5.240` | ISC | https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.240.tgz |
+| `emoji-regex` | `7.0.3` | MIT | https://registry.npmjs.org/emoji-regex/-/emoji-regex-7.0.3.tgz |
 | `emoji-regex` | `9.2.2` | MIT | https://registry.npmjs.org/emoji-regex/-/emoji-regex-9.2.2.tgz |
 | `emoji-regex` | `8.0.0` | MIT | https://registry.npmjs.org/emoji-regex/-/emoji-regex-8.0.0.tgz |
 | `es-abstract` | `1.24.0` | MIT | https://registry.npmjs.org/es-abstract/-/es-abstract-1.24.0.tgz |
@@ -243,6 +280,7 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `esbuild` | `0.21.5` | MIT | https://registry.npmjs.org/esbuild/-/esbuild-0.21.5.tgz |
 | `escalade` | `3.2.0` | MIT | https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz |
 | `escape-string-regexp` | `4.0.0` | MIT | https://registry.npmjs.org/escape-string-regexp/-/escape-string-regexp-4.0.0.tgz |
+| `escape-string-regexp` | `1.0.5` | MIT | https://registry.npmjs.org/escape-string-regexp/-/escape-string-regexp-1.0.5.tgz |
 | `eslint` | `9.39.1` | MIT | https://registry.npmjs.org/eslint/-/eslint-9.39.1.tgz |
 | `eslint-config-prettier` | `9.1.2` | MIT | https://registry.npmjs.org/eslint-config-prettier/-/eslint-config-prettier-9.1.2.tgz |
 | `eslint-plugin-react` | `7.37.5` | MIT | https://registry.npmjs.org/eslint-plugin-react/-/eslint-plugin-react-7.37.5.tgz |
@@ -251,34 +289,48 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `eslint-visitor-keys` | `4.2.1` | Apache-2.0 | https://registry.npmjs.org/eslint-visitor-keys/-/eslint-visitor-keys-4.2.1.tgz |
 | `eslint-visitor-keys` | `3.4.3` | Apache-2.0 | https://registry.npmjs.org/eslint-visitor-keys/-/eslint-visitor-keys-3.4.3.tgz |
 | `espree` | `10.4.0` | BSD-2-Clause | https://registry.npmjs.org/espree/-/espree-10.4.0.tgz |
+| `esprima` | `4.0.1` | BSD-2-Clause | https://registry.npmjs.org/esprima/-/esprima-4.0.1.tgz |
 | `esquery` | `1.6.0` | BSD-3-Clause | https://registry.npmjs.org/esquery/-/esquery-1.6.0.tgz |
 | `esrecurse` | `4.3.0` | BSD-2-Clause | https://registry.npmjs.org/esrecurse/-/esrecurse-4.3.0.tgz |
 | `estraverse` | `5.3.0` | BSD-2-Clause | https://registry.npmjs.org/estraverse/-/estraverse-5.3.0.tgz |
 | `esutils` | `2.0.3` | BSD-2-Clause | https://registry.npmjs.org/esutils/-/esutils-2.0.3.tgz |
 | `eventemitter3` | `5.0.1` | MIT | https://registry.npmjs.org/eventemitter3/-/eventemitter3-5.0.1.tgz |
+| `extend` | `3.0.2` | MIT | https://registry.npmjs.org/extend/-/extend-3.0.2.tgz |
+| `extend-shallow` | `2.0.1` | MIT | https://registry.npmjs.org/extend-shallow/-/extend-shallow-2.0.1.tgz |
+| `external-editor` | `3.1.0` | MIT | https://registry.npmjs.org/external-editor/-/external-editor-3.1.0.tgz |
+| `extsprintf` | `1.3.0` | MIT | https://registry.npmjs.org/extsprintf/-/extsprintf-1.3.0.tgz |
 | `fast-deep-equal` | `3.1.3` | MIT | https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz |
 | `fast-glob` | `3.3.3` | MIT | https://registry.npmjs.org/fast-glob/-/fast-glob-3.3.3.tgz |
 | `fast-json-stable-stringify` | `2.1.0` | MIT | https://registry.npmjs.org/fast-json-stable-stringify/-/fast-json-stable-stringify-2.1.0.tgz |
 | `fast-levenshtein` | `2.0.6` | MIT | https://registry.npmjs.org/fast-levenshtein/-/fast-levenshtein-2.0.6.tgz |
 | `fastq` | `1.19.1` | ISC | https://registry.npmjs.org/fastq/-/fastq-1.19.1.tgz |
+| `figures` | `2.0.0` | MIT | https://registry.npmjs.org/figures/-/figures-2.0.0.tgz |
 | `file-entry-cache` | `8.0.0` | MIT | https://registry.npmjs.org/file-entry-cache/-/file-entry-cache-8.0.0.tgz |
 | `fill-range` | `7.1.1` | MIT | https://registry.npmjs.org/fill-range/-/fill-range-7.1.1.tgz |
 | `find-up` | `5.0.0` | MIT | https://registry.npmjs.org/find-up/-/find-up-5.0.0.tgz |
+| `find-up` | `3.0.0` | MIT | https://registry.npmjs.org/find-up/-/find-up-3.0.0.tgz |
 | `flat-cache` | `4.0.1` | MIT | https://registry.npmjs.org/flat-cache/-/flat-cache-4.0.1.tgz |
 | `flatted` | `3.3.3` | ISC | https://registry.npmjs.org/flatted/-/flatted-3.3.3.tgz |
 | `for-each` | `0.3.5` | MIT | https://registry.npmjs.org/for-each/-/for-each-0.3.5.tgz |
 | `foreground-child` | `3.3.1` | ISC | https://registry.npmjs.org/foreground-child/-/foreground-child-3.3.1.tgz |
+| `forever-agent` | `0.6.1` | Apache-2.0 | https://registry.npmjs.org/forever-agent/-/forever-agent-0.6.1.tgz |
+| `form-data` | `2.3.3` | MIT | https://registry.npmjs.org/form-data/-/form-data-2.3.3.tgz |
 | `fraction.js` | `4.3.7` | MIT | https://registry.npmjs.org/fraction.js/-/fraction.js-4.3.7.tgz |
+| `fs-exists-sync` | `0.1.0` | MIT | https://registry.npmjs.org/fs-exists-sync/-/fs-exists-sync-0.1.0.tgz |
+| `fs.realpath` | `1.0.0` | ISC | https://registry.npmjs.org/fs.realpath/-/fs.realpath-1.0.0.tgz |
 | `fsevents` | `2.3.3` | MIT | https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz |
 | `function-bind` | `1.1.2` | MIT | https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz |
 | `function.prototype.name` | `1.1.8` | MIT | https://registry.npmjs.org/function.prototype.name/-/function.prototype.name-1.1.8.tgz |
 | `functions-have-names` | `1.2.3` | MIT | https://registry.npmjs.org/functions-have-names/-/functions-have-names-1.2.3.tgz |
 | `generator-function` | `2.0.1` | MIT | https://registry.npmjs.org/generator-function/-/generator-function-2.0.1.tgz |
 | `gensync` | `1.0.0-beta.2` | MIT | https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz |
+| `get-caller-file` | `2.0.5` | ISC | https://registry.npmjs.org/get-caller-file/-/get-caller-file-2.0.5.tgz |
 | `get-intrinsic` | `1.3.0` | MIT | https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz |
 | `get-proto` | `1.0.1` | MIT | https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz |
 | `get-symbol-description` | `1.1.0` | MIT | https://registry.npmjs.org/get-symbol-description/-/get-symbol-description-1.1.0.tgz |
+| `getpass` | `0.1.7` | MIT | https://registry.npmjs.org/getpass/-/getpass-0.1.7.tgz |
 | `glob` | `10.4.5` | ISC | https://registry.npmjs.org/glob/-/glob-10.4.5.tgz |
+| `glob` | `7.2.3` | ISC | https://registry.npmjs.org/glob/-/glob-7.2.3.tgz |
 | `glob-parent` | `5.1.2` | ISC | https://registry.npmjs.org/glob-parent/-/glob-parent-5.1.2.tgz |
 | `glob-parent` | `6.0.2` | ISC | https://registry.npmjs.org/glob-parent/-/glob-parent-6.0.2.tgz |
 | `globals` | `14.0.0` | MIT | https://registry.npmjs.org/globals/-/globals-14.0.0.tgz |
@@ -286,18 +338,26 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `globalthis` | `1.0.4` | MIT | https://registry.npmjs.org/globalthis/-/globalthis-1.0.4.tgz |
 | `gopd` | `1.2.0` | MIT | https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz |
 | `graphemer` | `1.4.0` | MIT | https://registry.npmjs.org/graphemer/-/graphemer-1.4.0.tgz |
+| `har-schema` | `2.0.0` | ISC | https://registry.npmjs.org/har-schema/-/har-schema-2.0.0.tgz |
+| `har-validator` | `5.1.5` | MIT | https://registry.npmjs.org/har-validator/-/har-validator-5.1.5.tgz |
 | `has-bigints` | `1.1.0` | MIT | https://registry.npmjs.org/has-bigints/-/has-bigints-1.1.0.tgz |
 | `has-flag` | `4.0.0` | MIT | https://registry.npmjs.org/has-flag/-/has-flag-4.0.0.tgz |
+| `has-flag` | `3.0.0` | MIT | https://registry.npmjs.org/has-flag/-/has-flag-3.0.0.tgz |
 | `has-property-descriptors` | `1.0.2` | MIT | https://registry.npmjs.org/has-property-descriptors/-/has-property-descriptors-1.0.2.tgz |
 | `has-proto` | `1.2.0` | MIT | https://registry.npmjs.org/has-proto/-/has-proto-1.2.0.tgz |
 | `has-symbols` | `1.1.0` | MIT | https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz |
 | `has-tostringtag` | `1.0.2` | MIT | https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz |
 | `hasown` | `2.0.2` | MIT | https://registry.npmjs.org/hasown/-/hasown-2.0.2.tgz |
+| `http-signature` | `1.2.0` | MIT | https://registry.npmjs.org/http-signature/-/http-signature-1.2.0.tgz |
+| `iconv-lite` | `0.4.24` | MIT | https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.4.24.tgz |
 | `ignore` | `5.3.2` | MIT | https://registry.npmjs.org/ignore/-/ignore-5.3.2.tgz |
 | `ignore` | `7.0.5` | MIT | https://registry.npmjs.org/ignore/-/ignore-7.0.5.tgz |
 | `immer` | `10.2.0` | MIT | https://registry.npmjs.org/immer/-/immer-10.2.0.tgz |
 | `import-fresh` | `3.3.1` | MIT | https://registry.npmjs.org/import-fresh/-/import-fresh-3.3.1.tgz |
 | `imurmurhash` | `0.1.4` | MIT | https://registry.npmjs.org/imurmurhash/-/imurmurhash-0.1.4.tgz |
+| `inflight` | `1.0.6` | ISC | https://registry.npmjs.org/inflight/-/inflight-1.0.6.tgz |
+| `inherits` | `2.0.4` | ISC | https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz |
+| `inquirer` | `6.5.2` | MIT | https://registry.npmjs.org/inquirer/-/inquirer-6.5.2.tgz |
 | `internal-slot` | `1.1.0` | MIT | https://registry.npmjs.org/internal-slot/-/internal-slot-1.1.0.tgz |
 | `internmap` | `2.0.3` | ISC | https://registry.npmjs.org/internmap/-/internmap-2.0.3.tgz |
 | `is-array-buffer` | `3.0.5` | MIT | https://registry.npmjs.org/is-array-buffer/-/is-array-buffer-3.0.5.tgz |
@@ -309,8 +369,10 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `is-core-module` | `2.16.1` | MIT | https://registry.npmjs.org/is-core-module/-/is-core-module-2.16.1.tgz |
 | `is-data-view` | `1.0.2` | MIT | https://registry.npmjs.org/is-data-view/-/is-data-view-1.0.2.tgz |
 | `is-date-object` | `1.1.0` | MIT | https://registry.npmjs.org/is-date-object/-/is-date-object-1.1.0.tgz |
+| `is-extendable` | `0.1.1` | MIT | https://registry.npmjs.org/is-extendable/-/is-extendable-0.1.1.tgz |
 | `is-extglob` | `2.1.1` | MIT | https://registry.npmjs.org/is-extglob/-/is-extglob-2.1.1.tgz |
 | `is-finalizationregistry` | `1.1.1` | MIT | https://registry.npmjs.org/is-finalizationregistry/-/is-finalizationregistry-1.1.1.tgz |
+| `is-fullwidth-code-point` | `2.0.0` | MIT | https://registry.npmjs.org/is-fullwidth-code-point/-/is-fullwidth-code-point-2.0.0.tgz |
 | `is-fullwidth-code-point` | `3.0.0` | MIT | https://registry.npmjs.org/is-fullwidth-code-point/-/is-fullwidth-code-point-3.0.0.tgz |
 | `is-generator-function` | `1.1.2` | MIT | https://registry.npmjs.org/is-generator-function/-/is-generator-function-1.1.2.tgz |
 | `is-glob` | `4.0.3` | MIT | https://registry.npmjs.org/is-glob/-/is-glob-4.0.3.tgz |
@@ -324,45 +386,65 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `is-string` | `1.1.1` | MIT | https://registry.npmjs.org/is-string/-/is-string-1.1.1.tgz |
 | `is-symbol` | `1.1.1` | MIT | https://registry.npmjs.org/is-symbol/-/is-symbol-1.1.1.tgz |
 | `is-typed-array` | `1.1.15` | MIT | https://registry.npmjs.org/is-typed-array/-/is-typed-array-1.1.15.tgz |
+| `is-typedarray` | `1.0.0` | MIT | https://registry.npmjs.org/is-typedarray/-/is-typedarray-1.0.0.tgz |
 | `is-weakmap` | `2.0.2` | MIT | https://registry.npmjs.org/is-weakmap/-/is-weakmap-2.0.2.tgz |
 | `is-weakref` | `1.1.1` | MIT | https://registry.npmjs.org/is-weakref/-/is-weakref-1.1.1.tgz |
 | `is-weakset` | `2.0.4` | MIT | https://registry.npmjs.org/is-weakset/-/is-weakset-2.0.4.tgz |
 | `isarray` | `2.0.5` | MIT | https://registry.npmjs.org/isarray/-/isarray-2.0.5.tgz |
 | `isexe` | `2.0.0` | ISC | https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz |
+| `isstream` | `0.1.2` | MIT | https://registry.npmjs.org/isstream/-/isstream-0.1.2.tgz |
 | `iterator.prototype` | `1.1.5` | MIT | https://registry.npmjs.org/iterator.prototype/-/iterator.prototype-1.1.5.tgz |
 | `jackspeak` | `3.4.3` | BlueOak-1.0.0 | https://registry.npmjs.org/jackspeak/-/jackspeak-3.4.3.tgz |
 | `jiti` | `1.21.7` | MIT | https://registry.npmjs.org/jiti/-/jiti-1.21.7.tgz |
 | `js-tokens` | `4.0.0` | MIT | https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz |
 | `js-yaml` | `4.1.0` | MIT | https://registry.npmjs.org/js-yaml/-/js-yaml-4.1.0.tgz |
+| `js-yaml` | `3.14.1` | MIT | https://registry.npmjs.org/js-yaml/-/js-yaml-3.14.1.tgz |
+| `jsbn` | `0.1.1` | MIT | https://registry.npmjs.org/jsbn/-/jsbn-0.1.1.tgz |
 | `jsesc` | `3.1.0` | MIT | https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz |
 | `json-buffer` | `3.0.1` | MIT | https://registry.npmjs.org/json-buffer/-/json-buffer-3.0.1.tgz |
+| `json-schema` | `0.4.0` | (AFL-2.1 OR BSD-3-Clause) | https://registry.npmjs.org/json-schema/-/json-schema-0.4.0.tgz |
 | `json-schema-traverse` | `0.4.1` | MIT | https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-0.4.1.tgz |
 | `json-stable-stringify-without-jsonify` | `1.0.1` | MIT | https://registry.npmjs.org/json-stable-stringify-without-jsonify/-/json-stable-stringify-without-jsonify-1.0.1.tgz |
+| `json-stringify-safe` | `5.0.1` | ISC | https://registry.npmjs.org/json-stringify-safe/-/json-stringify-safe-5.0.1.tgz |
 | `json5` | `2.2.3` | MIT | https://registry.npmjs.org/json5/-/json5-2.2.3.tgz |
+| `jsprim` | `1.4.2` | MIT | https://registry.npmjs.org/jsprim/-/jsprim-1.4.2.tgz |
 | `jsx-ast-utils` | `3.3.5` | MIT | https://registry.npmjs.org/jsx-ast-utils/-/jsx-ast-utils-3.3.5.tgz |
 | `keyv` | `4.5.4` | MIT | https://registry.npmjs.org/keyv/-/keyv-4.5.4.tgz |
 | `levn` | `0.4.1` | MIT | https://registry.npmjs.org/levn/-/levn-0.4.1.tgz |
 | `lilconfig` | `2.1.0` | MIT | https://registry.npmjs.org/lilconfig/-/lilconfig-2.1.0.tgz |
 | `lilconfig` | `3.1.3` | MIT | https://registry.npmjs.org/lilconfig/-/lilconfig-3.1.3.tgz |
 | `lines-and-columns` | `1.2.4` | MIT | https://registry.npmjs.org/lines-and-columns/-/lines-and-columns-1.2.4.tgz |
+| `lint` | `0.8.19` | Apache-2.0 | https://registry.npmjs.org/lint/-/lint-0.8.19.tgz |
+| `loadash` | `1.0.0` | ISC | https://registry.npmjs.org/loadash/-/loadash-1.0.0.tgz |
 | `locate-path` | `6.0.0` | MIT | https://registry.npmjs.org/locate-path/-/locate-path-6.0.0.tgz |
+| `locate-path` | `3.0.0` | MIT | https://registry.npmjs.org/locate-path/-/locate-path-3.0.0.tgz |
+| `lodash` | `4.17.21` | MIT | https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz |
 | `lodash.merge` | `4.6.2` | MIT | https://registry.npmjs.org/lodash.merge/-/lodash.merge-4.6.2.tgz |
+| `log-symbols` | `2.2.0` | MIT | https://registry.npmjs.org/log-symbols/-/log-symbols-2.2.0.tgz |
 | `loose-envify` | `1.4.0` | MIT | https://registry.npmjs.org/loose-envify/-/loose-envify-1.4.0.tgz |
 | `lru-cache` | `5.1.1` | ISC | https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz |
 | `lru-cache` | `10.4.3` | ISC | https://registry.npmjs.org/lru-cache/-/lru-cache-10.4.3.tgz |
 | `math-intrinsics` | `1.1.0` | MIT | https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz |
 | `merge2` | `1.4.1` | MIT | https://registry.npmjs.org/merge2/-/merge2-1.4.1.tgz |
 | `micromatch` | `4.0.8` | MIT | https://registry.npmjs.org/micromatch/-/micromatch-4.0.8.tgz |
+| `mime-db` | `1.52.0` | MIT | https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz |
+| `mime-types` | `2.1.35` | MIT | https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz |
+| `mimic-fn` | `1.2.0` | MIT | https://registry.npmjs.org/mimic-fn/-/mimic-fn-1.2.0.tgz |
 | `minimatch` | `3.1.2` | ISC | https://registry.npmjs.org/minimatch/-/minimatch-3.1.2.tgz |
 | `minimatch` | `9.0.5` | ISC | https://registry.npmjs.org/minimatch/-/minimatch-9.0.5.tgz |
+| `minimist` | `1.2.8` | MIT | https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz |
 | `minipass` | `7.1.2` | ISC | https://registry.npmjs.org/minipass/-/minipass-7.1.2.tgz |
+| `mkdirp` | `0.5.6` | MIT | https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.6.tgz |
+| `moment` | `2.30.1` | MIT | https://registry.npmjs.org/moment/-/moment-2.30.1.tgz |
 | `ms` | `2.1.3` | MIT | https://registry.npmjs.org/ms/-/ms-2.1.3.tgz |
+| `mute-stream` | `0.0.7` | ISC | https://registry.npmjs.org/mute-stream/-/mute-stream-0.0.7.tgz |
 | `mz` | `2.7.0` | MIT | https://registry.npmjs.org/mz/-/mz-2.7.0.tgz |
 | `nanoid` | `3.3.11` | MIT | https://registry.npmjs.org/nanoid/-/nanoid-3.3.11.tgz |
 | `natural-compare` | `1.4.0` | MIT | https://registry.npmjs.org/natural-compare/-/natural-compare-1.4.0.tgz |
 | `node-releases` | `2.0.26` | MIT | https://registry.npmjs.org/node-releases/-/node-releases-2.0.26.tgz |
 | `normalize-path` | `3.0.0` | MIT | https://registry.npmjs.org/normalize-path/-/normalize-path-3.0.0.tgz |
 | `normalize-range` | `0.1.2` | MIT | https://registry.npmjs.org/normalize-range/-/normalize-range-0.1.2.tgz |
+| `oauth-sign` | `0.9.0` | Apache-2.0 | https://registry.npmjs.org/oauth-sign/-/oauth-sign-0.9.0.tgz |
 | `object-assign` | `4.1.1` | MIT | https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz |
 | `object-hash` | `3.0.0` | MIT | https://registry.npmjs.org/object-hash/-/object-hash-3.0.0.tgz |
 | `object-inspect` | `1.13.4` | MIT | https://registry.npmjs.org/object-inspect/-/object-inspect-1.13.4.tgz |
@@ -371,16 +453,26 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `object.entries` | `1.1.9` | MIT | https://registry.npmjs.org/object.entries/-/object.entries-1.1.9.tgz |
 | `object.fromentries` | `2.0.8` | MIT | https://registry.npmjs.org/object.fromentries/-/object.fromentries-2.0.8.tgz |
 | `object.values` | `1.2.1` | MIT | https://registry.npmjs.org/object.values/-/object.values-1.2.1.tgz |
+| `once` | `1.4.0` | ISC | https://registry.npmjs.org/once/-/once-1.4.0.tgz |
+| `onetime` | `2.0.1` | MIT | https://registry.npmjs.org/onetime/-/onetime-2.0.1.tgz |
 | `optionator` | `0.9.4` | MIT | https://registry.npmjs.org/optionator/-/optionator-0.9.4.tgz |
+| `ora` | `3.4.0` | MIT | https://registry.npmjs.org/ora/-/ora-3.4.0.tgz |
+| `os-tmpdir` | `1.0.2` | MIT | https://registry.npmjs.org/os-tmpdir/-/os-tmpdir-1.0.2.tgz |
 | `own-keys` | `1.0.1` | MIT | https://registry.npmjs.org/own-keys/-/own-keys-1.0.1.tgz |
 | `p-limit` | `3.1.0` | MIT | https://registry.npmjs.org/p-limit/-/p-limit-3.1.0.tgz |
+| `p-limit` | `2.3.0` | MIT | https://registry.npmjs.org/p-limit/-/p-limit-2.3.0.tgz |
 | `p-locate` | `5.0.0` | MIT | https://registry.npmjs.org/p-locate/-/p-locate-5.0.0.tgz |
+| `p-locate` | `3.0.0` | MIT | https://registry.npmjs.org/p-locate/-/p-locate-3.0.0.tgz |
+| `p-try` | `2.2.0` | MIT | https://registry.npmjs.org/p-try/-/p-try-2.2.0.tgz |
 | `package-json-from-dist` | `1.0.1` | BlueOak-1.0.0 | https://registry.npmjs.org/package-json-from-dist/-/package-json-from-dist-1.0.1.tgz |
 | `parent-module` | `1.0.1` | MIT | https://registry.npmjs.org/parent-module/-/parent-module-1.0.1.tgz |
 | `path-exists` | `4.0.0` | MIT | https://registry.npmjs.org/path-exists/-/path-exists-4.0.0.tgz |
+| `path-exists` | `3.0.0` | MIT | https://registry.npmjs.org/path-exists/-/path-exists-3.0.0.tgz |
+| `path-is-absolute` | `1.0.1` | MIT | https://registry.npmjs.org/path-is-absolute/-/path-is-absolute-1.0.1.tgz |
 | `path-key` | `3.1.1` | MIT | https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz |
 | `path-parse` | `1.0.7` | MIT | https://registry.npmjs.org/path-parse/-/path-parse-1.0.7.tgz |
 | `path-scurry` | `1.11.1` | BlueOak-1.0.0 | https://registry.npmjs.org/path-scurry/-/path-scurry-1.11.1.tgz |
+| `performance-now` | `2.1.0` | MIT | https://registry.npmjs.org/performance-now/-/performance-now-2.1.0.tgz |
 | `picocolors` | `1.1.1` | ISC | https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz |
 | `picomatch` | `2.3.1` | MIT | https://registry.npmjs.org/picomatch/-/picomatch-2.3.1.tgz |
 | `pify` | `2.3.0` | MIT | https://registry.npmjs.org/pify/-/pify-2.3.0.tgz |
@@ -394,9 +486,12 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `postcss-selector-parser` | `6.1.2` | MIT | https://registry.npmjs.org/postcss-selector-parser/-/postcss-selector-parser-6.1.2.tgz |
 | `postcss-value-parser` | `4.2.0` | MIT | https://registry.npmjs.org/postcss-value-parser/-/postcss-value-parser-4.2.0.tgz |
 | `prelude-ls` | `1.2.1` | MIT | https://registry.npmjs.org/prelude-ls/-/prelude-ls-1.2.1.tgz |
+| `prettier` | `1.19.1` | MIT | https://registry.npmjs.org/prettier/-/prettier-1.19.1.tgz |
 | `prettier` | `3.6.2` | MIT | https://registry.npmjs.org/prettier/-/prettier-3.6.2.tgz |
 | `prop-types` | `15.8.1` | MIT | https://registry.npmjs.org/prop-types/-/prop-types-15.8.1.tgz |
+| `psl` | `1.15.0` | MIT | https://registry.npmjs.org/psl/-/psl-1.15.0.tgz |
 | `punycode` | `2.3.1` | MIT | https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz |
+| `qs` | `6.5.3` | BSD-3-Clause | https://registry.npmjs.org/qs/-/qs-6.5.3.tgz |
 | `queue-microtask` | `1.2.3` | MIT | https://registry.npmjs.org/queue-microtask/-/queue-microtask-1.2.3.tgz |
 | `react` | `18.3.1` | MIT | https://registry.npmjs.org/react/-/react-18.3.1.tgz |
 | `react-dom` | `18.3.1` | MIT | https://registry.npmjs.org/react-dom/-/react-dom-18.3.1.tgz |
@@ -413,19 +508,29 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `redux-thunk` | `3.1.0` | MIT | https://registry.npmjs.org/redux-thunk/-/redux-thunk-3.1.0.tgz |
 | `reflect.getprototypeof` | `1.0.10` | MIT | https://registry.npmjs.org/reflect.getprototypeof/-/reflect.getprototypeof-1.0.10.tgz |
 | `regexp.prototype.flags` | `1.5.4` | MIT | https://registry.npmjs.org/regexp.prototype.flags/-/regexp.prototype.flags-1.5.4.tgz |
+| `replace-in-file` | `3.4.4` | MIT | https://registry.npmjs.org/replace-in-file/-/replace-in-file-3.4.4.tgz |
+| `request` | `2.88.2` | Apache-2.0 | https://registry.npmjs.org/request/-/request-2.88.2.tgz |
+| `require-directory` | `2.1.1` | MIT | https://registry.npmjs.org/require-directory/-/require-directory-2.1.1.tgz |
+| `require-main-filename` | `2.0.0` | ISC | https://registry.npmjs.org/require-main-filename/-/require-main-filename-2.0.0.tgz |
 | `reselect` | `5.1.1` | MIT | https://registry.npmjs.org/reselect/-/reselect-5.1.1.tgz |
 | `resolve` | `2.0.0-next.5` | MIT | https://registry.npmjs.org/resolve/-/resolve-2.0.0-next.5.tgz |
 | `resolve` | `1.22.11` | MIT | https://registry.npmjs.org/resolve/-/resolve-1.22.11.tgz |
 | `resolve-from` | `4.0.0` | MIT | https://registry.npmjs.org/resolve-from/-/resolve-from-4.0.0.tgz |
+| `restore-cursor` | `2.0.0` | MIT | https://registry.npmjs.org/restore-cursor/-/restore-cursor-2.0.0.tgz |
 | `reusify` | `1.1.0` | MIT | https://registry.npmjs.org/reusify/-/reusify-1.1.0.tgz |
 | `rollup` | `4.52.5` | MIT | https://registry.npmjs.org/rollup/-/rollup-4.52.5.tgz |
+| `run-async` | `2.4.1` | MIT | https://registry.npmjs.org/run-async/-/run-async-2.4.1.tgz |
 | `run-parallel` | `1.2.0` | MIT | https://registry.npmjs.org/run-parallel/-/run-parallel-1.2.0.tgz |
+| `rxjs` | `6.6.7` | Apache-2.0 | https://registry.npmjs.org/rxjs/-/rxjs-6.6.7.tgz |
 | `safe-array-concat` | `1.1.3` | MIT | https://registry.npmjs.org/safe-array-concat/-/safe-array-concat-1.1.3.tgz |
+| `safe-buffer` | `5.2.1` | MIT | https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz |
 | `safe-push-apply` | `1.0.0` | MIT | https://registry.npmjs.org/safe-push-apply/-/safe-push-apply-1.0.0.tgz |
 | `safe-regex-test` | `1.1.0` | MIT | https://registry.npmjs.org/safe-regex-test/-/safe-regex-test-1.1.0.tgz |
+| `safer-buffer` | `2.1.2` | MIT | https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz |
 | `scheduler` | `0.23.2` | MIT | https://registry.npmjs.org/scheduler/-/scheduler-0.23.2.tgz |
 | `semver` | `7.7.3` | ISC | https://registry.npmjs.org/semver/-/semver-7.7.3.tgz |
 | `semver` | `6.3.1` | ISC | https://registry.npmjs.org/semver/-/semver-6.3.1.tgz |
+| `set-blocking` | `2.0.0` | ISC | https://registry.npmjs.org/set-blocking/-/set-blocking-2.0.0.tgz |
 | `set-cookie-parser` | `2.7.1` | MIT | https://registry.npmjs.org/set-cookie-parser/-/set-cookie-parser-2.7.1.tgz |
 | `set-function-length` | `1.2.2` | MIT | https://registry.npmjs.org/set-function-length/-/set-function-length-1.2.2.tgz |
 | `set-function-name` | `2.0.2` | MIT | https://registry.npmjs.org/set-function-name/-/set-function-name-2.0.2.tgz |
@@ -436,9 +541,15 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `side-channel-list` | `1.0.0` | MIT | https://registry.npmjs.org/side-channel-list/-/side-channel-list-1.0.0.tgz |
 | `side-channel-map` | `1.0.1` | MIT | https://registry.npmjs.org/side-channel-map/-/side-channel-map-1.0.1.tgz |
 | `side-channel-weakmap` | `1.0.2` | MIT | https://registry.npmjs.org/side-channel-weakmap/-/side-channel-weakmap-1.0.2.tgz |
+| `signal-exit` | `3.0.7` | ISC | https://registry.npmjs.org/signal-exit/-/signal-exit-3.0.7.tgz |
 | `signal-exit` | `4.1.0` | ISC | https://registry.npmjs.org/signal-exit/-/signal-exit-4.1.0.tgz |
+| `simple-git` | `3.30.0` | MIT | https://registry.npmjs.org/simple-git/-/simple-git-3.30.0.tgz |
 | `source-map-js` | `1.2.1` | BSD-3-Clause | https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz |
+| `sprintf-js` | `1.0.3` | BSD-3-Clause | https://registry.npmjs.org/sprintf-js/-/sprintf-js-1.0.3.tgz |
+| `sshpk` | `1.18.0` | MIT | https://registry.npmjs.org/sshpk/-/sshpk-1.18.0.tgz |
 | `stop-iteration-iterator` | `1.1.0` | MIT | https://registry.npmjs.org/stop-iteration-iterator/-/stop-iteration-iterator-1.1.0.tgz |
+| `string-width` | `3.1.0` | MIT | https://registry.npmjs.org/string-width/-/string-width-3.1.0.tgz |
+| `string-width` | `2.1.1` | MIT | https://registry.npmjs.org/string-width/-/string-width-2.1.1.tgz |
 | `string-width` | `5.1.2` | MIT | https://registry.npmjs.org/string-width/-/string-width-5.1.2.tgz |
 | `string-width` | `4.2.3` | MIT | https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz |
 | `string-width-cjs` | `4.2.3` | MIT | https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz |
@@ -447,20 +558,29 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `string.prototype.trim` | `1.2.10` | MIT | https://registry.npmjs.org/string.prototype.trim/-/string.prototype.trim-1.2.10.tgz |
 | `string.prototype.trimend` | `1.0.9` | MIT | https://registry.npmjs.org/string.prototype.trimend/-/string.prototype.trimend-1.0.9.tgz |
 | `string.prototype.trimstart` | `1.0.8` | MIT | https://registry.npmjs.org/string.prototype.trimstart/-/string.prototype.trimstart-1.0.8.tgz |
+| `strip-ansi` | `5.2.0` | MIT | https://registry.npmjs.org/strip-ansi/-/strip-ansi-5.2.0.tgz |
+| `strip-ansi` | `4.0.0` | MIT | https://registry.npmjs.org/strip-ansi/-/strip-ansi-4.0.0.tgz |
 | `strip-ansi` | `6.0.1` | MIT | https://registry.npmjs.org/strip-ansi/-/strip-ansi-6.0.1.tgz |
 | `strip-ansi` | `7.1.2` | MIT | https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.1.2.tgz |
 | `strip-ansi-cjs` | `6.0.1` | MIT | https://registry.npmjs.org/strip-ansi/-/strip-ansi-6.0.1.tgz |
 | `strip-json-comments` | `3.1.1` | MIT | https://registry.npmjs.org/strip-json-comments/-/strip-json-comments-3.1.1.tgz |
 | `sucrase` | `3.35.0` | MIT | https://registry.npmjs.org/sucrase/-/sucrase-3.35.0.tgz |
+| `supports-color` | `5.5.0` | MIT | https://registry.npmjs.org/supports-color/-/supports-color-5.5.0.tgz |
 | `supports-color` | `7.2.0` | MIT | https://registry.npmjs.org/supports-color/-/supports-color-7.2.0.tgz |
 | `supports-preserve-symlinks-flag` | `1.0.0` | MIT | https://registry.npmjs.org/supports-preserve-symlinks-flag/-/supports-preserve-symlinks-flag-1.0.0.tgz |
 | `tailwindcss` | `3.4.14` | MIT | https://registry.npmjs.org/tailwindcss/-/tailwindcss-3.4.14.tgz |
 | `thenify` | `3.3.1` | MIT | https://registry.npmjs.org/thenify/-/thenify-3.3.1.tgz |
 | `thenify-all` | `1.6.0` | MIT | https://registry.npmjs.org/thenify-all/-/thenify-all-1.6.0.tgz |
+| `through` | `2.3.8` | MIT | https://registry.npmjs.org/through/-/through-2.3.8.tgz |
 | `tiny-invariant` | `1.3.3` | MIT | https://registry.npmjs.org/tiny-invariant/-/tiny-invariant-1.3.3.tgz |
+| `tmp` | `0.0.33` | MIT | https://registry.npmjs.org/tmp/-/tmp-0.0.33.tgz |
 | `to-regex-range` | `5.0.1` | MIT | https://registry.npmjs.org/to-regex-range/-/to-regex-range-5.0.1.tgz |
+| `tough-cookie` | `2.5.0` | BSD-3-Clause | https://registry.npmjs.org/tough-cookie/-/tough-cookie-2.5.0.tgz |
 | `ts-api-utils` | `2.1.0` | MIT | https://registry.npmjs.org/ts-api-utils/-/ts-api-utils-2.1.0.tgz |
 | `ts-interface-checker` | `0.1.13` | Apache-2.0 | https://registry.npmjs.org/ts-interface-checker/-/ts-interface-checker-0.1.13.tgz |
+| `tslib` | `1.14.1` | 0BSD | https://registry.npmjs.org/tslib/-/tslib-1.14.1.tgz |
+| `tunnel-agent` | `0.6.0` | Apache-2.0 | https://registry.npmjs.org/tunnel-agent/-/tunnel-agent-0.6.0.tgz |
+| `tweetnacl` | `0.14.5` | Unlicense | https://registry.npmjs.org/tweetnacl/-/tweetnacl-0.14.5.tgz |
 | `type-check` | `0.4.0` | MIT | https://registry.npmjs.org/type-check/-/type-check-0.4.0.tgz |
 | `typed-array-buffer` | `1.0.3` | MIT | https://registry.npmjs.org/typed-array-buffer/-/typed-array-buffer-1.0.3.tgz |
 | `typed-array-byte-length` | `1.0.3` | MIT | https://registry.npmjs.org/typed-array-byte-length/-/typed-array-byte-length-1.0.3.tgz |
@@ -473,18 +593,29 @@ It is generated from the JSON inventories committed under `licenses/`. Regenerat
 | `uri-js` | `4.4.1` | BSD-2-Clause | https://registry.npmjs.org/uri-js/-/uri-js-4.4.1.tgz |
 | `use-sync-external-store` | `1.6.0` | MIT | https://registry.npmjs.org/use-sync-external-store/-/use-sync-external-store-1.6.0.tgz |
 | `util-deprecate` | `1.0.2` | MIT | https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz |
+| `uuid` | `3.4.0` | MIT | https://registry.npmjs.org/uuid/-/uuid-3.4.0.tgz |
+| `verror` | `1.10.0` | MIT | https://registry.npmjs.org/verror/-/verror-1.10.0.tgz |
 | `victory-vendor` | `37.3.6` | MIT AND ISC | https://registry.npmjs.org/victory-vendor/-/victory-vendor-37.3.6.tgz |
 | `vite` | `5.4.21` | MIT | https://registry.npmjs.org/vite/-/vite-5.4.21.tgz |
+| `wcwidth` | `1.0.1` | MIT | https://registry.npmjs.org/wcwidth/-/wcwidth-1.0.1.tgz |
 | `which` | `2.0.2` | ISC | https://registry.npmjs.org/which/-/which-2.0.2.tgz |
 | `which-boxed-primitive` | `1.1.1` | MIT | https://registry.npmjs.org/which-boxed-primitive/-/which-boxed-primitive-1.1.1.tgz |
 | `which-builtin-type` | `1.2.1` | MIT | https://registry.npmjs.org/which-builtin-type/-/which-builtin-type-1.2.1.tgz |
 | `which-collection` | `1.0.2` | MIT | https://registry.npmjs.org/which-collection/-/which-collection-1.0.2.tgz |
+| `which-module` | `2.0.1` | ISC | https://registry.npmjs.org/which-module/-/which-module-2.0.1.tgz |
 | `which-typed-array` | `1.1.19` | MIT | https://registry.npmjs.org/which-typed-array/-/which-typed-array-1.1.19.tgz |
 | `word-wrap` | `1.2.5` | MIT | https://registry.npmjs.org/word-wrap/-/word-wrap-1.2.5.tgz |
+| `wrap-ansi` | `5.1.0` | MIT | https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-5.1.0.tgz |
 | `wrap-ansi` | `8.1.0` | MIT | https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-8.1.0.tgz |
 | `wrap-ansi-cjs` | `7.0.0` | MIT | https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-7.0.0.tgz |
+| `wrappy` | `1.0.2` | ISC | https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz |
+| `write` | `0.3.3` | MIT | https://registry.npmjs.org/write/-/write-0.3.3.tgz |
+| `write-yaml` | `1.0.0` | MIT | https://registry.npmjs.org/write-yaml/-/write-yaml-1.0.0.tgz |
+| `y18n` | `4.0.3` | ISC | https://registry.npmjs.org/y18n/-/y18n-4.0.3.tgz |
 | `yallist` | `3.1.1` | ISC | https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz |
 | `yaml` | `2.8.1` | ISC | https://registry.npmjs.org/yaml/-/yaml-2.8.1.tgz |
+| `yargs` | `13.3.2` | MIT | https://registry.npmjs.org/yargs/-/yargs-13.3.2.tgz |
+| `yargs-parser` | `13.1.2` | ISC | https://registry.npmjs.org/yargs-parser/-/yargs-parser-13.1.2.tgz |
 | `yocto-queue` | `0.1.0` | MIT | https://registry.npmjs.org/yocto-queue/-/yocto-queue-0.1.0.tgz |
 
 ## Electron (Desktop shell)
