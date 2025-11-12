@@ -845,6 +845,17 @@ function setupMenu() {
   Menu.setApplicationMenu(menu);
 }
 
+function registerDisplayListeners() {
+  if (!screen || typeof screen.on !== 'function') {
+    return;
+  }
+  const handleChange = () => {
+    adjustGuestWindowForDisplays();
+  };
+  screen.on('display-added', handleChange);
+  screen.on('display-removed', handleChange);
+}
+
 function launchBackend(root, port) {
   return new Promise((resolve, reject) => {
     const python = resolvePythonExecutable();
@@ -1280,15 +1291,26 @@ function computeAllowedOrigins() {
   return origins.join(',');
 }
 
-function determineGuestDisplayBounds() {
+function determineGuestWindowConfig() {
   const displays = typeof screen.getAllDisplays === 'function' ? screen.getAllDisplays() : [];
-  const primary = typeof screen.getPrimaryDisplay === 'function' ? screen.getPrimaryDisplay() : null;
-  if (!displays || displays.length === 0) {
-    return (primary && primary.bounds) || { x: 0, y: 0, width: 1280, height: 720 };
+  const primary = typeof screen.getPrimaryDisplay === 'function' ? screen.getPrimaryDisplay() : displays[0] || null;
+  const secondary = primary ? displays.find((display) => display.id !== primary.id) : null;
+  if (secondary) {
+    return {
+      bounds: secondary.bounds || { x: 0, y: 0, width: 1920, height: 1080 },
+      fullscreen: true,
+    };
   }
-  const external = primary ? displays.find((display) => display.id !== primary.id) : null;
-  const target = external || primary || displays[0];
-  return target.bounds || { x: 0, y: 0, width: 1280, height: 720 };
+  const target = primary || displays[0];
+  const area = target && target.workArea ? target.workArea : target && target.bounds ? target.bounds : { x: 0, y: 0, width: 1280, height: 720 };
+  const width = Math.min(1280, area.width);
+  const height = Math.min(720, area.height);
+  const x = area.x + Math.max(0, Math.floor((area.width - width) / 2));
+  const y = area.y + Math.max(0, Math.floor((area.height - height) / 2));
+  return {
+    bounds: { x, y, width, height },
+    fullscreen: false,
+  };
 }
 
 function minimizeGuestWindow() {
@@ -1306,8 +1328,33 @@ function restoreGuestWindowFullscreen() {
   if (guestWindow.isMinimized()) {
     guestWindow.restore();
   }
-  guestWindow.setFullScreen(true);
+  adjustGuestWindowForDisplays();
   guestWindow.focus();
+}
+
+function adjustGuestWindowForDisplays() {
+  if (!guestWindow || guestWindow.isDestroyed()) {
+    return;
+  }
+  const config = determineGuestWindowConfig();
+  const currentlyFullscreen = guestWindow.isFullScreen();
+  if (config.fullscreen) {
+    if (!currentlyFullscreen) {
+      guestWindow.setBounds(config.bounds);
+      guestWindow.setFullScreen(true);
+    } else {
+      guestWindow.setFullScreen(false);
+      guestWindow.setBounds(config.bounds);
+      guestWindow.setFullScreen(true);
+    }
+    guestWindow.setAutoHideMenuBar(true);
+  } else {
+    if (currentlyFullscreen) {
+      guestWindow.setFullScreen(false);
+    }
+    guestWindow.setBounds(config.bounds);
+    guestWindow.setAutoHideMenuBar(false);
+  }
 }
 
 async function createWindows() {
@@ -1331,15 +1378,15 @@ async function createWindows() {
     sendLicenseModalRequest();
   }
 
-  const guestBounds = determineGuestDisplayBounds();
+  const guestConfig = determineGuestWindowConfig();
   guestWindow = new BrowserWindow({
-    x: guestBounds.x,
-    y: guestBounds.y,
-    width: guestBounds.width,
-    height: guestBounds.height,
-    fullscreen: true,
-    frame: false,
-    autoHideMenuBar: true,
+    x: guestConfig.bounds.x,
+    y: guestConfig.bounds.y,
+    width: guestConfig.bounds.width,
+    height: guestConfig.bounds.height,
+    fullscreen: guestConfig.fullscreen,
+    frame: true,
+    autoHideMenuBar: guestConfig.fullscreen,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -1350,7 +1397,7 @@ async function createWindows() {
     guestWindow = null;
   });
   guestWindow.on('restore', () => {
-    guestWindow.setFullScreen(true);
+    adjustGuestWindowForDisplays();
   });
   await guestWindow.loadURL(buildWindowUrl('/guest', query));
   injectRuntimeConfig(guestWindow, apiBase, apiToken);
@@ -1387,6 +1434,7 @@ app.on('activate', () => {
 
 app.whenReady().then(async () => {
   setupMenu();
+  registerDisplayListeners();
   const root = getUserRoot();
   try {
     backendPort = await resolveBackendPort();
