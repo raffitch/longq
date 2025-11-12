@@ -21,6 +21,7 @@ frontend/tsconfig.tsbuildinfo
 # Runtime data
 data/
 backend/data/
+.license-dev/
 .env
 backend/auth_token.json
 
