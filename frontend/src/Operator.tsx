@@ -72,6 +72,14 @@ type UploadErrorMap = Record<ReportKind, string | null>;
 type DroppedFile = { file: File; relativePath: string; name: string };
 type SelectionMap = Record<ReportKind, boolean>;
 type ParsedMap = Record<ReportKind, boolean>;
+type FileWithRelativePath = File & { webkitRelativePath?: string };
+
+type DataTransferItemWithEntry = DataTransferItem & {
+  webkitGetAsEntry?: () => FileSystemEntry | null;
+};
+
+const isFileEntry = (entry: FileSystemEntry): entry is FileSystemFileEntry => entry.isFile;
+const isDirectoryEntry = (entry: FileSystemEntry): entry is FileSystemDirectoryEntry => entry.isDirectory;
 const GUEST_HEARTBEAT_KEY = "longevityq_guest_heartbeat";
 // Allow extra slack so background-tab timer throttling (which can stretch to >60s) does not trigger false "closed" states.
 const GUEST_HEARTBEAT_GRACE_MS = 180000;
@@ -172,24 +180,26 @@ function currentSessionNames(s: Session): { first: string; last: string } {
   return { first, last };
 }
 
+const hasStringMessage = (err: unknown): err is { message: string } =>
+  Boolean(err && typeof err === "object" && "message" in err && typeof (err as { message?: unknown }).message === "string");
+
 function formatErrorMessage(err: unknown): string {
-  const raw =
-    typeof err === "string"
-      ? err
-      : err && typeof err === "object" && "message" in err && typeof (err as any).message === "string"
-      ? (err as any).message
-      : "";
+  const raw = typeof err === "string" ? err : hasStringMessage(err) ? err.message : "";
 
   if (raw) {
     const trimmed = raw.trim();
     if (trimmed.startsWith("{")) {
       try {
-        const parsed = JSON.parse(trimmed);
+        const parsed: unknown = JSON.parse(trimmed);
         if (parsed && typeof parsed === "object") {
-          if (typeof parsed.detail === "string") return parsed.detail;
-          if (Array.isArray(parsed.detail)) return parsed.detail.join("; ");
-          const values = Object.values(parsed)
-            .filter((v) => typeof v === "string")
+          const detail = (parsed as { detail?: unknown }).detail;
+          if (typeof detail === "string") return detail;
+          if (Array.isArray(detail)) {
+            const joined = detail.filter((value): value is string => typeof value === "string").join("; ");
+            if (joined) return joined;
+          }
+          const values = Object.values(parsed as Record<string, unknown>)
+            .filter((v): v is string => typeof v === "string")
             .join("; ");
           if (values) return values;
         }
@@ -209,9 +219,8 @@ function formatErrorMessage(err: unknown): string {
 
 function isNetworkError(err: unknown): boolean {
   if (err instanceof TypeError) return true;
-  if (err && typeof err === "object" && "message" in err) {
-    const msg = (err as any).message;
-    if (typeof msg === "string" && /network|fetch|failed to fetch/i.test(msg)) {
+  if (hasStringMessage(err)) {
+    if (/network|fetch|failed to fetch/i.test(err.message)) {
       return true;
     }
   }
@@ -302,17 +311,17 @@ function getRootFolderName(files: DroppedFile[]): string | null {
   return null;
 }
 
-async function readEntries(reader: any): Promise<any[]> {
+async function readEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
   return new Promise((resolve, reject) => {
     reader.readEntries(
-      (entries: any[]) => resolve(entries),
-      (err: unknown) => reject(err),
+      (entries) => resolve(entries),
+      (err) => reject(err instanceof Error ? err : new Error("Failed to read directory entries.")),
     );
   });
 }
 
-async function traverseEntry(entry: any, path: string): Promise<DroppedFile[]> {
-  if (entry.isFile) {
+async function traverseEntry(entry: FileSystemEntry, path: string): Promise<DroppedFile[]> {
+  if (isFileEntry(entry)) {
     return new Promise((resolve) => {
       entry.file(
         (file: File) => {
@@ -324,7 +333,7 @@ async function traverseEntry(entry: any, path: string): Promise<DroppedFile[]> {
     });
   }
 
-  if (entry.isDirectory) {
+  if (isDirectoryEntry(entry)) {
     const reader = entry.createReader();
     const results: DroppedFile[] = [];
     // Read entries in batches until directory is exhausted
@@ -345,10 +354,9 @@ async function traverseEntry(entry: any, path: string): Promise<DroppedFile[]> {
 
 async function collectFilesFromDataTransfer(dt: DataTransfer): Promise<DroppedFile[]> {
   const items = Array.from(dt.items ?? []);
-  const entries: any[] = [];
+  const entries: FileSystemEntry[] = [];
   for (const item of items) {
-    // @ts-ignore non-standard API supported by Chromium-based browsers
-    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+    const entry = (item as DataTransferItemWithEntry).webkitGetAsEntry?.() ?? null;
     if (entry) entries.push(entry);
   }
 
@@ -365,14 +373,14 @@ async function collectFilesFromDataTransfer(dt: DataTransfer): Promise<DroppedFi
 function filesFromFileList(list: FileList | null): DroppedFile[] {
   if (!list) return [];
   return Array.from(list).map((file) => {
-    const relativePath = (file as any).webkitRelativePath || file.name;
+    const relativePath = (file as FileWithRelativePath).webkitRelativePath || file.name;
     return { file, relativePath, name: file.name };
   });
 }
 
 export default function Operator({ onSessionReady }: { onSessionReady: (id: number) => void }) {
-  const [firstNameInput, setFirstNameInput] = useState("");
-  const [lastNameInput, setLastNameInput] = useState("");
+  const [firstNameInput, setFirstNameInput] = useState<string>("");
+  const [lastNameInput, setLastNameInput] = useState<string>("");
   const [session, setSession] = useState<Session | null>(null);
   const [uploads, setUploads] = useState<UploadMap>(() => createEmptyUploadMap());
   const [uploadErrors, setUploadErrors] = useState<UploadErrorMap>(() => createEmptyErrorMap());
@@ -387,22 +395,21 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [editedLastName, setEditedLastName] = useState<string>("");
   const [editedSex, setEditedSex] = useState<Sex | null>(null);
   const [lastDroppedFiles, setLastDroppedFiles] = useState<DroppedFile[]>([]);
-  const [backendDown, setBackendDown] = useState(false);
-  const [backendReady, setBackendReady] = useState(false);
-  const [hasPendingChanges, setHasPendingChanges] = useState(false);
-  const [shouldPulsePublish, setShouldPulsePublish] = useState(false);
-  const [shouldPulseUpload, setShouldPulseUpload] = useState(false);
+  const [backendDown, setBackendDown] = useState<boolean>(false);
+  const [backendReady, setBackendReady] = useState<boolean>(false);
+  const [hasPendingChanges, setHasPendingChanges] = useState<boolean>(false);
+  const [shouldPulsePublish, setShouldPulsePublish] = useState<boolean>(false);
+  const [shouldPulseUpload, setShouldPulseUpload] = useState<boolean>(false);
   const [sexSelection, setSexSelection] = useState<Sex | "">("");
-  const [fitPreview, setFitPreview] = useState(true);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  const [licenseModalOpen, setLicenseModalOpen] = useState(false);
+  const [fitPreview, setFitPreview] = useState<boolean>(true);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(false);
+  const [licenseModalOpen, setLicenseModalOpen] = useState<boolean>(false);
   const licenseModal = licenseModalOpen ? <ManageLicenseModal onClose={() => setLicenseModalOpen(false)} /> : null;
   const { status: licenseStatus, loading: licenseLoading } = useLicense();
   const licenseReady = licenseStatus ? licenseStatus.state === "valid" || licenseStatus.state === "disabled" : false;
   const waitingForLicense = licenseLoading && !licenseReady;
-  const needsActivation = !licenseLoading && !licenseReady;
   const [diagnosticsEntries, setDiagnosticsEntries] = useState<DiagnosticEntry[]>([]);
-  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState<boolean>(false);
   const [diagnosticsFetchError, setDiagnosticsFetchError] = useState<string | null>(null);
   const [livePreviewArea, setLivePreviewArea] = useState(() => ({
     width: FIT_MAX_DIMENSION,
@@ -412,13 +419,13 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     width: FIT_MAX_DIMENSION,
     height: FIT_MAX_DIMENSION,
   }));
-  const [presetsEnabled, setPresetsEnabled] = useState(false);
+  const [presetsEnabled, setPresetsEnabled] = useState<boolean>(false);
   const thresholdLimit = useThresholdLimitValue();
   const thresholdMax = useThresholdMaxValue();
   const visibleSeverities = useVisibleSeverities();
   const visibleSeveritiesSet = new Set<GeneralSeverity>(visibleSeverities as GeneralSeverity[]);
   const hasAnyUploads = useMemo(() => Object.values(uploads).some(Boolean), [uploads]);
-  const [showThresholdControls, setShowThresholdControls] = useState(false);
+  const [showThresholdControls, setShowThresholdControls] = useState<boolean>(false);
   const viewportWidth = PREVIEW_VIEWPORT.width;
   const viewportHeight = PREVIEW_VIEWPORT.height;
   const currentPreset = useMemo<PresetKey>(() => {
@@ -452,7 +459,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       notifyOperatorWindowClosed();
     };
 
-    notifyOperatorWindowOpen();
+    void notifyOperatorWindowOpen();
 
     if (typeof window === "undefined") {
       return () => {
@@ -524,11 +531,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       return;
     }
     if (isNetworkError(err)) {
-      setDiagnosticsFetchError("Backend unreachable. Ensure the Quantum Qi™ services are running, then try again.");
-      markBackendDown(err);
-    } else {
-      setDiagnosticsFetchError(formatErrorMessage(err));
-    }
+        setDiagnosticsFetchError("Backend unreachable. Ensure the Quantum Qi™ services are running, then try again.");
+        setBackendDown(true);
+      } else {
+        setDiagnosticsFetchError(formatErrorMessage(err));
+      }
   } finally {
     if (mountedRef.current) {
       setDiagnosticsLoading(false);
@@ -639,26 +646,28 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const isOperationActive = (ctx: OperationContext) =>
     mountedRef.current && !ctx.signal.aborted && operationSeqRef.current === ctx.seq;
 
-  const safeSetState = <Setter extends React.Dispatch<React.SetStateAction<any>>>(
-    ctx: OperationContext,
-    setter: Setter,
-    value: Parameters<Setter>[0],
-  ) => {
-    if (!isOperationActive(ctx)) return;
-    setter(value);
-  };
-
-  const applyState = <Setter extends React.Dispatch<React.SetStateAction<any>>>(
-    setter: Setter,
-    value: Parameters<Setter>[0],
+  function applyState<T, U extends T>(
+    setter: React.Dispatch<React.SetStateAction<T>>,
+    value: U,
     ctx?: OperationContext,
-  ) => {
+  ): void;
+  function applyState<T>(
+    setter: React.Dispatch<React.SetStateAction<T>>,
+    value: (prev: T) => T,
+    ctx?: OperationContext,
+  ): void;
+  function applyState<T>(
+    setter: React.Dispatch<React.SetStateAction<T>>,
+    value: React.SetStateAction<T>,
+    ctx?: OperationContext,
+  ) {
     if (ctx) {
-      safeSetState(ctx, setter, value);
-    } else {
-      setter(value);
+      if (!isOperationActive(ctx)) {
+        return;
+      }
     }
-  };
+    setter(value);
+  }
 
   useEffect(() => {
     if (!diagnosticsOpen) {
@@ -668,9 +677,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       }
       return;
     }
-    fetchDiagnostics();
+    void fetchDiagnostics();
     diagnosticsPollRef.current = window.setInterval(() => {
-      fetchDiagnostics();
+      void fetchDiagnostics();
     }, 15000);
     return () => {
       if (diagnosticsPollRef.current !== null) {
@@ -694,7 +703,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
   const isParsed = (kind: ReportKind) => parsedState[kind];
 
-  const readGuestHeartbeat = () => {
+  const readGuestHeartbeat = useCallback(() => {
     if (typeof window === "undefined") return null;
     try {
       const stored = window.localStorage.getItem(GUEST_HEARTBEAT_KEY);
@@ -702,12 +711,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     } catch {
       return null;
     }
-  };
+  }, []);
 
-  const guestHeartbeatAlive = () => {
+  const guestHeartbeatAlive = useCallback(() => {
     const beat = readGuestHeartbeat();
     return beat !== null && !Number.isNaN(beat) && Date.now() - beat < GUEST_HEARTBEAT_GRACE_MS;
-  };
+  }, [readGuestHeartbeat]);
 
   const markBackendUp = (ctx?: OperationContext) => {
     applyState(setBackendDown, false, ctx);
@@ -817,15 +826,15 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         applyState(setStatus, `Stored "${uploaded.filename}".`, operation);
       }
       return uploaded;
-    } catch (e: any) {
+    } catch (err) {
       if (operation.signal.aborted || !isOperationActive(operation)) {
         return null;
       }
-      const message = formatErrorMessage(e);
+      const message = formatErrorMessage(err);
       applyState(setUploadErrors, (prev) => ({ ...prev, [kind]: message }), operation);
       applyState(setError, message, operation);
       applyState(setStatus, `Upload failed for "${displayName}".`, operation);
-      markBackendDown(e, operation);
+      markBackendDown(err, operation);
       return null;
     }
   }
@@ -855,11 +864,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       }
       markBackendUp(operation);
       return true;
-    } catch (e: any) {
+    } catch (err) {
       if (operation.signal.aborted || !isOperationActive(operation)) {
         return false;
       }
-      const message = formatErrorMessage(e);
+      const message = formatErrorMessage(err);
       applyState(setError, message, operation);
       applyState(setUploadErrors, (prev) => ({ ...prev, [kind]: message }), operation);
       setParsedFor(kind, false, operation);
@@ -874,13 +883,13 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       } else if (kind === "toxins") {
         applyState(setStatus, "Parsing toxins report failed.", operation);
       }
-      markBackendDown(e, operation);
+      markBackendDown(err, operation);
       return false;
     }
   }
   const [stagedPreviewSessionId, setStagedPreviewSessionId] = useState<number | null>(null);
-  const [stagedPreviewVersion, setStagedPreviewVersion] = useState(0);
-  const [hasShownOnGuest, setHasShownOnGuest] = useState(false);
+  const [stagedPreviewVersion, setStagedPreviewVersion] = useState<number>(0);
+  const [hasShownOnGuest, setHasShownOnGuest] = useState<boolean>(false);
   const [guestWindowOpen, setGuestWindowOpen] = useState<boolean>(() => guestHeartbeatAlive());
 
   const livePreviewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -983,7 +992,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         autoOpenTimerRef.current = null;
       }
     };
-  }, [guestWindowOpen]);
+  }, [guestHeartbeatAlive, guestWindowOpen]);
 
   useEffect(() => {
     const computeWindowState = () => {
@@ -1046,7 +1055,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         };
         ws.onerror = () => {
           noteState(true);
-          try { ws?.close(); } catch {}
+          try {
+            ws?.close();
+          } catch {
+            /* noop */
+          }
         };
       } catch {
         noteState(true);
@@ -1070,7 +1083,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     return () => {
       disposed = true;
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      try { ws?.close(); } catch {}
+      try {
+        ws?.close();
+      } catch {
+        /* noop */
+      }
     };
   }, [base, buildWebSocketUrl, licenseReady]);
 
@@ -1172,7 +1189,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       if (lastDroppedFiles.length > 0) {
         await processDroppedFiles([...lastDroppedFiles]);
       }
-    } catch (e: any) {
+    } catch (err) {
       setSession((prev) =>
         prev
           ? {
@@ -1185,9 +1202,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           : prev,
       );
       setSexSelection(previous.sex ?? "");
-      setError(formatErrorMessage(e));
+      setError(formatErrorMessage(err));
       setStatus("Failed to update guest name.");
-      markBackendDown(e);
+      markBackendDown(err);
     }
   }
 
@@ -1493,16 +1510,19 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       markBackendUp(operation);
       applyState(setStatus, "Session is live. Staged preview refreshed below.", operation);
       applyState(setHasPendingChanges, false, operation);
-    } catch (e: any) {
+    } catch (err) {
       if (operation.signal.aborted || !isOperationActive(operation)) {
         return;
       }
-      const message = formatErrorMessage(e);
+      const message = formatErrorMessage(err);
       applyState(setError, message, operation);
       applyState(setStatus, "Publishing failed.", operation);
-      markBackendDown(e, operation);
+      markBackendDown(err, operation);
     }
   }
+
+  const onPublishRef = useRef(onPublish);
+  onPublishRef.current = onPublish;
 
   const applyPresetSelection = useCallback(
     async (key: PresetKey, options?: { autoPublish?: boolean; silent?: boolean }) => {
@@ -1533,10 +1553,13 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setError("");
 
       if (autoPublish) {
-        await onPublish(nextSelection, { force: true });
+        const publishHandler = onPublishRef.current;
+        if (publishHandler) {
+          await publishHandler(nextSelection, { force: true });
+        }
       }
     },
-    [onPublish, selectedReports, session],
+    [selectedReports, session],
   );
 
   const handlePresetButton = useCallback(
@@ -1591,10 +1614,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       );
       setStatus("Bound current session to guest screen.");
       setHasShownOnGuest(true);
-    } catch (e: any) {
-      setError(formatErrorMessage(e));
+    } catch (err) {
+      setError(formatErrorMessage(err));
       setStatus("Failed to bind guest screen.");
-      markBackendDown(e);
+      markBackendDown(err);
     }
   }
 
@@ -1608,10 +1631,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       );
       setStatus("Cleared guest screen.");
       setHasShownOnGuest(false);
-    } catch (e: any) {
-      setError(formatErrorMessage(e));
+    } catch (err) {
+      setError(formatErrorMessage(err));
       setStatus("Failed to clear guest screen.");
-      markBackendDown(e);
+      markBackendDown(err);
     }
   }
 
@@ -1706,7 +1729,13 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                     Female
                   </label>
                 </fieldset>
-                <Button type="button" variant="primary" size="icon" onClick={saveEditName} title="Save name">
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="icon"
+                  onClick={() => { void saveEditName(); }}
+                  title="Save name"
+                >
                   <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path d="M5 10.5l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -1764,108 +1793,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     );
   };
 
-  const renderCreateForm = () => (
-    <form
-      className="mt-3 flex flex-wrap items-center gap-2"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        const first = formatClientName(firstNameInput);
-        const last = formatClientName(lastNameInput);
-        if (!first) {
-          setError("Enter the guest's first name.");
-          setStatus("");
-          return;
-        }
-        if (!sexSelection) {
-          setError("Select the guest's gender.");
-          setStatus("");
-          return;
-        }
-        try {
-          setError("");
-          const full = formatFullName(first, last);
-          setStatus(`Creating session for ${full}…`);
-          const created = await createSession(first, last, sexSelection as Sex);
-          markBackendUp();
-          setSession(created);
-          setSexSelection(created.sex);
-          onSessionReady(created.id);
-          setStagedPreviewSessionId(created.published ? created.id : null);
-          setStagedPreviewVersion((v) => v + 1);
-          setHasShownOnGuest(false);
-          resetUploadState();
-          setFirstNameInput(first);
-          setLastNameInput(last);
-          const createdName = formatFullName(created.first_name, created.last_name);
-          setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next guest folder.");
-      try {
-        await setDisplaySession({
-          stagedSessionId: created.id,
-          stagedFirstName: created.first_name ?? first,
-          stagedFullName: formatFullName(created.first_name, created.last_name),
-          stagedSex: created.sex,
-        });
-        markBackendUp();
-      } catch (err) {
-        setError(formatErrorMessage(err));
-        markBackendDown(err);
-      }
-        } catch (err) {
-          setError(formatErrorMessage(err));
-          setStatus("Session creation failed.");
-          markBackendDown(err);
-        }
-      }}
-    >
-      <input
-        className={cn(darkInputClasses, "min-w-[180px]")}
-        placeholder="First name"
-        value={firstNameInput}
-        onChange={(e) => setFirstNameInput(e.target.value)}
-      />
-      <input
-        className={cn(darkInputClasses, "min-w-[180px]")}
-        placeholder="Last name (optional)"
-        value={lastNameInput}
-        onChange={(e) => setLastNameInput(e.target.value)}
-      />
-      <div className="flex items-center gap-3 text-[13px] text-text-secondary">
-        <span>Gender:</span>
-        <label className="flex items-center gap-1.5">
-          <input
-            type="radio"
-            name="session-sex-inline"
-            value="male"
-            checked={sexSelection === "male"}
-            onChange={() => setSexSelection("male")}
-            className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
-          />
-          Male
-        </label>
-        <label className="flex items-center gap-1.5">
-          <input
-            type="radio"
-            name="session-sex-inline"
-            value="female"
-            checked={sexSelection === "female"}
-            onChange={() => setSexSelection("female")}
-            className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
-          />
-          Female
-        </label>
-      </div>
-      <Button type="submit" variant="primary" disabled={!firstNameInput.trim() || !sexSelection}>
-        Create Session
-      </Button>
-    </form>
-  );
-
   const renderDropZone = () => (
     <div
       onDragEnter={handleDragHighlight}
       onDragOver={handleDragHighlight}
       onDragLeave={handleDragLeaveArea}
-      onDrop={handleDrop}
+      onDrop={(event) => { void handleDrop(event); }}
       className={cn(
         "flex h-full flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-border/70 bg-surface px-3 py-2.5 text-[11px] text-[#4b5563] shadow-sm transition-colors duration-150",
         {
@@ -1893,7 +1826,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         multiple
         className="hidden"
-        onChange={onFileInput}
+        onChange={(event) => { void onFileInput(event); }}
       />
     </div>
   );
@@ -1945,7 +1878,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               </div>
               <div className="ml-auto flex items-center gap-3">
                 <Button
-                  onClick={() => onPublish()}
+                  onClick={() => { void onPublish(); }}
                   disabled={disablePublish}
                   variant={publishButtonVariant}
                   className={cn(
@@ -2431,7 +2364,7 @@ useEffect(() => {
               size="sm"
               variant="soft"
               className="px-3"
-              onClick={() => fetchDiagnostics()}
+              onClick={() => { void fetchDiagnostics(); }}
               disabled={diagnosticsLoading}
             >
               Refresh
@@ -2605,7 +2538,7 @@ useEffect(() => {
         onDragEnter={handleDragHighlight}
         onDragOver={handleDragHighlight}
         onDragLeave={handleDragLeaveArea}
-        onDrop={handleDrop}
+        onDrop={(event) => { void handleDrop(event); }}
         className="flex flex-wrap items-start gap-4 px-3 py-3"
       >
         <div
@@ -2659,56 +2592,58 @@ useEffect(() => {
                   </p>
                   <form
                     className="mt-5 flex flex-col gap-2.5"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const first = formatClientName(firstNameInput);
-                  const last = formatClientName(lastNameInput);
-                  if (!first || !last) {
-                    setError("Enter the guest's first and last name.");
-                    setStatus("");
-                    return;
-                  }
-                  if (!sexSelection) {
-                    setError("Select the guest's gender.");
-                    setStatus("");
-                    return;
-                  }
-                  try {
-                    setError("");
-                    const full = formatFullName(first, last);
-                    setStatus(`Creating session for ${full}…`);
-                    const created = await createSession(first, last, sexSelection as Sex);
-                    markBackendUp();
-                    setSession(created);
-                    setSexSelection(created.sex);
-                    onSessionReady(created.id);
-                    setStagedPreviewSessionId(created.published ? created.id : null);
-                    setStagedPreviewVersion((v) => v + 1);
-                    setHasShownOnGuest(false);
-                    resetUploadState();
-                    setFirstNameInput(first);
-                    setLastNameInput(last);
-                    const createdName = formatFullName(created.first_name, created.last_name);
-                    setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next guest folder.");
-                    try {
-                      await setDisplaySession({
-                        stagedSessionId: created.id,
-                        stagedFirstName: created.first_name ?? first,
-                        stagedFullName: formatFullName(created.first_name, created.last_name),
-                        stagedSex: created.sex,
-                      });
-                      markBackendUp();
-                    } catch (err) {
-                      setError(formatErrorMessage(err));
-                      markBackendDown(err);
-                    }
-                  } catch (err) {
-                    setError(formatErrorMessage(err));
-                    setStatus("Session creation failed.");
-                    markBackendDown(err);
-                  }
-                }}
-              >
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void (async () => {
+                        const first = formatClientName(firstNameInput);
+                        const last = formatClientName(lastNameInput);
+                        if (!first || !last) {
+                          setError("Enter the guest's first and last name.");
+                          setStatus("");
+                          return;
+                        }
+                        if (!sexSelection) {
+                          setError("Select the guest's gender.");
+                          setStatus("");
+                          return;
+                        }
+                        try {
+                          setError("");
+                          const full = formatFullName(first, last);
+                          setStatus(`Creating session for ${full}…`);
+                          const created = await createSession(first, last, sexSelection);
+                          markBackendUp();
+                          setSession(created);
+                          setSexSelection(created.sex);
+                          onSessionReady(created.id);
+                          setStagedPreviewSessionId(created.published ? created.id : null);
+                          setStagedPreviewVersion((v) => v + 1);
+                          setHasShownOnGuest(false);
+                          resetUploadState();
+                          setFirstNameInput(first);
+                          setLastNameInput(last);
+                          const createdName = formatFullName(created.first_name, created.last_name);
+                          setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next guest folder.");
+                          try {
+                            await setDisplaySession({
+                              stagedSessionId: created.id,
+                              stagedFirstName: created.first_name ?? first,
+                              stagedFullName: formatFullName(created.first_name, created.last_name),
+                              stagedSex: created.sex,
+                            });
+                            markBackendUp();
+                          } catch (err) {
+                            setError(formatErrorMessage(err));
+                            markBackendDown(err);
+                          }
+                        } catch (err) {
+                          setError(formatErrorMessage(err));
+                          setStatus("Session creation failed.");
+                          markBackendDown(err);
+                        }
+                      })();
+                    }}
+                  >
                 <div className="flex flex-col gap-2.5 sm:flex-row">
                   <input
                     className={cn(darkInputClasses, "flex-1 text-[14px]" )}
