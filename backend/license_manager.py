@@ -415,10 +415,10 @@ class LicenseManager:
                     message = "Seat limit reached for this email."
                 elif detail == "email_not_allowed":
                     code = detail
-                    message = "This email is not allowed to activate licenses."
+                    message = "There are currently no seats associated with this email."
                 else:
                     code = "email_forbidden"
-                    message = "Email not allowed or seat limit reached."
+                    message = "The use of this email is forbidden."
             elif exc.code == 400:
                 code = detail or "invalid_request"
                 message = "Validation error. Check the email and try again."

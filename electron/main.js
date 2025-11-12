@@ -1285,6 +1285,9 @@ async function createWindows() {
   guestWindow = new BrowserWindow({
     width: 1280,
     height: 720,
+    fullscreen: true,
+    frame: false,
+    autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
