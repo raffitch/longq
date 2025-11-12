@@ -14,7 +14,11 @@ export interface OverallScoreCardProps {
   nextSteps?: string[];
 }
 
-const DEFAULT_NEXT_STEPS = ["Prioritize hydration", "Maintain consistent rest patterns", "Reintroduce moderate foods"];
+const DEFAULT_NEXT_STEPS = [
+  "Prioritize hydration",
+  "Maintain consistent rest patterns",
+  "Reintroduce moderate foods",
+];
 
 export default function OverallScoreCard({
   overallScore = 93,
@@ -46,14 +50,20 @@ export default function OverallScoreCard({
     <div className="flex flex-col gap-8 rounded-2xl bg-bg-card p-8 shadow-card md:p-10">
       <div className="flex flex-col items-center gap-4 text-center">
         <span className="text-2xl text-white/70 md:text-3xl">Overall Score</span>
-        <span className="text-8xl font-bold text-white md:text-9xl">{Math.round(overallScore)}</span>
-        <span className={`rounded-full px-4 py-1 text-xl font-medium md:text-2xl ${statusBadge.bgColor} ${statusBadge.textColor}`}>
+        <span className="text-8xl font-bold text-white md:text-9xl">
+          {Math.round(overallScore)}
+        </span>
+        <span
+          className={`rounded-full px-4 py-1 text-xl font-medium md:text-2xl ${statusBadge.bgColor} ${statusBadge.textColor}`}
+        >
           {scoreStatus}
         </span>
       </div>
 
       <div className="rounded-xl bg-white/5 p-6 shadow-inner-card md:p-8">
-        <h4 className="mb-6 text-2xl font-normal text-text-secondary md:text-[28px]">Priority Breakdown:</h4>
+        <h4 className="mb-6 text-2xl font-normal text-text-secondary md:text-[28px]">
+          Priority Breakdown:
+        </h4>
         <div className="flex flex-col gap-4">
           {counts.map(({ severity, count }) => {
             const meta = GENERAL_SEVERITY_META[severity];
@@ -62,7 +72,9 @@ export default function OverallScoreCard({
                 <div className="flex items-center gap-4">
                   <div className="h-4 w-4 rounded-full" style={{ backgroundColor: meta.color }} />
                   <div className="flex flex-col">
-                    <span className="whitespace-nowrap text-xl font-medium text-white/70 md:text-2xl">{meta.label}</span>
+                    <span className="whitespace-nowrap text-xl font-medium text-white/70 md:text-2xl">
+                      {meta.label}
+                    </span>
                     <span className="text-sm text-text-secondary/70">{meta.range}</span>
                   </div>
                 </div>

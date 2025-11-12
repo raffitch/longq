@@ -79,9 +79,7 @@ const toDisplayName = (name: string): string => {
     .replace(/[_-]+/g, " ")
     .split(" ")
     .filter(Boolean);
-  return parts
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
+  return parts.map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join(" ");
 };
 
 export const classifySeverity = makeSeverityClassifier(GENERAL_SEVERITY_THRESHOLDS);
@@ -232,42 +230,42 @@ const CHAKRA_IDS = [
 
 const CHAKRA_ALIAS_MAP: Record<string, string> = {
   "chakra 1": CHAKRA_IDS[0],
-  "chakra1": CHAKRA_IDS[0],
+  chakra1: CHAKRA_IDS[0],
   "chakra-1": CHAKRA_IDS[0],
   "1": CHAKRA_IDS[0],
   "01": CHAKRA_IDS[0],
   root: CHAKRA_IDS[0],
   "root chakra": CHAKRA_IDS[0],
   "chakra 2": CHAKRA_IDS[1],
-  "chakra2": CHAKRA_IDS[1],
+  chakra2: CHAKRA_IDS[1],
   "chakra-2": CHAKRA_IDS[1],
   "2": CHAKRA_IDS[1],
   "02": CHAKRA_IDS[1],
   sacral: CHAKRA_IDS[1],
   "sacral chakra": CHAKRA_IDS[1],
   "chakra 3": CHAKRA_IDS[2],
-  "chakra3": CHAKRA_IDS[2],
+  chakra3: CHAKRA_IDS[2],
   "chakra-3": CHAKRA_IDS[2],
   "3": CHAKRA_IDS[2],
   "03": CHAKRA_IDS[2],
   "solar plexus": CHAKRA_IDS[2],
   "solar plexus chakra": CHAKRA_IDS[2],
   "chakra 4": CHAKRA_IDS[3],
-  "chakra4": CHAKRA_IDS[3],
+  chakra4: CHAKRA_IDS[3],
   "chakra-4": CHAKRA_IDS[3],
   "4": CHAKRA_IDS[3],
   "04": CHAKRA_IDS[3],
   heart: CHAKRA_IDS[3],
   "heart chakra": CHAKRA_IDS[3],
   "chakra 5": CHAKRA_IDS[4],
-  "chakra5": CHAKRA_IDS[4],
+  chakra5: CHAKRA_IDS[4],
   "chakra-5": CHAKRA_IDS[4],
   "5": CHAKRA_IDS[4],
   "05": CHAKRA_IDS[4],
   throat: CHAKRA_IDS[4],
   "throat chakra": CHAKRA_IDS[4],
   "chakra 6": CHAKRA_IDS[5],
-  "chakra6": CHAKRA_IDS[5],
+  chakra6: CHAKRA_IDS[5],
   "chakra-6": CHAKRA_IDS[5],
   "6": CHAKRA_IDS[5],
   "06": CHAKRA_IDS[5],
@@ -275,7 +273,7 @@ const CHAKRA_ALIAS_MAP: Record<string, string> = {
   "third eye": CHAKRA_IDS[5],
   "third eye chakra": CHAKRA_IDS[5],
   "chakra 7": CHAKRA_IDS[6],
-  "chakra7": CHAKRA_IDS[6],
+  chakra7: CHAKRA_IDS[6],
   "chakra-7": CHAKRA_IDS[6],
   "7": CHAKRA_IDS[6],
   "07": CHAKRA_IDS[6],
@@ -333,9 +331,10 @@ export function transformFoodData(raw: RawFoodData | null | undefined): Map<stri
       const existing = categories.get(displayName) ?? [];
       for (const item of category.items) {
         if (typeof item.score !== "number") continue;
-        const severity = (item.severity && ["high", "moderate", "medium", "low"].includes(item.severity))
-          ? (item.severity as FoodSeverity)
-          : classifyFoodSeverity(item.score);
+        const severity =
+          item.severity && ["high", "moderate", "medium", "low"].includes(item.severity)
+            ? (item.severity as FoodSeverity)
+            : classifyFoodSeverity(item.score);
         existing.push({
           name: item.name,
           score: item.score,
@@ -350,7 +349,10 @@ export function transformFoodData(raw: RawFoodData | null | undefined): Map<stri
   return categories;
 }
 
-export function transformNutritionData(raw: RawNutritionData | null | undefined, limit = 10): NutritionData {
+export function transformNutritionData(
+  raw: RawNutritionData | null | undefined,
+  limit = 10,
+): NutritionData {
   void limit;
   const items: NutrientItem[] = (raw?.items ?? [])
     .map((item) => ({
@@ -499,7 +501,9 @@ export function aggregateInsights(
 
   const categories: Array<{ name: string; items: FoodItem[] }> = [];
 
-  const orderLookup = new Map<string, number>(FOOD_CATEGORY_ORDER.map((name, index) => [name, index]));
+  const orderLookup = new Map<string, number>(
+    FOOD_CATEGORY_ORDER.map((name, index) => [name, index]),
+  );
   const sortedKeys = Array.from(foodMap.keys()).sort((a, b) => {
     const aIndex = orderLookup.has(a) ? orderLookup.get(a)! : Number.MAX_SAFE_INTEGER;
     const bIndex = orderLookup.has(b) ? orderLookup.get(b)! : Number.MAX_SAFE_INTEGER;
@@ -507,10 +511,13 @@ export function aggregateInsights(
     return a.localeCompare(b);
   });
 
-  const severityTotals = GENERAL_SEVERITY_ORDER.reduce<Record<GeneralSeverity, number>>((acc, severity) => {
-    acc[severity] = 0;
-    return acc;
-  }, {} as Record<GeneralSeverity, number>);
+  const severityTotals = GENERAL_SEVERITY_ORDER.reduce<Record<GeneralSeverity, number>>(
+    (acc, severity) => {
+      acc[severity] = 0;
+      return acc;
+    },
+    {} as Record<GeneralSeverity, number>,
+  );
 
   sortedKeys.forEach((key) => {
     const items = foodMap.get(key) ?? [];
@@ -684,13 +691,14 @@ export function aggregateInsights(
   const hasChakras = Object.keys(sanitizedChakras).length > 0;
   const hasMetrics = Object.keys(sanitizedMetrics).length > 0;
 
-  const energyMap = hasOrgans || hasChakras || hasMetrics
-    ? {
-        organs: sanitizedOrgans,
-        chakras: sanitizedChakras,
-        metrics: sanitizedMetrics,
-      }
-    : null;
+  const energyMap =
+    hasOrgans || hasChakras || hasMetrics
+      ? {
+          organs: sanitizedOrgans,
+          chakras: sanitizedChakras,
+          metrics: sanitizedMetrics,
+        }
+      : null;
 
   return {
     categories,
@@ -707,7 +715,10 @@ export function aggregateInsights(
   };
 }
 
-function buildNextSteps(topHighItems: Array<{ category: string; item: { name: string } }>, counts: PriorityCounts): string[] {
+function buildNextSteps(
+  topHighItems: Array<{ category: string; item: { name: string } }>,
+  counts: PriorityCounts,
+): string[] {
   const steps: string[] = [];
 
   if (topHighItems.length) {
@@ -729,7 +740,9 @@ function buildNextSteps(topHighItems: Array<{ category: string; item: { name: st
   }
 
   if (counts.moderateCount + counts.highCount + counts.veryHighCount > 0) {
-    steps.push("Rotate moderate- and high-priority foods and allow 72 hours before reintroducing them.");
+    steps.push(
+      "Rotate moderate- and high-priority foods and allow 72 hours before reintroducing them.",
+    );
   }
 
   if (counts.highCount + counts.veryHighCount === 0) {

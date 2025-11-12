@@ -60,16 +60,18 @@ export const GENERAL_SEVERITY_THRESHOLDS: Array<{ min: number; severity: General
   { min: 0, severity: "very low" },
 ];
 
-export const FOOD_SEVERITY_THRESHOLDS: Array<{ min: number; severity: "high" | "moderate" | "medium" | "low" }> = [
+export const FOOD_SEVERITY_THRESHOLDS: Array<{
+  min: number;
+  severity: "high" | "moderate" | "medium" | "low";
+}> = [
   { min: 90, severity: "high" },
   { min: 80, severity: "moderate" },
   { min: 65, severity: "medium" },
   { min: 0, severity: "low" },
 ];
 
-export const makeSeverityClassifier = <S extends string>(
-  thresholds: Array<{ min: number; severity: S }>,
-) =>
+export const makeSeverityClassifier =
+  <S extends string>(thresholds: Array<{ min: number; severity: S }>) =>
   (score: number | undefined | null): S => {
     const value = Number.isFinite(score) ? Math.abs(Number(score)) : 0;
     for (const { min, severity } of thresholds) {

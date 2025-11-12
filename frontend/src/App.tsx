@@ -17,7 +17,8 @@ export default function App() {
               <div className="w-full max-w-[480px] rounded-3xl border border-border bg-surface/90 p-8 text-center shadow-surface-lg">
                 <h1 className="text-[30px] font-semibold">Quantum Qi™</h1>
                 <p className="mt-2 text-[14px] text-text-secondary">
-                  Desktop companion for the Operator Console and Guest display. Pick a screen to get started.
+                  Desktop companion for the Operator Console and Guest display. Pick a screen to get
+                  started.
                 </p>
                 <div className="mt-6 space-y-3">
                   <Link className="block" to="/operator">

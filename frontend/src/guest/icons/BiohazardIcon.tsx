@@ -16,8 +16,20 @@ const BiohazardIcon = (props: React.SVGProps<SVGSVGElement>) => (
       strokeLinecap="round"
       strokeLinejoin="round"
     />
-    <path d="M12 7V3" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M12 11V7" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <path
+      d="M12 7V3"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M12 11V7"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
     <path
       d="M12 21a9 9 0 0 0 9-9h-3a6 6 0 0 1-6 6v3"
       stroke="currentColor"

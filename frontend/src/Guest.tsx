@@ -44,7 +44,9 @@ export default function Guest() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [serverDown, setServerDown] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
-  const licenseReady = licenseStatus ? licenseStatus.state === "valid" || licenseStatus.state === "disabled" : false;
+  const licenseReady = licenseStatus
+    ? licenseStatus.state === "valid" || licenseStatus.state === "disabled"
+    : false;
   const waitingForLicense = licenseLoading && !licenseReady;
   const needsActivation = !licenseLoading && !licenseReady;
 
@@ -79,7 +81,11 @@ export default function Guest() {
       heavyMetalsTransformed.length > 0 ||
       hormonesTransformed.length > 0 ||
       toxinsTransformed.length > 0 ||
-      Boolean(energyMap && (Object.keys(energyMap.organs ?? {}).length || Object.keys(energyMap.chakras ?? {}).length));
+      Boolean(
+        energyMap &&
+          (Object.keys(energyMap.organs ?? {}).length ||
+            Object.keys(energyMap.chakras ?? {}).length),
+      );
     if (!hasAnyData) {
       return null;
     }
@@ -94,8 +100,7 @@ export default function Guest() {
   }, [data, nutrition, heavyMetals, hormones, toxins, energyMap]);
 
   const formatPreviewMessage = (err: unknown): string => {
-    const raw =
-      err instanceof Error ? err.message : typeof err === "string" ? err : "";
+    const raw = err instanceof Error ? err.message : typeof err === "string" ? err : "";
     if (!raw) return "Preview unavailable.";
     const trimmed = raw.trim();
     if (trimmed.startsWith("{")) {
@@ -136,15 +141,19 @@ export default function Guest() {
       if (!d.session_id) {
         lastSessionId.current = null;
         const stagedFirst =
-          (d.staged_first_name ??
+          (
+            d.staged_first_name ??
             d.first_name ??
-            (d.client_name ? d.client_name.split(" ", 1)[0] : null))?.trim() || null;
+            (d.client_name ? d.client_name.split(" ", 1)[0] : null)
+          )?.trim() || null;
         const stagedFull =
-          (d.staged_full_name ??
+          (
+            d.staged_full_name ??
             d.client_name ??
             (d.first_name || d.last_name
               ? [d.first_name, d.last_name].filter(Boolean).join(" ")
-              : null))?.trim() || null;
+              : null)
+          )?.trim() || null;
         setFirstName(stagedFirst);
         setClientFullName(stagedFull ?? stagedFirst);
         setSex(d.staged_sex ?? "male");
@@ -157,11 +166,19 @@ export default function Guest() {
         return;
       }
       const stagedFirst =
-        (d.staged_first_name ?? d.first_name ?? (d.client_name ? d.client_name.split(" ", 1)[0] : null))?.trim() || null;
+        (
+          d.staged_first_name ??
+          d.first_name ??
+          (d.client_name ? d.client_name.split(" ", 1)[0] : null)
+        )?.trim() || null;
       const stagedFull =
-        (d.staged_full_name ??
+        (
+          d.staged_full_name ??
           d.client_name ??
-          (d.first_name || d.last_name ? [d.first_name, d.last_name].filter(Boolean).join(" ") : null))?.trim() || null;
+          (d.first_name || d.last_name
+            ? [d.first_name, d.last_name].filter(Boolean).join(" ")
+            : null)
+        )?.trim() || null;
       setFirstName(stagedFirst ?? null);
       setClientFullName(stagedFull ?? stagedFirst ?? null);
       setSex(d.sex ?? d.staged_sex ?? "male");
@@ -286,15 +303,21 @@ export default function Guest() {
     const connectWithUrl = (wsUrl: string) => {
       try {
         ws = new WebSocket(wsUrl);
-        ws.onopen = () => { noteServerState(false); };
-        ws.onmessage = () => { void refreshOnce(); };
+        ws.onopen = () => {
+          noteServerState(false);
+        };
+        ws.onmessage = () => {
+          void refreshOnce();
+        };
         ws.onclose = () => {
           noteServerState(true);
           reconnectTimer = window.setTimeout(attemptConnect, 3000);
         };
         ws.onerror = () => {
           noteServerState(true);
-          try { ws?.close(); } catch {
+          try {
+            ws?.close();
+          } catch {
             /* noop */
           }
         };
@@ -317,14 +340,18 @@ export default function Guest() {
     };
 
     attemptConnect();
-    const t = window.setInterval(() => { void refreshOnce(); }, 30000);
+    const t = window.setInterval(() => {
+      void refreshOnce();
+    }, 30000);
     void refreshOnce();
 
     return () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       clearInterval(t);
-      try { ws?.close(); } catch {
+      try {
+        ws?.close();
+      } catch {
         /* noop */
       }
     };
@@ -429,7 +456,9 @@ export default function Guest() {
     }
 
     void loadPreview();
-    const timer = window.setInterval(() => { void loadPreview(); }, 15000);
+    const timer = window.setInterval(() => {
+      void loadPreview();
+    }, 15000);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -452,8 +481,8 @@ export default function Guest() {
           <div className="max-w-[460px] space-y-3">
             <h1 className="text-[28px] font-semibold">Activation Required</h1>
             <p className="text-[15px] text-text-secondary">
-              The operator license has not been activated on this workstation. Please return to the Operator
-              Console window, complete activation, and relaunch the guest display.
+              The operator license has not been activated on this workstation. Please return to the
+              Operator Console window, complete activation, and relaunch the guest display.
             </p>
           </div>
         </div>
@@ -472,7 +501,11 @@ export default function Guest() {
                 className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-cyan-400/40 blur-3xl"
                 aria-hidden="true"
               />
-              <img src="/quantum-qi-logo.png" alt="Quantum Qi™ logo" className="mx-auto w-40 max-w-[60vw]" />
+              <img
+                src="/quantum-qi-logo.png"
+                alt="Quantum Qi™ logo"
+                className="mx-auto w-40 max-w-[60vw]"
+              />
             </div>
             <div className="flex flex-col items-center gap-1.5">
               <h1 className="guest-welcome-title font-logo text-text-primary">
@@ -489,7 +522,9 @@ export default function Guest() {
                 aria-hidden="true"
               />
               <p className="guest-welcome-instructions text-slate-300">
-                {waitingName ? `Preparing ${waitingName}'s experience…` : "Preparing your experience…"}
+                {waitingName
+                  ? `Preparing ${waitingName}'s experience…`
+                  : "Preparing your experience…"}
               </p>
             </div>
           </div>
@@ -501,7 +536,8 @@ export default function Guest() {
         <div className="max-w-md space-y-4">
           <h1 className="text-3xl font-bold">Connection Lost</h1>
           <p className="text-lg text-slate-300">
-            This session has been terminated. Close this window and restart the program once the console is back online.
+            This session has been terminated. Close this window and restart the program once the
+            console is back online.
           </p>
         </div>
       </div>
@@ -514,8 +550,12 @@ export default function Guest() {
       return (
         <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f1114] px-6 text-center text-slate-100">
           <div className="max-w-lg space-y-4">
-            <span className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-300">Staged Preview</span>
-            {clientFullName && <h1 className="text-3xl font-semibold text-text-primary">{clientFullName}</h1>}
+            <span className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-300">
+              Staged Preview
+            </span>
+            {clientFullName && (
+              <h1 className="text-3xl font-semibold text-text-primary">{clientFullName}</h1>
+            )}
             <p className="text-lg text-slate-300">{message}</p>
           </div>
         </div>
@@ -531,7 +571,11 @@ export default function Guest() {
               className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-cyan-400/40 blur-3xl"
               aria-hidden="true"
             />
-            <img src="/quantum-qi-logo.png" alt="Quantum Qi™ logo" className="mx-auto w-52 max-w-[70vw]" />
+            <img
+              src="/quantum-qi-logo.png"
+              alt="Quantum Qi™ logo"
+              className="mx-auto w-52 max-w-[70vw]"
+            />
           </div>
           <div className="flex flex-col items-center gap-1.5">
             <h1 className="guest-welcome-title font-logo text-text-primary">
@@ -546,7 +590,9 @@ export default function Guest() {
             {displayName ? `Welcome ${displayName}` : "Welcome"}
           </p>
           <p className="guest-welcome-instructions text-slate-300">
-            {hasActiveSession ? "Your wellness journey is in process" : "Your wellness journey is about to begin"}
+            {hasActiveSession
+              ? "Your wellness journey is in process"
+              : "Your wellness journey is about to begin"}
           </p>
         </div>
       </div>

@@ -2,7 +2,13 @@ import React from "react";
 
 const GrainIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" {...props}>
-    <path d="M12.014 21.514v-3.75" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <path
+      d="M12.014 21.514v-3.75"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
     <path
       d="m5.93 9.504-.43 1.604c-.712 2.659.866 5.391 3.524 6.105l2.99.801v-3.44c-.164-2.105-1.637-3.879-3.676-4.426l-2.408-.644Z"
       stroke="currentColor"

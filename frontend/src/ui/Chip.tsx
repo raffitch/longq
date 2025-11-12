@@ -20,13 +20,15 @@ type ChipProps = React.HTMLAttributes<HTMLSpanElement> & {
   className?: ClassValue;
 };
 
-const Chip = React.forwardRef<HTMLSpanElement, ChipProps>(({ className, variant = "default", children, ...props }, ref) => {
-  return (
-    <span ref={ref} className={cn(baseClasses, variantClasses[variant], className)} {...props}>
-      {children}
-    </span>
-  );
-});
+const Chip = React.forwardRef<HTMLSpanElement, ChipProps>(
+  ({ className, variant = "default", children, ...props }, ref) => {
+    return (
+      <span ref={ref} className={cn(baseClasses, variantClasses[variant], className)} {...props}>
+        {children}
+      </span>
+    );
+  },
+);
 
 Chip.displayName = "Chip";
 

@@ -1,6 +1,7 @@
 const DEV_MODE = Boolean(import.meta.env.DEV);
 
-const globalScope = typeof globalThis !== "undefined" ? (globalThis as Record<string, unknown>) : {};
+const globalScope =
+  typeof globalThis !== "undefined" ? (globalThis as Record<string, unknown>) : {};
 
 function readInjectedBase(): string | null {
   const injected = globalScope.__LONGQ_API_BASE__;
@@ -90,11 +91,27 @@ function authHeaders(headers: Record<string, string> = {}): Record<string, strin
 
 export type ReportKind = "food" | "heavy-metals" | "hormones" | "nutrition" | "toxins" | "peek";
 export type Sex = "male" | "female";
-export type Session = { id:number; code:string; client_name:string; first_name:string|null; last_name:string|null; folder_name:string|null; state:string; published:boolean; sex: Sex };
-export type FileOut = { id:number; kind:string; filename:string; status:string; error?:string };
-export type ParsedOut<T=unknown> = { session_id:number; kind:string; data:T };
-export type BannerOut = { message:string };
-export type ParsedBundleOut = { session_id:number; reports:Record<string, unknown> };
+export type Session = {
+  id: number;
+  code: string;
+  client_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  folder_name: string | null;
+  state: string;
+  published: boolean;
+  sex: Sex;
+};
+export type FileOut = {
+  id: number;
+  kind: string;
+  filename: string;
+  status: string;
+  error?: string;
+};
+export type ParsedOut<T = unknown> = { session_id: number; kind: string; data: T };
+export type BannerOut = { message: string };
+export type ParsedBundleOut = { session_id: number; reports: Record<string, unknown> };
 export type DiagnosticEntry = {
   code: string;
   level: string;
@@ -144,7 +161,11 @@ async function ok<T>(r: Response): Promise<T> {
   return parsed as T;
 }
 
-export async function createSession(first_name: string, last_name: string, sex: Sex): Promise<Session> {
+export async function createSession(
+  first_name: string,
+  last_name: string,
+  sex: Sex,
+): Promise<Session> {
   return ok(
     await fetch(`${BASE}/sessions`, {
       method: "POST",
@@ -154,25 +175,35 @@ export async function createSession(first_name: string, last_name: string, sex: 
   );
 }
 export async function updateSession(
-  sessionId:number,
-  data:{client_name?:string; first_name?:string; last_name?:string; sex?: Sex},
+  sessionId: number,
+  data: { client_name?: string; first_name?: string; last_name?: string; sex?: Sex },
 ): Promise<Session> {
-  return ok(await fetch(`${BASE}/sessions/${sessionId}`, {
-    method: "PATCH",
-    headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify(data),
-  }));
+  return ok(
+    await fetch(`${BASE}/sessions/${sessionId}`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(data),
+    }),
+  );
 }
-export async function banner(sessionId:number): Promise<BannerOut> {
+export async function banner(sessionId: number): Promise<BannerOut> {
   return ok(await fetch(`${BASE}/sessions/${sessionId}/banner`, { headers: authHeaders() }));
 }
-export async function uploadPdf(sessionId:number, kind:ReportKind, file:File): Promise<FileOut> {
+export async function uploadPdf(sessionId: number, kind: ReportKind, file: File): Promise<FileOut> {
   const fd = new FormData();
   fd.append("file", file);
-  return ok(await fetch(`${BASE}/sessions/${sessionId}/upload/${kind}`, { method:"POST", body: fd, headers: authHeaders() }));
+  return ok(
+    await fetch(`${BASE}/sessions/${sessionId}/upload/${kind}`, {
+      method: "POST",
+      body: fd,
+      headers: authHeaders(),
+    }),
+  );
 }
-export async function parseFile(fileId:number): Promise<ParsedOut> {
-  return ok(await fetch(`${BASE}/files/${fileId}/parse`, { method:"POST", headers: authHeaders() }));
+export async function parseFile(fileId: number): Promise<ParsedOut> {
+  return ok(
+    await fetch(`${BASE}/files/${fileId}/parse`, { method: "POST", headers: authHeaders() }),
+  );
 }
 export async function publish(
   sessionId: number,
@@ -195,7 +226,7 @@ export async function getParsedBundle(sessionId: number): Promise<ParsedBundleOu
   return ok(await fetch(`${BASE}/sessions/${sessionId}/parsed`, { headers: authHeaders() }));
 }
 
-export async function getSession(sessionId:number): Promise<Session> {
+export async function getSession(sessionId: number): Promise<Session> {
   return ok(await fetch(`${BASE}/sessions/${sessionId}`, { headers: authHeaders() }));
 }
 
@@ -207,7 +238,7 @@ export type DisplaySessionPayload = {
   stagedSex?: Sex | null;
 };
 
-export async function setDisplaySession(payload: DisplaySessionPayload): Promise<{ok:boolean}> {
+export async function setDisplaySession(payload: DisplaySessionPayload): Promise<{ ok: boolean }> {
   const body: Record<string, unknown> = {};
   if ("sessionId" in payload) {
     body.session_id = payload.sessionId;

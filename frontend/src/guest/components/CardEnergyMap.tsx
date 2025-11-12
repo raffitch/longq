@@ -310,7 +310,7 @@ export default function CardEnergyMap({
       const isStructure = definition.category === "structure";
       const providedValue = isStructure ? 100 : organValueMap.get(definition.id);
       const hasValue = isStructure || organValueMap.has(definition.id);
-      const clampedValue = isStructure ? 100 : providedValue ?? 0;
+      const clampedValue = isStructure ? 100 : (providedValue ?? 0);
       const normalizedValue = Math.max(0, Math.min(100, clampedValue));
       const priority = isStructure ? null : getPriorityForValue(normalizedValue);
       const metricColor = isStructure ? STRUCTURE_COLOR : hasValue ? priority!.color : "#9CA3AF";
@@ -434,7 +434,6 @@ export default function CardEnergyMap({
         }
       : undefined;
 
-
   return (
     <div className="flex h-full flex-col gap-6 rounded-2xl bg-bg-card px-8 py-9 shadow-card">
       <div className="grid gap-5 md:grid-cols-4 md:grid-rows-[auto_minmax(0,1fr)] md:gap-6 min-h-0">
@@ -462,22 +461,36 @@ export default function CardEnergyMap({
             className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">{resolvedSectionTitle}</span>
+              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">
+                {resolvedSectionTitle}
+              </span>
               <span className="text-sm text-text-tertiary">Value</span>
             </div>
 
             <div className="flex flex-col gap-2.5">
               {anthroposSliderMetrics.map((metric) => (
-                <div key={`anthropos-slider-${metric.id}`} className="anthropos-slider flex flex-col gap-1.5">
+                <div
+                  key={`anthropos-slider-${metric.id}`}
+                  className="anthropos-slider flex flex-col gap-1.5"
+                >
                   <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium uppercase tracking-wide" style={{ color: metric.color }}>
+                    <span
+                      className="font-medium uppercase tracking-wide"
+                      style={{ color: metric.color }}
+                    >
                       {metric.name}
                     </span>
                     <div className="flex items-center justify-end gap-0.5 text-right">
-                      <span className="text-right font-medium uppercase tracking-wide" style={{ color: metric.color }}>
+                      <span
+                        className="text-right font-medium uppercase tracking-wide"
+                        style={{ color: metric.color }}
+                      >
                         {metric.priorityLabel}
                       </span>
-                      <span className="w-8 text-right font-medium uppercase tracking-wide tabular-nums" style={{ color: metric.color }}>
+                      <span
+                        className="w-8 text-right font-medium uppercase tracking-wide tabular-nums"
+                        style={{ color: metric.color }}
+                      >
                         {metric.hasValue ? metric.value : "—"}
                       </span>
                     </div>
@@ -534,7 +547,8 @@ export default function CardEnergyMap({
                 const glowOpacity = chakra.hasValue ? 0.18 + intensity * 0.32 : 0.12;
                 const fillOpacity = chakra.hasValue ? 0.85 : 0.35;
                 const strokeOpacity = chakra.hasValue ? 0.82 : 0.4;
-                const isNeutral = chakra.hasValue && chakra.priorityLabel.toLowerCase() === "neutral";
+                const isNeutral =
+                  chakra.hasValue && chakra.priorityLabel.toLowerCase() === "neutral";
                 const outlineStrokeWidth = chakra.hasValue && !isNeutral ? 12 : 4;
                 const baseInnerRadius = CHAKRA_RADIUS + 3 - 2; // base radius minus half of default stroke
                 const outlineRadius = baseInnerRadius + outlineStrokeWidth / 2;
@@ -580,22 +594,36 @@ export default function CardEnergyMap({
             className="flex flex-col gap-2.5 rounded-2xl bg-white/5 px-6 py-6 md:self-stretch"
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">Chakras</span>
+              <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">
+                Chakras
+              </span>
               <span className="text-sm text-text-tertiary">Value</span>
             </div>
 
             <div className="flex flex-col gap-2">
               {padmasanaSliderMetrics.map((chakra) => (
-                <div key={`padmasana-slider-${chakra.id}`} className="padmasana-slider flex flex-col gap-1.5">
+                <div
+                  key={`padmasana-slider-${chakra.id}`}
+                  className="padmasana-slider flex flex-col gap-1.5"
+                >
                   <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium uppercase tracking-wide" style={{ color: chakra.color }}>
+                    <span
+                      className="font-medium uppercase tracking-wide"
+                      style={{ color: chakra.color }}
+                    >
                       {chakra.name}
                     </span>
                     <div className="flex items-center justify-end gap-1 text-right">
-                      <span className="font-medium uppercase tracking-wide" style={{ color: chakra.color }}>
+                      <span
+                        className="font-medium uppercase tracking-wide"
+                        style={{ color: chakra.color }}
+                      >
                         {chakra.priorityLabel}
                       </span>
-                      <span className="w-8 text-right font-medium uppercase tracking-wide tabular-nums" style={{ color: chakra.color }}>
+                      <span
+                        className="w-8 text-right font-medium uppercase tracking-wide tabular-nums"
+                        style={{ color: chakra.color }}
+                      >
                         {chakra.hasValue ? chakra.value : "—"}
                       </span>
                     </div>
@@ -630,7 +658,9 @@ export default function CardEnergyMap({
           return (
             <div key={metric.id} className={metric.gridClass}>
               <div className="flex h-full flex-col gap-4 rounded-2xl bg-white/5 p-6 backdrop-blur">
-                <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">{metric.name}</span>
+                <span className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">
+                  {metric.name}
+                </span>
                 {metric.hasValue ? (
                   <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
                     <div
@@ -644,7 +674,9 @@ export default function CardEnergyMap({
                       </div>
                     </div>
                     {metric.label && (
-                      <span className="text-xs uppercase tracking-wide text-text-secondary">{metric.label}</span>
+                      <span className="text-xs uppercase tracking-wide text-text-secondary">
+                        {metric.label}
+                      </span>
                     )}
                   </div>
                 ) : (

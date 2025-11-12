@@ -7,17 +7,48 @@
 :root {
   background-color: #0b0d10;
   color: #f8fafc;
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Arial,
+    sans-serif;
 }
 
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; font-family: inherit; }
-button { cursor: pointer; border: none; }
-button:disabled { cursor: not-allowed; }
-input { outline: none; }
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  font-family: inherit;
+}
+button {
+  cursor: pointer;
+  border: none;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+input {
+  outline: none;
+}
 
 .font-logo {
-  font-family: "Rajdhani", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-family:
+    "Rajdhani",
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Arial,
+    sans-serif;
   letter-spacing: 0.08em;
 }
 

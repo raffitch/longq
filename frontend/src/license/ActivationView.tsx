@@ -354,7 +354,12 @@ export function ActivationPanel({
             {folderError && <p className="mt-2 text-accent-warning">{folderError}</p>}
           </div>
         ) : (
-          <div className={cn("rounded-2xl border border-border bg-surface-muted/60 p-5", compact && "p-4")}>
+          <div
+            className={cn(
+              "rounded-2xl border border-border bg-surface-muted/60 p-5",
+              compact && "p-4",
+            )}
+          >
             <div className="mb-3 flex gap-2">
               <button
                 type="button"

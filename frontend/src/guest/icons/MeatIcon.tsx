@@ -16,7 +16,13 @@ const MeatIcon = (props: React.SVGProps<SVGSVGElement>) => (
       strokeLinecap="round"
       strokeLinejoin="round"
     />
-    <path d="m23.423 60.963 4.612 4.613" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+    <path
+      d="m23.423 60.963 4.612 4.613"
+      stroke="currentColor"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
     <path
       d="M48.677 85.987c18.013-18.018 22.395-42.844 9.784-55.45C45.854 17.926 21.029 22.308 3.016 40.321"
       stroke="currentColor"

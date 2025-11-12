@@ -31,8 +31,7 @@ export function LicenseProvider({ children }: { children: React.ReactNode }) {
       setStatus(next);
       setError(null);
     } catch (err) {
-      const message =
-        (err as LicenseApiError)?.message ?? "Unable to contact the license service.";
+      const message = (err as LicenseApiError)?.message ?? "Unable to contact the license service.";
       setError(message);
     } finally {
       setLoading(false);
@@ -60,22 +59,19 @@ export function LicenseProvider({ children }: { children: React.ReactNode }) {
     await load();
   }, [load]);
 
-  const activate = useCallback(
-    async (email: string, mode: LicenseMode = "activate") => {
-      const trimmed = email.trim();
-      if (!trimmed) {
-        const err = new Error("Email is required.") as LicenseApiError;
-        err.code = "email_required";
-        throw err;
-      }
-      const runner = mode === "refresh" ? refreshLicense : activateLicense;
-      const next = await runner(trimmed);
-      setStatus(next);
-      setError(null);
-      return next;
-    },
-    [],
-  );
+  const activate = useCallback(async (email: string, mode: LicenseMode = "activate") => {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      const err = new Error("Email is required.") as LicenseApiError;
+      err.code = "email_required";
+      throw err;
+    }
+    const runner = mode === "refresh" ? refreshLicense : activateLicense;
+    const next = await runner(trimmed);
+    setStatus(next);
+    setError(null);
+    return next;
+  }, []);
 
   const value = useMemo<LicenseContextValue>(
     () => ({

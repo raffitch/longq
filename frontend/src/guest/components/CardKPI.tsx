@@ -18,7 +18,11 @@ export default function CardKPI({ title, value, status, delta }: CardKPIProps) {
       case "Stable":
         return { border: "border-accent-teal", bg: "bg-accent-teal/5", shadow: "shadow-teal-glow" };
       case "Low":
-        return { border: "border-priority-medium", bg: "bg-priority-medium/5", shadow: "shadow-yellow-glow" };
+        return {
+          border: "border-priority-medium",
+          bg: "bg-priority-medium/5",
+          shadow: "shadow-yellow-glow",
+        };
       case "Imbalanced":
       case "High":
       case "Medium":
@@ -32,7 +36,9 @@ export default function CardKPI({ title, value, status, delta }: CardKPIProps) {
       <h3 className="text-3xl font-normal leading-tight md:text-4xl">{title}</h3>
 
       <div className="flex flex-1 flex-col justify-center">
-        <div className="mb-8 text-7xl font-normal leading-none md:text-8xl lg:text-[128px]">{value}</div>
+        <div className="mb-8 text-7xl font-normal leading-none md:text-8xl lg:text-[128px]">
+          {value}
+        </div>
 
         <div
           className={`flex h-[51px] w-fit items-center rounded-full border px-4 ${statusStyle.border} ${statusStyle.bg} ${statusStyle.shadow}`}

@@ -18,7 +18,14 @@ type VisibleArray = readonly VisibleValue[];
 const CURRENT_LIMIT_VERSION = "3";
 const CURRENT_VISIBLE_VERSION = "2";
 
-const DEFAULT_VISIBLE = Object.freeze(["very high", "high", "moderate", "normal", "low", "very low"] as const) as VisibleArray;
+const DEFAULT_VISIBLE = Object.freeze([
+  "very high",
+  "high",
+  "moderate",
+  "normal",
+  "low",
+  "very low",
+] as const) as VisibleArray;
 
 const getWindow = () => (typeof window === "undefined" ? null : window);
 
@@ -95,7 +102,9 @@ const ensureMaxHydrated = () => {
 };
 
 const normalizeVisible = (values: string[]): VisibleArray => {
-  const normalized = Array.from(new Set(values.map((value) => value.trim().toLowerCase()))).filter(Boolean);
+  const normalized = Array.from(new Set(values.map((value) => value.trim().toLowerCase()))).filter(
+    Boolean,
+  );
   if (!normalized.length) {
     return DEFAULT_VISIBLE;
   }

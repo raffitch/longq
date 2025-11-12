@@ -69,13 +69,16 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
   const visibleSeverities = useVisibleSeverities();
   const visibleSet = new Set(visibleSeverities);
 
-  const groupedItems = items.reduce<Record<FoodSeverity, FoodItem[]>>((acc, item) => {
-    if (!acc[item.severity]) {
-      acc[item.severity] = [];
-    }
-    acc[item.severity].push(item);
-    return acc;
-  }, { high: [], moderate: [], medium: [], low: [] });
+  const groupedItems = items.reduce<Record<FoodSeverity, FoodItem[]>>(
+    (acc, item) => {
+      if (!acc[item.severity]) {
+        acc[item.severity] = [];
+      }
+      acc[item.severity].push(item);
+      return acc;
+    },
+    { high: [], moderate: [], medium: [], low: [] },
+  );
 
   const chartData = DISPLAY_ORDER.map((severity) => ({
     name: severity,
@@ -96,7 +99,9 @@ export default function FoodCategoryCard({ category, icon, items }: FoodCategory
             key={`${item.name}-${item.score}`}
             className={`flex h-14 items-center rounded-[30px] px-4 md:px-6 ${SEVERITY_BG[severity]}`}
           >
-            <span className={`whitespace-nowrap text-left text-xl font-normal md:text-[28px] ${SEVERITY_TEXT[severity]}`}>
+            <span
+              className={`whitespace-nowrap text-left text-xl font-normal md:text-[28px] ${SEVERITY_TEXT[severity]}`}
+            >
               {item.name} {Math.round(item.score)}
             </span>
           </div>

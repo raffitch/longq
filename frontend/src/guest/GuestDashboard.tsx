@@ -12,7 +12,15 @@ import {
   ToxinsInsightsCard,
   type FoodItem,
 } from "./components";
-import { BiohazardIcon, DairyIcon, EggsIcon, FruitsIcon, GrainIcon, MeatIcon, SeafoodIcon } from "./icons";
+import {
+  BiohazardIcon,
+  DairyIcon,
+  EggsIcon,
+  FruitsIcon,
+  GrainIcon,
+  MeatIcon,
+  SeafoodIcon,
+} from "./icons";
 import type { AggregatedInsights, PriorityCounts } from "./dataTransform";
 import { GENERAL_SEVERITY_META, GENERAL_SEVERITY_ORDER } from "../shared/priority";
 import { useVisibleSeverities } from "../hooks/useThresholdSettings";
@@ -26,13 +34,23 @@ interface GuestDashboardProps {
 }
 
 const defaultIcon = (
-  <svg className="h-16 w-16 text-accent-teal" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <svg
+    className="h-16 w-16 text-accent-teal"
+    viewBox="0 0 64 64"
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+  >
     <circle cx="32" cy="32" r="20" stroke="currentColor" strokeWidth={3} />
   </svg>
 );
 
 const leafIcon = (
-  <svg className="h-16 w-16 text-accent-teal" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <svg
+    className="h-16 w-16 text-accent-teal"
+    viewBox="0 0 64 64"
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+  >
     <path
       d="M32 6C14 12 6 28 6 40c0 10 8 18 18 18 16 0 28-16 28-30 0-11-6-20-20-22Z"
       stroke="currentColor"
@@ -44,7 +62,12 @@ const leafIcon = (
 );
 
 const sproutIcon = (
-  <svg className="h-16 w-16 text-accent-teal" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <svg
+    className="h-16 w-16 text-accent-teal"
+    viewBox="0 0 64 64"
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+  >
     <path
       d="M32 58V22M32 22c-8 8-18 8-24 2 6-10 16-12 24-8m0 8c8-8 18-8 24-2-6 10-16 12-24 8"
       stroke="currentColor"
@@ -61,10 +84,16 @@ interface LegendRowProps {
   children: React.ReactNode;
 }
 
-const LegendRow: React.FC<LegendRowProps> = ({ title, backgroundClass = "bg-bg-card", children }) => (
+const LegendRow: React.FC<LegendRowProps> = ({
+  title,
+  backgroundClass = "bg-bg-card",
+  children,
+}) => (
   <div className={`flex flex-col gap-4 rounded-2xl ${backgroundClass} p-6 md:gap-6 lg:gap-8`}>
     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <span className="whitespace-nowrap text-2xl font-normal text-text-primary md:text-3xl">{title}</span>
+      <span className="whitespace-nowrap text-2xl font-normal text-text-primary md:text-3xl">
+        {title}
+      </span>
       <div className="flex w-full flex-wrap items-center justify-end gap-4 text-text-primary md:gap-6 lg:gap-8">
         {children}
       </div>
@@ -77,39 +106,53 @@ const getCategoryIcon = (name: string): React.ReactNode => {
   if (key.includes("dairy")) return <DairyIcon className="h-16 w-16 text-accent-teal" />;
   if (key.includes("egg")) return <EggsIcon className="h-16 w-16 text-accent-teal" />;
   if (key.includes("fruit")) return <FruitsIcon className="h-16 w-16 text-accent-teal" />;
-  if (key.includes("grain") || key.includes("wheat")) return <GrainIcon className="h-16 w-16 text-accent-teal" />;
+  if (key.includes("grain") || key.includes("wheat"))
+    return <GrainIcon className="h-16 w-16 text-accent-teal" />;
   if (key.includes("meat")) return <MeatIcon className="h-16 w-16 text-accent-teal" />;
-  if (key.includes("seafood") || key.includes("fish")) return <SeafoodIcon className="h-16 w-16 text-accent-teal" />;
+  if (key.includes("seafood") || key.includes("fish"))
+    return <SeafoodIcon className="h-16 w-16 text-accent-teal" />;
   if (key.includes("heavy")) return <BiohazardIcon className="h-16 w-16 text-accent-teal" />;
   if (key.includes("vegetable")) return leafIcon;
-  if (key.includes("legume") || key.includes("nut") || key.includes("seed") || key.includes("lectin")) return sproutIcon;
+  if (
+    key.includes("legume") ||
+    key.includes("nut") ||
+    key.includes("seed") ||
+    key.includes("lectin")
+  )
+    return sproutIcon;
   return defaultIcon;
 };
 
 const formatDate = (input?: string | null): string => {
   if (!input) {
-    return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(new Date());
+    return new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date());
   }
   const parsed = new Date(input);
   if (Number.isNaN(parsed.getTime())) {
     return input;
   }
-  return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(parsed);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
 };
 
 const computeEnergyStatus = (counts: PriorityCounts) =>
   counts.highCount + counts.veryHighCount > 2 ? "Imbalanced" : "Stable";
 
-const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportDate, aggregated, sex }) => {
-  const {
-    categories,
-    nutrition,
-    heavyMetals,
-    hormones,
-    toxins,
-    priorityCounts,
-    energyMap,
-  } = aggregated;
+const GuestDashboard: React.FC<GuestDashboardProps> = ({
+  clientFullName,
+  reportDate,
+  aggregated,
+  sex,
+}) => {
+  const { categories, nutrition, heavyMetals, hormones, toxins, priorityCounts, energyMap } =
+    aggregated;
 
   const showNutrition = nutrition.nutrients.length > 0;
   const showHeavyMetals = heavyMetals.length > 0;
@@ -155,7 +198,13 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
                 className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-cyan-400/45 blur-3xl"
                 aria-hidden="true"
               />
-              <svg className="h-auto w-32 fill-accent-teal" viewBox="0 0 192 97" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Logo">
+              <svg
+                className="h-auto w-32 fill-accent-teal"
+                viewBox="0 0 192 97"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-label="Logo"
+              >
                 <path
                   fillRule="evenodd"
                   clipRule="evenodd"
@@ -169,46 +218,53 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
           <div className="flex flex-col gap-4 rounded-2xl bg-bg-card p-6 text-text-secondary md:flex-row md:items-center md:gap-12 lg:gap-18">
             <div className="flex flex-col">
               <span className="text-xl md:text-2xl">Guest Name</span>
-              <span className="text-2xl text-text-primary md:text-4xl">{clientFullName ?? "Guest"}</span>
+              <span className="text-2xl text-text-primary md:text-4xl">
+                {clientFullName ?? "Guest"}
+              </span>
             </div>
 
             <div className="flex flex-col">
               <span className="text-xl md:text-2xl">Date</span>
-              <span className="text-2xl text-text-primary md:text-4xl">{formatDate(reportDate)}</span>
+              <span className="text-2xl text-text-primary md:text-4xl">
+                {formatDate(reportDate)}
+              </span>
             </div>
-
           </div>
         </header>
         {hasEnergyMap && (
           <>
-        <section aria-labelledby="key-highlights">
-          <div className="flex flex-col gap-6">
-            <h2 id="key-highlights" className="text-4xl font-bold md:text-5xl lg:text-6xl">
-              PEEK Report
-            </h2>
-            <div className="flex flex-col gap-6">
-              <LegendRow title="Bio-Energetic Resonance" backgroundClass="bg-white/5">
-                {PEAK_PRIORITY_TIERS.map((tier) => (
-                  <div key={tier.label} className="flex items-center gap-3">
-                    <span className="h-7 w-7 rounded-full" style={{ background: tier.color }} aria-hidden="true" />
-                    <span className="whitespace-nowrap text-xl font-normal md:text-2xl lg:text-[28px]">
-                      {tier.label}
-                    </span>
-                  </div>
-                ))}
-              </LegendRow>
-              <CardEnergyMap
-                status={computeEnergyStatus(priorityCounts)}
-                sex={sex}
-                organValues={energyMap?.organs}
-                chakraValues={energyMap?.chakras}
-                metricValues={energyMap?.metrics}
-              />
-            </div>
-          </div>
-        </section>
-      </>
-    )}
+            <section aria-labelledby="key-highlights">
+              <div className="flex flex-col gap-6">
+                <h2 id="key-highlights" className="text-4xl font-bold md:text-5xl lg:text-6xl">
+                  PEEK Report
+                </h2>
+                <div className="flex flex-col gap-6">
+                  <LegendRow title="Bio-Energetic Resonance" backgroundClass="bg-white/5">
+                    {PEAK_PRIORITY_TIERS.map((tier) => (
+                      <div key={tier.label} className="flex items-center gap-3">
+                        <span
+                          className="h-7 w-7 rounded-full"
+                          style={{ background: tier.color }}
+                          aria-hidden="true"
+                        />
+                        <span className="whitespace-nowrap text-xl font-normal md:text-2xl lg:text-[28px]">
+                          {tier.label}
+                        </span>
+                      </div>
+                    ))}
+                  </LegendRow>
+                  <CardEnergyMap
+                    status={computeEnergyStatus(priorityCounts)}
+                    sex={sex}
+                    organValues={energyMap?.organs}
+                    chakraValues={energyMap?.chakras}
+                    metricValues={energyMap?.metrics}
+                  />
+                </div>
+              </div>
+            </section>
+          </>
+        )}
 
         {showFoodSection && (
           <>
@@ -222,7 +278,11 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
                   visibleSeveritySet.has(FOOD_SEVERITY_TO_GENERAL[entry.severity]),
                 ).map((entry) => (
                   <div key={entry.severity} className="flex items-center gap-3">
-                    <span className="h-7 w-7 rounded-full" style={{ background: entry.color }} aria-hidden="true" />
+                    <span
+                      className="h-7 w-7 rounded-full"
+                      style={{ background: entry.color }}
+                      aria-hidden="true"
+                    />
                     <span className="whitespace-nowrap text-xl font-normal md:text-2xl lg:text-[28px]">
                       {entry.label}
                     </span>
@@ -250,21 +310,23 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
           <>
             <div className="h-px w-full bg-white/20" aria-hidden="true" />
             <LegendRow title="Bio-Energetic Status">
-              {GENERAL_SEVERITY_ORDER.filter((severity) => visibleSeveritySet.has(severity)).map((severity) => {
-                const meta = GENERAL_SEVERITY_META[severity];
-                return (
-                  <div key={severity} className="flex items-center gap-3">
-                    <span
-                      className="h-7 w-7 rounded-full"
-                      style={{ background: meta.color }}
-                      aria-hidden="true"
-                    />
-                    <span className="whitespace-nowrap text-xl font-normal text-text-primary md:text-2xl lg:text-[28px]">
-                      {meta.label}
-                    </span>
-                  </div>
-                );
-              })}
+              {GENERAL_SEVERITY_ORDER.filter((severity) => visibleSeveritySet.has(severity)).map(
+                (severity) => {
+                  const meta = GENERAL_SEVERITY_META[severity];
+                  return (
+                    <div key={severity} className="flex items-center gap-3">
+                      <span
+                        className="h-7 w-7 rounded-full"
+                        style={{ background: meta.color }}
+                        aria-hidden="true"
+                      />
+                      <span className="whitespace-nowrap text-xl font-normal text-text-primary md:text-2xl lg:text-[28px]">
+                        {meta.label}
+                      </span>
+                    </div>
+                  );
+                },
+              )}
             </LegendRow>
           </>
         )}
@@ -318,7 +380,8 @@ const GuestDashboard: React.FC<GuestDashboardProps> = ({ clientFullName, reportD
         )}
 
         <p className="mt-12 px-4 text-lg font-light leading-relaxed text-text-secondary md:px-10 md:text-xl">
-          Note: These results provide a snapshot of current wellness indicators. Review with your practitioner before making significant lifestyle changes.
+          Note: These results provide a snapshot of current wellness indicators. Review with your
+          practitioner before making significant lifestyle changes.
         </p>
       </main>
     </div>

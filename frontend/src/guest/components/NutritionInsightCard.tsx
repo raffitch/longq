@@ -27,7 +27,11 @@ const NutritionInsightCard: React.FC<NutritionInsightCardProps> = ({ data }) => 
   const visibleSet = new Set(visibleSeverities);
 
   if (!data || !data.nutrients.length) {
-    return <div className="rounded-2xl bg-bg-card p-8 text-text-secondary">No nutrition data available.</div>;
+    return (
+      <div className="rounded-2xl bg-bg-card p-8 text-text-secondary">
+        No nutrition data available.
+      </div>
+    );
   }
 
   const hasTitle = Boolean(data.note);
@@ -50,7 +54,9 @@ const NutritionInsightCard: React.FC<NutritionInsightCardProps> = ({ data }) => 
   return (
     <div className="flex h-full flex-col gap-6 rounded-2xl bg-bg-card p-8 shadow-card md:p-10">
       {hasTitle && (
-        <h3 className="text-3xl font-normal leading-tight text-text-secondary md:text-4xl">{data.note}</h3>
+        <h3 className="text-3xl font-normal leading-tight text-text-secondary md:text-4xl">
+          {data.note}
+        </h3>
       )}
 
       <div className="flex flex-col gap-6">

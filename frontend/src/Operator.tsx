@@ -10,7 +10,11 @@ import {
   useVisibleSeverities,
 } from "./hooks/useThresholdSettings";
 import { setThresholdLimit, setVisibleSeverities } from "./shared/thresholdConfig";
-import { GENERAL_SEVERITY_META, GENERAL_SEVERITY_ORDER, type GeneralSeverity } from "./shared/priority";
+import {
+  GENERAL_SEVERITY_META,
+  GENERAL_SEVERITY_ORDER,
+  type GeneralSeverity,
+} from "./shared/priority";
 import {
   createSession,
   updateSession,
@@ -34,17 +38,29 @@ import type { ElectronDiagnosticsEvent } from "./types/electron";
 
 const REPORT_DEFS: { kind: ReportKind; label: string; aliases: string[] }[] = [
   { kind: "food", label: "Food", aliases: ["food"] },
-  { kind: "heavy-metals", label: "Heavy Metals", aliases: ["heavy metals", "heavy-metals", "heavy_metals"] },
+  {
+    kind: "heavy-metals",
+    label: "Heavy Metals",
+    aliases: ["heavy metals", "heavy-metals", "heavy_metals"],
+  },
   { kind: "hormones", label: "Hormones", aliases: ["hormones"] },
   { kind: "nutrition", label: "Nutrition", aliases: ["nutrition"] },
   { kind: "toxins", label: "Toxins", aliases: ["toxins"] },
-  { kind: "peek", label: "PEEK Report", aliases: ["peek", "peek report", "energy", "energy-map", "energy map"] },
+  {
+    kind: "peek",
+    label: "PEEK Report",
+    aliases: ["peek", "peek report", "energy", "energy-map", "energy map"],
+  },
 ];
 
 type PresetKey = "energy-health" | "food" | "health" | "energy" | "custom";
 
 const PRESET_DEFS: Array<{ key: PresetKey; label: string; reports: ReportKind[] | null }> = [
-  { key: "energy-health", label: "Energy & Health", reports: ["peek", "nutrition", "hormones", "toxins", "heavy-metals"] },
+  {
+    key: "energy-health",
+    label: "Energy & Health",
+    reports: ["peek", "nutrition", "hormones", "toxins", "heavy-metals"],
+  },
   { key: "food", label: "Food", reports: ["food"] },
   { key: "health", label: "Health", reports: ["nutrition", "hormones", "toxins", "heavy-metals"] },
   { key: "energy", label: "Energy", reports: ["peek"] },
@@ -53,10 +69,13 @@ const PRESET_DEFS: Array<{ key: PresetKey; label: string; reports: ReportKind[] 
 
 const DEFAULT_PRESET_KEY: PresetKey = "energy-health";
 
-const PRESET_REPORT_SETS: Record<PresetKey, Set<ReportKind>> = PRESET_DEFS.reduce((acc, preset) => {
-  acc[preset.key] = new Set(preset.reports ?? []);
-  return acc;
-}, {} as Record<PresetKey, Set<ReportKind>>);
+const PRESET_REPORT_SETS: Record<PresetKey, Set<ReportKind>> = PRESET_DEFS.reduce(
+  (acc, preset) => {
+    acc[preset.key] = new Set(preset.reports ?? []);
+    return acc;
+  },
+  {} as Record<PresetKey, Set<ReportKind>>,
+);
 
 const LABEL: Record<ReportKind, string> = {
   food: "food",
@@ -79,7 +98,8 @@ type DataTransferItemWithEntry = DataTransferItem & {
 };
 
 const isFileEntry = (entry: FileSystemEntry): entry is FileSystemFileEntry => entry.isFile;
-const isDirectoryEntry = (entry: FileSystemEntry): entry is FileSystemDirectoryEntry => entry.isDirectory;
+const isDirectoryEntry = (entry: FileSystemEntry): entry is FileSystemDirectoryEntry =>
+  entry.isDirectory;
 const GUEST_HEARTBEAT_KEY = "longevityq_guest_heartbeat";
 // Allow extra slack so background-tab timer throttling (which can stretch to >60s) does not trigger false "closed" states.
 const GUEST_HEARTBEAT_GRACE_MS = 180000;
@@ -96,8 +116,10 @@ const FIT_SCALE_MARGIN = 24;
 const ORIGINAL_WIDTH_BUFFER = 64;
 const darkInputClasses =
   "rounded-lg border border-border-strong bg-neutral-dark px-2.5 py-1.5 text-text-primary shadow-[inset_0_1px_2px_rgba(15,23,42,0.45)] outline-none caret-accent-info focus:ring-2 focus:ring-accent-info/40";
-const cardShellClasses = "rounded-2xl border border-border/80 bg-surface text-text-primary shadow-sm";
-const statusCardClasses = "rounded-2xl border border-border/80 bg-surface text-text-primary shadow-sm";
+const cardShellClasses =
+  "rounded-2xl border border-border/80 bg-surface text-text-primary shadow-sm";
+const statusCardClasses =
+  "rounded-2xl border border-border/80 bg-surface text-text-primary shadow-sm";
 const tileBaseClasses =
   "flex h-full min-w-0 flex-col gap-2.5 rounded-3xl border border-border/70 p-3.5 text-text-primary transition-colors duration-200";
 type ChipVariant = React.ComponentProps<typeof Chip>["variant"];
@@ -169,7 +191,7 @@ function selectionsEqual(a: SelectionMap, b: SelectionMap): boolean {
 }
 
 function currentSessionNames(s: Session): { first: string; last: string } {
-  const first = s.first_name ?? (s.client_name?.split(" ", 1)[0] ?? "");
+  const first = s.first_name ?? s.client_name?.split(" ", 1)[0] ?? "";
   let last = s.last_name ?? "";
   if (!last && s.client_name) {
     const parts = s.client_name.split(" ");
@@ -181,7 +203,12 @@ function currentSessionNames(s: Session): { first: string; last: string } {
 }
 
 const hasStringMessage = (err: unknown): err is { message: string } =>
-  Boolean(err && typeof err === "object" && "message" in err && typeof (err as { message?: unknown }).message === "string");
+  Boolean(
+    err &&
+      typeof err === "object" &&
+      "message" in err &&
+      typeof (err as { message?: unknown }).message === "string",
+  );
 
 function formatErrorMessage(err: unknown): string {
   const raw = typeof err === "string" ? err : hasStringMessage(err) ? err.message : "";
@@ -195,7 +222,9 @@ function formatErrorMessage(err: unknown): string {
           const detail = (parsed as { detail?: unknown }).detail;
           if (typeof detail === "string") return detail;
           if (Array.isArray(detail)) {
-            const joined = detail.filter((value): value is string => typeof value === "string").join("; ");
+            const joined = detail
+              .filter((value): value is string => typeof value === "string")
+              .join("; ");
             if (joined) return joined;
           }
           const values = Object.values(parsed as Record<string, unknown>)
@@ -273,11 +302,7 @@ function formatClientName(raw: string): string {
       .filter(Boolean)
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
       .join("-");
-  return cleaned
-    .split(" ")
-    .filter(Boolean)
-    .map(fixWord)
-    .join(" ");
+  return cleaned.split(" ").filter(Boolean).map(fixWord).join(" ");
 }
 
 function formatFullName(first?: string | null, last?: string | null): string {
@@ -364,9 +389,7 @@ async function collectFilesFromDataTransfer(dt: DataTransfer): Promise<DroppedFi
     return filesFromFileList(dt.files);
   }
 
-  const nested = await Promise.all(
-    entries.map((entry) => traverseEntry(entry, entry.name || "")),
-  );
+  const nested = await Promise.all(entries.map((entry) => traverseEntry(entry, entry.name || "")));
   return nested.flat();
 }
 
@@ -384,7 +407,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [session, setSession] = useState<Session | null>(null);
   const [uploads, setUploads] = useState<UploadMap>(() => createEmptyUploadMap());
   const [uploadErrors, setUploadErrors] = useState<UploadErrorMap>(() => createEmptyErrorMap());
-  const [selectedReports, setSelectedReports] = useState<SelectionMap>(() => createSelectionMap(false));
+  const [selectedReports, setSelectedReports] = useState<SelectionMap>(() =>
+    createSelectionMap(false),
+  );
   const [parsedState, setParsedState] = useState<ParsedMap>(() => emptyParsed());
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -404,9 +429,13 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const [fitPreview, setFitPreview] = useState<boolean>(true);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(false);
   const [licenseModalOpen, setLicenseModalOpen] = useState<boolean>(false);
-  const licenseModal = licenseModalOpen ? <ManageLicenseModal onClose={() => setLicenseModalOpen(false)} /> : null;
+  const licenseModal = licenseModalOpen ? (
+    <ManageLicenseModal onClose={() => setLicenseModalOpen(false)} />
+  ) : null;
   const { status: licenseStatus, loading: licenseLoading } = useLicense();
-  const licenseReady = licenseStatus ? licenseStatus.state === "valid" || licenseStatus.state === "disabled" : false;
+  const licenseReady = licenseStatus
+    ? licenseStatus.state === "valid" || licenseStatus.state === "disabled"
+    : false;
   const waitingForLicense = licenseLoading && !licenseReady;
   const [diagnosticsEntries, setDiagnosticsEntries] = useState<DiagnosticEntry[]>([]);
   const [diagnosticsLoading, setDiagnosticsLoading] = useState<boolean>(false);
@@ -435,7 +464,6 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     return detectPreset(selectedReports);
   }, [presetsEnabled, selectedReports]);
   const previewToggleLabel = fitPreview ? "Switch to original size" : "Switch to fit to screen";
-
 
   useEffect(() => {
     document.title = "Quantum Qi™ - Operator Portal";
@@ -486,7 +514,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   }, [licenseReady]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const guestWindowRef = useRef<Window | null>(null);
-  const replaceInputsRef = useRef<Record<ReportKind, HTMLInputElement | null>>({} as Record<ReportKind, HTMLInputElement | null>);
+  const replaceInputsRef = useRef<Record<ReportKind, HTMLInputElement | null>>(
+    {} as Record<ReportKind, HTMLInputElement | null>,
+  );
   const base = API_BASE;
 
   const buildWebSocketUrl = useCallback(
@@ -520,27 +550,29 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const fetchDiagnostics = useCallback(async () => {
     setDiagnosticsLoading(true);
     setDiagnosticsFetchError(null);
-  try {
-    const entries = await getDiagnostics(25);
-    if (!mountedRef.current) {
-      return;
-    }
-    setDiagnosticsEntries(entries);
-  } catch (err) {
-    if (!mountedRef.current) {
-      return;
-    }
-    if (isNetworkError(err)) {
-        setDiagnosticsFetchError("Backend unreachable. Ensure the Quantum Qi™ services are running, then try again.");
+    try {
+      const entries = await getDiagnostics(25);
+      if (!mountedRef.current) {
+        return;
+      }
+      setDiagnosticsEntries(entries);
+    } catch (err) {
+      if (!mountedRef.current) {
+        return;
+      }
+      if (isNetworkError(err)) {
+        setDiagnosticsFetchError(
+          "Backend unreachable. Ensure the Quantum Qi™ services are running, then try again.",
+        );
         setBackendDown(true);
       } else {
         setDiagnosticsFetchError(formatErrorMessage(err));
       }
-  } finally {
-    if (mountedRef.current) {
-      setDiagnosticsLoading(false);
+    } finally {
+      if (mountedRef.current) {
+        setDiagnosticsLoading(false);
+      }
     }
-  }
   }, []);
   const operationSeqRef = useRef(0);
   const operationAbortRef = useRef<AbortController | null>(null);
@@ -839,7 +871,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     }
   }
 
-  async function parseReport(kind: ReportKind, file: FileOut, ctx?: OperationContext): Promise<boolean> {
+  async function parseReport(
+    kind: ReportKind,
+    file: FileOut,
+    ctx?: OperationContext,
+  ): Promise<boolean> {
     const operation = ctx ?? beginOperation();
     resetParsed(kind, operation);
     try {
@@ -896,8 +932,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const livePreviewContentRef = useRef<HTMLDivElement | null>(null);
   const stagedPreviewContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const displayFullName =
-    session ? formatFullName(session.first_name, session.last_name) || session.client_name || "" : "";
+  const displayFullName = session
+    ? formatFullName(session.first_name, session.last_name) || session.client_name || ""
+    : "";
   const liveMonitorMessage = (() => {
     if (hasShownOnGuest && session?.published) return "Live Reports.";
     return displayFullName ? `Welcome ${displayFullName}.` : "Welcome.";
@@ -1116,8 +1153,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setEditedLastName("");
     setEditedSex(null);
     if (session) {
-      const currentName = formatFullName(session.first_name, session.last_name) || session.client_name;
-      setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next guest folder.");
+      const currentName =
+        formatFullName(session.first_name, session.last_name) || session.client_name;
+      setStatus(
+        currentName ? `Drop the folder for ${currentName}.` : "Ready for the next guest folder.",
+      );
     } else {
       setStatus("");
     }
@@ -1147,7 +1187,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setEditedLastName("");
       setEditedSex(null);
       const currentName = formatFullName(currentFirst, currentLast) || session.client_name;
-      setStatus(currentName ? `Drop the folder for ${currentName}.` : "Ready for the next guest folder.");
+      setStatus(
+        currentName ? `Drop the folder for ${currentName}.` : "Ready for the next guest folder.",
+      );
       return;
     }
 
@@ -1163,9 +1205,21 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setError("");
       const provisionalFull = formatFullName(first, last);
       setSession((prev) =>
-        prev ? { ...prev, first_name: first, last_name: last, client_name: provisionalFull, sex: nextSex } : prev,
+        prev
+          ? {
+              ...prev,
+              first_name: first,
+              last_name: last,
+              client_name: provisionalFull,
+              sex: nextSex,
+            }
+          : prev,
       );
-      const updated = await updateSession(session.id, { first_name: first, last_name: last, sex: nextSex });
+      const updated = await updateSession(session.id, {
+        first_name: first,
+        last_name: last,
+        sex: nextSex,
+      });
       markBackendUp();
       setSession(updated);
       setSexSelection(updated.sex);
@@ -1173,7 +1227,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       setEditedFirstName("");
       setEditedLastName("");
       setEditedSex(null);
-      setStatus(`Guest name updated to ${formatFullName(updated.first_name, updated.last_name)}. Re-drop the folder if needed.`);
+      setStatus(
+        `Guest name updated to ${formatFullName(updated.first_name, updated.last_name)}. Re-drop the folder if needed.`,
+      );
       try {
         await setDisplaySession({
           stagedSessionId: updated.id,
@@ -1215,7 +1271,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     setError("");
     setStatus(
       checked
-      ? `${label} report will be included in the guest display.`
+        ? `${label} report will be included in the guest display.`
         : `${label} report hidden from the guest display until re-selected.`,
     );
   }
@@ -1223,7 +1279,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   async function processDroppedFiles(dropped: DroppedFile[]) {
     const operation = beginOperation();
     if (!dropped.length) {
-      applyState(setStatus, "No files detected. Drop a folder that contains the guest reports.", operation);
+      applyState(
+        setStatus,
+        "No files detected. Drop a folder that contains the guest reports.",
+        operation,
+      );
       return;
     }
     applyState(setLastDroppedFiles, dropped, operation);
@@ -1253,9 +1313,14 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       // }
       if (normalizedSession) {
         const tokens = (value: string) => new Set(value.split(" ").filter(Boolean));
-        const hasAll = (source: Set<string>, target: Set<string>) => [...target].every((token) => source.has(token));
+        const hasAll = (source: Set<string>, target: Set<string>) =>
+          [...target].every((token) => source.has(token));
         if (!hasAll(tokens(normalizedFolder), tokens(normalizedSession))) {
-          applyState(setStatus, `Folder “${rootName}” doesn’t match ${sessionReference}. Proceeding anyway.`, operation);
+          applyState(
+            setStatus,
+            `Folder “${rootName}” doesn’t match ${sessionReference}. Proceeding anyway.`,
+            operation,
+          );
         }
       }
     }
@@ -1265,7 +1330,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       return lower.endsWith(".pdf") || lower.endsWith(".docx") || lower.endsWith(".doc");
     });
     if (!supportedFiles.length) {
-      applyState(setStatus, "No supported report files (.pdf, .docx) found inside the folder.", operation);
+      applyState(
+        setStatus,
+        "No supported report files (.pdf, .docx) found inside the folder.",
+        operation,
+      );
       return;
     }
 
@@ -1375,7 +1444,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   function openGuestWindow() {
     const guestUrl = `${window.location.origin}/guest`;
     const windowName = "longevityq_guest_screen";
-    let target = guestWindowRef.current && !guestWindowRef.current.closed ? guestWindowRef.current : null;
+    let target =
+      guestWindowRef.current && !guestWindowRef.current.closed ? guestWindowRef.current : null;
     if (!target) {
       try {
         const possible = window.open("", windowName);
@@ -1408,7 +1478,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       return;
     }
 
-    const features = "noopener=yes,noreferrer=yes,width=1280,height=720,resizable=yes,scrollbars=yes";
+    const features =
+      "noopener=yes,noreferrer=yes,width=1280,height=720,resizable=yes,scrollbars=yes";
     const opened = window.open(guestUrl, windowName, features);
     if (opened) {
       guestWindowRef.current = opened;
@@ -1426,23 +1497,26 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     }
   }
 
-  async function parseSelectedReports(ctx?: OperationContext, selectionOverride?: SelectionMap): Promise<boolean> {
+  async function parseSelectedReports(
+    ctx?: OperationContext,
+    selectionOverride?: SelectionMap,
+  ): Promise<boolean> {
     if (!session) return false;
     const operation = ctx ?? beginOperation();
     if (isUploading) {
-      applyState(setStatus, "Upload in progress. Please wait until uploads finish before publishing.", operation);
+      applyState(
+        setStatus,
+        "Upload in progress. Please wait until uploads finish before publishing.",
+        operation,
+      );
       return false;
     }
 
     const selection = selectionOverride ?? selectedReports;
-    const targets: Array<{ kind: ReportKind; file: FileOut }> = REPORT_DEFS.flatMap(
-      (def) => {
-        const file = uploads[def.kind];
-        return selection[def.kind] && file
-          ? [{ kind: def.kind, file }]
-          : [];
-      },
-    );
+    const targets: Array<{ kind: ReportKind; file: FileOut }> = REPORT_DEFS.flatMap((def) => {
+      const file = uploads[def.kind];
+      return selection[def.kind] && file ? [{ kind: def.kind, file }] : [];
+    });
 
     if (!targets.length) {
       if (!session?.published) {
@@ -1450,7 +1524,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         applyState(setStatus, "No reports selected for publishing.", operation);
         return false;
       }
-      applyState(setStatus, "No reports selected. Publishing will hide all reports from the guest view.", operation);
+      applyState(
+        setStatus,
+        "No reports selected. Publishing will hide all reports from the guest view.",
+        operation,
+      );
       return true;
     }
 
@@ -1494,17 +1572,22 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       return;
     }
     try {
-      applyState(setStatus, session.published ? "Updating live session…" : "Publishing…", operation);
+      applyState(
+        setStatus,
+        session.published ? "Updating live session…" : "Publishing…",
+        operation,
+      );
       const sessionId = session.id;
       const result = await publish(sessionId, true, selection);
       if (!isOperationActive(operation)) {
         return;
       }
-      localStorage.setItem(
-        "longevityq_publish",
-        JSON.stringify({ sessionId, ts: Date.now() }),
+      localStorage.setItem("longevityq_publish", JSON.stringify({ sessionId, ts: Date.now() }));
+      applyState(
+        setSession,
+        (prev) => (prev ? { ...prev, published: result.published } : prev),
+        operation,
       );
-      applyState(setSession, (prev) => (prev ? { ...prev, published: result.published } : prev), operation);
       applyState(setStagedPreviewSessionId, sessionId, operation);
       applyState(setStagedPreviewVersion, (v) => v + 1, operation);
       markBackendUp(operation);
@@ -1548,7 +1631,11 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       const autoPublish = options?.autoPublish ?? true;
       if (!options?.silent) {
         const label = preset.label;
-        setStatus(autoPublish ? `${label} preset applied. Updating guest view…` : `${label} preset applied.`);
+        setStatus(
+          autoPublish
+            ? `${label} preset applied. Updating guest view…`
+            : `${label} preset applied.`,
+        );
       }
       setError("");
 
@@ -1625,10 +1712,7 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     try {
       await setDisplaySession({ sessionId: null });
       markBackendUp();
-      localStorage.setItem(
-        "longevityq_publish",
-        JSON.stringify({ sessionId: 0, ts: Date.now() }),
-      );
+      localStorage.setItem("longevityq_publish", JSON.stringify({ sessionId: 0, ts: Date.now() }));
       setStatus("Cleared guest screen.");
       setHasShownOnGuest(false);
     } catch (err) {
@@ -1641,11 +1725,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
   const guestButtonLabel = !guestWindowOpen
     ? "Open Guest Window"
     : hasShownOnGuest
-    ? "Hide"
-    : "Go Live";
+      ? "Hide"
+      : "Go Live";
 
-  const guestButtonDisabled =
-    guestWindowOpen && !hasShownOnGuest && !(session?.published ?? false);
+  const guestButtonDisabled = guestWindowOpen && !hasShownOnGuest && !(session?.published ?? false);
 
   const handleGuestButtonClick = () => {
     if (!guestWindowOpen) {
@@ -1661,11 +1744,10 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
   const renderSessionHeader = () => {
     if (!session) return null;
-    const displayName = formatFullName(session.first_name, session.last_name) || session.client_name;
+    const displayName =
+      formatFullName(session.first_name, session.last_name) || session.client_name;
     const guestButtonVariant: React.ComponentProps<typeof Button>["variant"] =
-      !guestWindowOpen || (hasShownOnGuest && guestWindowOpen)
-        ? "secondary"
-        : "primary";
+      !guestWindowOpen || (hasShownOnGuest && guestWindowOpen) ? "secondary" : "primary";
 
     return (
       <div className="mt-3 flex flex-wrap items-stretch gap-4">
@@ -1733,23 +1815,48 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                   type="button"
                   variant="primary"
                   size="icon"
-                  onClick={() => { void saveEditName(); }}
+                  onClick={() => {
+                    void saveEditName();
+                  }}
                   title="Save name"
                 >
                   <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <path d="M5 10.5l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path
+                      d="M5 10.5l3 3 7-7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </Button>
-                <Button type="button" variant="danger" size="icon" onClick={cancelEditName} title="Cancel">
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="icon"
+                  onClick={cancelEditName}
+                  title="Cancel"
+                >
                   <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <path d="M6 6l8 8M14 6l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path
+                      d="M6 6l8 8M14 6l-8 8"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
                   </svg>
                 </Button>
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-2.5">
                 <div className="text-[16px] font-semibold">{displayName}</div>
-                <Button type="button" variant="ghost" size="icon" onClick={startEditName} title="Edit guest name">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={startEditName}
+                  title="Edit guest name"
+                >
                   <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path
                       d="M4 13.5v2.5h2.5L15.1 7.4l-2.5-2.5L4 13.5zM16.6 5.9a1 1 0 000-1.4l-1.1-1.1a1 1 0 00-1.4 0l-1.2 1.2 2.5 2.5 1.2-1.2z"
@@ -1760,20 +1867,29 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               </div>
             )}
             <div className="flex flex-wrap gap-2">
-              <Chip variant={session.published ? "success" : "muted"}>{session.published ? "Published" : "Not Published"}</Chip>
+              <Chip variant={session.published ? "success" : "muted"}>
+                {session.published ? "Published" : "Not Published"}
+              </Chip>
               {hasShownOnGuest && guestWindowOpen && <Chip variant="info">Visible on Guest</Chip>}
             </div>
           </div>
         </div>
-        <div className={cn("flex min-w-[220px] flex-[0_0_220px] flex-col justify-between gap-3 p-4", statusCardClasses)}>
+        <div
+          className={cn(
+            "flex min-w-[220px] flex-[0_0_220px] flex-col justify-between gap-3 p-4",
+            statusCardClasses,
+          )}
+        >
           <div>
-            <div className="text-[13px] font-semibold uppercase tracking-[0.3em] text-text-secondary">Guest Screen</div>
+            <div className="text-[13px] font-semibold uppercase tracking-[0.3em] text-text-secondary">
+              Guest Screen
+            </div>
             <div className="mt-1.5 text-[12px] text-text-secondary">
               {hasShownOnGuest
                 ? "Currently showing this session."
                 : guestWindowOpen
-                ? "Reveal on the guest screen."
-                : "Guest window not open."}
+                  ? "Reveal on the guest screen."
+                  : "Guest window not open."}
             </div>
           </div>
           <div className="text-[11px] text-[#9ca3c9]">
@@ -1798,7 +1914,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       onDragEnter={handleDragHighlight}
       onDragOver={handleDragHighlight}
       onDragLeave={handleDragLeaveArea}
-      onDrop={(event) => { void handleDrop(event); }}
+      onDrop={(event) => {
+        void handleDrop(event);
+      }}
       className={cn(
         "flex h-full flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-border/70 bg-surface px-3 py-2.5 text-[11px] text-[#4b5563] shadow-sm transition-colors duration-150",
         {
@@ -1806,15 +1924,17 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         },
       )}
     >
-        <Button
-          type="button"
-          variant="primary"
-          onClick={onBrowse}
-          className={cn(
-            "px-[14px] py-1.5 text-[12px] transition-shadow",
-            shouldPulseUpload && session && "animate-[pulse_1.3s_ease-in-out_2] shadow-[0_0_18px_rgba(59,130,246,0.45)]",
-          )}
-        >
+      <Button
+        type="button"
+        variant="primary"
+        onClick={onBrowse}
+        className={cn(
+          "px-[14px] py-1.5 text-[12px] transition-shadow",
+          shouldPulseUpload &&
+            session &&
+            "animate-[pulse_1.3s_ease-in-out_2] shadow-[0_0_18px_rgba(59,130,246,0.45)]",
+        )}
+      >
         Upload
       </Button>
       <div className="flex min-w-0 flex-1 items-center justify-end text-right">
@@ -1826,21 +1946,32 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
         accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         multiple
         className="hidden"
-        onChange={(event) => { void onFileInput(event); }}
+        onChange={(event) => {
+          void onFileInput(event);
+        }}
       />
     </div>
   );
 
   const renderUploadAndPublishRow = () => {
     if (!session) return null;
-    const publishableReports = REPORT_DEFS.filter((def) => selectedReports[def.kind] && uploads[def.kind]);
+    const publishableReports = REPORT_DEFS.filter(
+      (def) => selectedReports[def.kind] && uploads[def.kind],
+    );
     const hasSelectedReports = publishableReports.length > 0;
     const canPublishWithoutSelection = session.published;
     const publishLocked = session.published && !hasPendingChanges;
-    const disablePublish = (!hasSelectedReports && !canPublishWithoutSelection) || isUploading || publishLocked;
-    const publishLabel = session.published ? (hasPendingChanges ? "Update" : "Published") : "Publish";
-  const publishButtonVariant: React.ComponentProps<typeof Button>["variant"] = publishLocked ? "secondary" : "primary";
-  const publishShouldPulse = shouldPulsePublish && !disablePublish;
+    const disablePublish =
+      (!hasSelectedReports && !canPublishWithoutSelection) || isUploading || publishLocked;
+    const publishLabel = session.published
+      ? hasPendingChanges
+        ? "Update"
+        : "Published"
+      : "Publish";
+    const publishButtonVariant: React.ComponentProps<typeof Button>["variant"] = publishLocked
+      ? "secondary"
+      : "primary";
+    const publishShouldPulse = shouldPulsePublish && !disablePublish;
     const publishStatusText = hasSelectedReports
       ? session.published
         ? publishLocked
@@ -1848,8 +1979,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           : "Update to reflect recent changes."
         : "Publish the selected reports."
       : session.published
-      ? "Publishing will hide all reports from the guest view."
-      : "< Upload to publish.";
+        ? "Publishing will hide all reports from the guest view."
+        : "< Upload to publish.";
     const sliderMax = Math.max(1, thresholdMax);
     const sliderValue = Math.min(thresholdLimit, sliderMax);
     const handleToggleSeverity = (severity: GeneralSeverity, checked: boolean) => {
@@ -1878,12 +2009,15 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
               </div>
               <div className="ml-auto flex items-center gap-3">
                 <Button
-                  onClick={() => { void onPublish(); }}
+                  onClick={() => {
+                    void onPublish();
+                  }}
                   disabled={disablePublish}
                   variant={publishButtonVariant}
                   className={cn(
                     "px-[18px] transition-shadow",
-                    publishShouldPulse && "animate-[pulse_1.3s_ease-in-out_2] shadow-[0_0_18px_rgba(59,130,246,0.45)]",
+                    publishShouldPulse &&
+                      "animate-[pulse_1.3s_ease-in-out_2] shadow-[0_0_18px_rgba(59,130,246,0.45)]",
                   )}
                 >
                   {publishLabel}
@@ -1894,7 +2028,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                     onClick={() => setShowThresholdControls((prev) => !prev)}
                     className={cn(
                       "flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-white shadow-surface-md transition-colors duration-150",
-                      showThresholdControls ? "ring-2 ring-accent-info/40" : "hover:border-accent-info/40",
+                      showThresholdControls
+                        ? "ring-2 ring-accent-info/40"
+                        : "hover:border-accent-info/40",
                     )}
                     title="Adjust priority display limit"
                   >
@@ -1938,17 +2074,24 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                               const checked = visibleSeveritiesSet.has(severity);
                               const disable = checked && visibleSeveritiesSet.size <= 1;
                               return (
-                                <label key={severity} className="flex items-center gap-3 text-[12px] text-text-secondary">
+                                <label
+                                  key={severity}
+                                  className="flex items-center gap-3 text-[12px] text-text-secondary"
+                                >
                                   <input
                                     type="checkbox"
                                     checked={checked}
                                     disabled={disable}
-                                    onChange={(event) => handleToggleSeverity(severity, event.target.checked)}
+                                    onChange={(event) =>
+                                      handleToggleSeverity(severity, event.target.checked)
+                                    }
                                     className="h-3.5 w-3.5 accent-accent-info"
                                   />
                                   <span className="flex flex-col">
                                     <span className="text-text-primary">{meta.label}</span>
-                                    <span className="text-[11px] text-text-secondary/70">{meta.range}</span>
+                                    <span className="text-[11px] text-text-secondary/70">
+                                      {meta.range}
+                                    </span>
                                   </span>
                                 </label>
                               );
@@ -1981,8 +2124,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                       !presetsEnabled
                         ? "cursor-not-allowed border-[#d1d5db] bg-[#f3f4f6] text-[#9ca3af]"
                         : isActive
-                        ? "border-[#0ea5e9] bg-[#0ea5e9]/15 text-[#0ea5e9]"
-                        : "border-[#d1d5db] bg-white text-[#374151] hover:border-[#0ea5e9] hover:text-[#0ea5e9]",
+                          ? "border-[#0ea5e9] bg-[#0ea5e9]/15 text-[#0ea5e9]"
+                          : "border-[#d1d5db] bg-white text-[#374151] hover:border-[#0ea5e9] hover:text-[#0ea5e9]",
                     )}
                   >
                     {preset.label}
@@ -2003,7 +2146,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       const uploaded = uploads[def.kind];
       const err = uploadErrors[def.kind];
       const isSelected = selectedReports[def.kind];
-      const tileState: "pending" | "uploaded" | "error" = uploaded && !err ? "uploaded" : err ? "error" : "pending";
+      const tileState: "pending" | "uploaded" | "error" =
+        uploaded && !err ? "uploaded" : err ? "error" : "pending";
       const parsedFlag = isParsed(def.kind);
       const parsedAndSelected = Boolean(parsedFlag && isSelected);
       const hasParseError = Boolean(err && uploaded);
@@ -2022,9 +2166,12 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
 
       const tileClass = cn(tileBaseClasses, {
         "border-error-border bg-tile-error text-chip-danger-text shadow-error-soft": hasParseError,
-        "border-success-border bg-tile-success shadow-success-soft": parsedAndSelected && !hasParseError,
-        "border-border bg-surface-muted shadow-surface-md": tileState === "uploaded" && !parsedAndSelected && !hasParseError,
-        "border border-dashed border-border bg-tile-pending shadow-none": tileState === "pending" && !hasParseError && !parsedAndSelected,
+        "border-success-border bg-tile-success shadow-success-soft":
+          parsedAndSelected && !hasParseError,
+        "border-border bg-surface-muted shadow-surface-md":
+          tileState === "uploaded" && !parsedAndSelected && !hasParseError,
+        "border border-dashed border-border bg-tile-pending shadow-none":
+          tileState === "pending" && !hasParseError && !parsedAndSelected,
       });
 
       const showing = isPublishedReport;
@@ -2032,21 +2179,21 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       const chipVariant: ChipVariant = hasParseError
         ? "danger"
         : showing
-        ? "success"
-        : wantsShow
-        ? "info"
-        : tileState === "uploaded"
-        ? "muted"
-        : "muted";
+          ? "success"
+          : wantsShow
+            ? "info"
+            : tileState === "uploaded"
+              ? "muted"
+              : "muted";
       const chipLabel = hasParseError
         ? "Error"
         : showing
-        ? "Showing"
-        : wantsShow
-        ? "Show"
-        : tileState === "uploaded"
-        ? "Hidden"
-        : "Waiting";
+          ? "Showing"
+          : wantsShow
+            ? "Show"
+            : tileState === "uploaded"
+              ? "Hidden"
+              : "Waiting";
 
       return (
         <div key={def.kind} className={tileClass}>
@@ -2071,7 +2218,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                 title={uploaded ? `Include ${def.label} report` : "Upload report first"}
                 className="h-[18px] w-[18px] accent-accent disabled:cursor-not-allowed"
               />
-              <div className="min-w-0 text-[13px] font-bold leading-tight tracking-[0.02em]">{def.label}</div>
+              <div className="min-w-0 text-[13px] font-bold leading-tight tracking-[0.02em]">
+                {def.label}
+              </div>
             </div>
             <Chip variant={chipVariant} className="mt-[2px] shrink-0">
               {chipLabel}
@@ -2090,7 +2239,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
                 </div>
                 {hasParseError && (
                   <div className="text-chip-danger-text">
-                    {needsLocatorGuidance ? `${err} Fix the file and parse again or deselect to continue.` : err}
+                    {needsLocatorGuidance
+                      ? `${err} Fix the file and parse again or deselect to continue.`
+                      : err}
                   </div>
                 )}
                 {!isSelected && !parsedFlag && (
@@ -2123,7 +2274,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
           className={cn(
             "grid gap-[12px] [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]",
             {
-              "rounded-[16px] border-[3px] border-dotted border-accent-blue bg-[rgba(37,99,235,0.07)] p-3": isDragActive,
+              "rounded-[16px] border-[3px] border-dotted border-accent-blue bg-[rgba(37,99,235,0.07)] p-3":
+                isDragActive,
             },
           )}
         >
@@ -2145,7 +2297,8 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     },
     [runtimeToken],
   );
-  const liveMonitorUrl = appendTokenParam(origin ? `${origin}/guest?monitor=1` : "/guest?monitor=1") ?? undefined;
+  const liveMonitorUrl =
+    appendTokenParam(origin ? `${origin}/guest?monitor=1` : "/guest?monitor=1") ?? undefined;
   const stagedPreviewUrl =
     appendTokenParam(
       stagedPreviewSessionId !== null
@@ -2172,7 +2325,14 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     }
     const computed = Math.min(availableWidth / viewportWidth, availableHeight / viewportHeight, 1);
     return Number.isFinite(computed) && computed > 0 ? computed : fallbackFitScale;
-  }, [fallbackFitScale, livePreviewArea, stagedPreviewArea, stagedPreviewVisible, viewportHeight, viewportWidth]);
+  }, [
+    fallbackFitScale,
+    livePreviewArea,
+    stagedPreviewArea,
+    stagedPreviewVisible,
+    viewportHeight,
+    viewportWidth,
+  ]);
 
   const originalScale = useMemo(() => {
     const area = stagedPreviewVisible ? stagedPreviewArea : livePreviewArea;
@@ -2209,12 +2369,15 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     };
   }, [fitPreview, previewScale, viewportHeight, viewportWidth]);
 
-  const scaledFrameStyle = useMemo<React.CSSProperties>(() => ({
-    transform: `scale(${previewScale})`,
-    transformOrigin: "top left",
-    width: `${viewportWidth}px`,
-    height: `${viewportHeight}px`,
-  }), [previewScale, viewportHeight, viewportWidth]);
+  const scaledFrameStyle = useMemo<React.CSSProperties>(
+    () => ({
+      transform: `scale(${previewScale})`,
+      transformOrigin: "top left",
+      width: `${viewportWidth}px`,
+      height: `${viewportHeight}px`,
+    }),
+    [previewScale, viewportHeight, viewportWidth],
+  );
 
   useEffect(() => {
     if (stagedPreviewVisible) return;
@@ -2226,7 +2389,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       const entry = entries[entries.length - 1];
       if (!entry) return;
       const { width, height } = entry.contentRect;
-      setLivePreviewArea((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
+      setLivePreviewArea((prev) =>
+        prev.width === width && prev.height === height ? prev : { width, height },
+      );
     });
     observer.observe(node);
 
@@ -2245,7 +2410,9 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
       const entry = entries[entries.length - 1];
       if (!entry) return;
       const { width, height } = entry.contentRect;
-      setStagedPreviewArea((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
+      setStagedPreviewArea((prev) =>
+        prev.width === width && prev.height === height ? prev : { width, height },
+      );
     });
     observer.observe(node);
 
@@ -2254,94 +2421,101 @@ export default function Operator({ onSessionReady }: { onSessionReady: (id: numb
     };
   }, [stagedPreviewVisible]);
 
-useEffect(() => {
-  if (stagedPreviewVisible) return;
-  const container = livePreviewContainerRef.current;
-  if (!container) return;
+  useEffect(() => {
+    if (stagedPreviewVisible) return;
+    const container = livePreviewContainerRef.current;
+    if (!container) return;
 
-  if (fitPreview) {
-    container.scrollTo({ left: 0, top: 0, behavior: "auto" });
-    return;
-  }
-
-  const targetLeft = Math.max(0, (viewportWidth * previewScale - container.clientWidth) / 2);
-  const targetTop = Math.max(0, (viewportHeight * previewScale - container.clientHeight) / 2);
-  const scroll = () => container.scrollTo({ left: targetLeft, top: targetTop, behavior: "auto" });
-
-  const frame = requestAnimationFrame(scroll);
-  const iframe = container.querySelector("iframe");
-  iframe?.addEventListener("load", scroll);
-
-  return () => {
-    cancelAnimationFrame(frame);
-    iframe?.removeEventListener("load", scroll);
-  };
-}, [previewScale, viewportHeight, viewportWidth, stagedPreviewVisible, fitPreview]);
-
-useEffect(() => {
-  if (stagedPreviewVisible) return;
-  const container = livePreviewContainerRef.current;
-  const content = livePreviewContentRef.current;
-  if (!container || !content) return;
-
-  if (fitPreview) {
-    container.scrollTo({ left: 0, top: 0, behavior: "auto" });
-    return;
-  }
-
-  livePreviewUserScrolledRef.current = false;
-
-  const center = (force = false) => {
-    if (!force && livePreviewUserScrolledRef.current) return;
-    const scaledWidth = viewportWidth * previewScale;
-    const scaledHeight = viewportHeight * previewScale;
-    const targetLeft = Math.max(0, scaledWidth / 2 - container.clientWidth / 2);
-    const targetTop = Math.max(0, scaledHeight / 2 - container.clientHeight / 2);
-    container.scrollTo({ left: targetLeft, top: targetTop, behavior: "auto" });
-  };
-
-  const schedule = (force = false) => {
-    const delays = [0, 120, 320, 640, 1000, 1600];
-    delays.forEach((delay) => window.setTimeout(() => center(force), delay));
-  };
-
-  schedule(true);
-
-  const iframe = content.querySelector("iframe");
-  const handleLoad = () => {
-    livePreviewUserScrolledRef.current = false;
-    schedule(true);
-  };
-  iframe?.addEventListener("load", handleLoad);
-
-  const observers: ResizeObserver[] = [];
-  if (typeof ResizeObserver !== "undefined") {
-    const ro = new ResizeObserver(() => center(false));
-    ro.observe(container);
-    ro.observe(content);
-    observers.push(ro);
-  }
-
-  return () => {
-    iframe?.removeEventListener("load", handleLoad);
-    observers.forEach((ro) => ro.disconnect());
-  };
-}, [previewScale, fitPreview, liveMonitorUrl, stagedPreviewVisible, viewportHeight, viewportWidth]);
-
-useEffect(() => {
-  livePreviewUserScrolledRef.current = false;
-}, [fitPreview, previewScale, liveMonitorUrl, stagedPreviewVisible]);
-
-useEffect(() => {
-  const unsubscribe = window.longqLicense?.onManageRequest?.(() => {
-    setLicenseModalOpen(true);
-  });
-  return () => {
-    if (typeof unsubscribe === "function") {
-      unsubscribe();
+    if (fitPreview) {
+      container.scrollTo({ left: 0, top: 0, behavior: "auto" });
+      return;
     }
-  };
-}, []);
+
+    const targetLeft = Math.max(0, (viewportWidth * previewScale - container.clientWidth) / 2);
+    const targetTop = Math.max(0, (viewportHeight * previewScale - container.clientHeight) / 2);
+    const scroll = () => container.scrollTo({ left: targetLeft, top: targetTop, behavior: "auto" });
+
+    const frame = requestAnimationFrame(scroll);
+    const iframe = container.querySelector("iframe");
+    iframe?.addEventListener("load", scroll);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      iframe?.removeEventListener("load", scroll);
+    };
+  }, [previewScale, viewportHeight, viewportWidth, stagedPreviewVisible, fitPreview]);
+
+  useEffect(() => {
+    if (stagedPreviewVisible) return;
+    const container = livePreviewContainerRef.current;
+    const content = livePreviewContentRef.current;
+    if (!container || !content) return;
+
+    if (fitPreview) {
+      container.scrollTo({ left: 0, top: 0, behavior: "auto" });
+      return;
+    }
+
+    livePreviewUserScrolledRef.current = false;
+
+    const center = (force = false) => {
+      if (!force && livePreviewUserScrolledRef.current) return;
+      const scaledWidth = viewportWidth * previewScale;
+      const scaledHeight = viewportHeight * previewScale;
+      const targetLeft = Math.max(0, scaledWidth / 2 - container.clientWidth / 2);
+      const targetTop = Math.max(0, scaledHeight / 2 - container.clientHeight / 2);
+      container.scrollTo({ left: targetLeft, top: targetTop, behavior: "auto" });
+    };
+
+    const schedule = (force = false) => {
+      const delays = [0, 120, 320, 640, 1000, 1600];
+      delays.forEach((delay) => window.setTimeout(() => center(force), delay));
+    };
+
+    schedule(true);
+
+    const iframe = content.querySelector("iframe");
+    const handleLoad = () => {
+      livePreviewUserScrolledRef.current = false;
+      schedule(true);
+    };
+    iframe?.addEventListener("load", handleLoad);
+
+    const observers: ResizeObserver[] = [];
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => center(false));
+      ro.observe(container);
+      ro.observe(content);
+      observers.push(ro);
+    }
+
+    return () => {
+      iframe?.removeEventListener("load", handleLoad);
+      observers.forEach((ro) => ro.disconnect());
+    };
+  }, [
+    previewScale,
+    fitPreview,
+    liveMonitorUrl,
+    stagedPreviewVisible,
+    viewportHeight,
+    viewportWidth,
+  ]);
+
+  useEffect(() => {
+    livePreviewUserScrolledRef.current = false;
+  }, [fitPreview, previewScale, liveMonitorUrl, stagedPreviewVisible]);
+
+  useEffect(() => {
+    const unsubscribe = window.longqLicense?.onManageRequest?.(() => {
+      setLicenseModalOpen(true);
+    });
+    return () => {
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    };
+  }, []);
 
   const diagnosticsModal = diagnosticsOpen ? (
     <div
@@ -2364,12 +2538,19 @@ useEffect(() => {
               size="sm"
               variant="soft"
               className="px-3"
-              onClick={() => { void fetchDiagnostics(); }}
+              onClick={() => {
+                void fetchDiagnostics();
+              }}
               disabled={diagnosticsLoading}
             >
               Refresh
             </Button>
-            <Button size="sm" variant="secondary" className="px-3" onClick={() => setDiagnosticsOpen(false)}>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="px-3"
+              onClick={() => setDiagnosticsOpen(false)}
+            >
               Close
             </Button>
           </div>
@@ -2390,7 +2571,10 @@ useEffect(() => {
           ) : (
             <ul className="space-y-3">
               {diagnosticsEntries.map((entry) => (
-                <li key={`${entry.code}-${entry.timestamp}`} className="rounded-2xl border border-border bg-surface px-4 py-3">
+                <li
+                  key={`${entry.code}-${entry.timestamp}`}
+                  className="rounded-2xl border border-border bg-surface px-4 py-3"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-accent-info">
                       {entry.code}
@@ -2402,9 +2586,11 @@ useEffect(() => {
                       })()}
                     </span>
                   </div>
-                  <div className="mt-2 text-[13px] font-semibold text-text-primary">{entry.message}</div>
+                  <div className="mt-2 text-[13px] font-semibold text-text-primary">
+                    {entry.message}
+                  </div>
                   <div className="mt-1 text-[11px] text-text-secondary">
-                    {(entry.logger ?? "backend")} · {entry.level}
+                    {entry.logger ?? "backend"} · {entry.level}
                     {entry.pathname ? ` · ${entry.pathname}:${entry.lineno ?? 0}` : ""}
                   </div>
                   {entry.detail && (
@@ -2447,8 +2633,8 @@ useEffect(() => {
               <>
                 <div className="text-[20px] font-semibold">Activation Required</div>
                 <p className="text-[14px] text-text-secondary">
-                  The license file is missing or invalid. Use the Manage License button to refresh or re-import it,
-                  then reopen the Operator Console.
+                  The license file is missing or invalid. Use the Manage License button to refresh
+                  or re-import it, then reopen the Operator Console.
                 </p>
                 <div className="flex justify-center">
                   <Button variant="primary" onClick={() => setLicenseModalOpen(true)}>
@@ -2479,7 +2665,9 @@ useEffect(() => {
               <div className="text-[18px] font-semibold tracking-[0.16em] text-teal-100 uppercase">
                 Initializing Console
               </div>
-              <p className="mt-2 text-[14px] text-slate-200">Connecting to the Quantum Qi™ backend…</p>
+              <p className="mt-2 text-[14px] text-slate-200">
+                Connecting to the Quantum Qi™ backend…
+              </p>
             </div>
           </div>
         </div>
@@ -2496,8 +2684,8 @@ useEffect(() => {
           <div className="w-full max-w-[560px] space-y-4 text-center">
             <div className="text-[30px] font-bold">Operator Console Offline</div>
             <div className="mt-2 text-[16px] opacity-80">
-              The Quantum Qi™ services are no longer reachable. Close this window and restart the program once
-              the server is running again.
+              The Quantum Qi™ services are no longer reachable. Close this window and restart the
+              program once the server is running again.
             </div>
             {error && (
               <div className="mx-auto max-w-[520px] rounded-2xl border border-border bg-surface/90 px-5 py-4 text-left text-[13px] leading-relaxed text-text-secondary">
@@ -2508,7 +2696,12 @@ useEffect(() => {
               </div>
             )}
             <div className="flex flex-wrap justify-center gap-3 pt-1">
-              <Button variant="secondary" size="sm" className="px-4" onClick={() => setDiagnosticsOpen(true)}>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="px-4"
+                onClick={() => setDiagnosticsOpen(true)}
+              >
                 View diagnostics
               </Button>
               <Button
@@ -2538,7 +2731,9 @@ useEffect(() => {
         onDragEnter={handleDragHighlight}
         onDragOver={handleDragHighlight}
         onDragLeave={handleDragLeaveArea}
-        onDrop={(event) => { void handleDrop(event); }}
+        onDrop={(event) => {
+          void handleDrop(event);
+        }}
         className="flex flex-wrap items-start gap-4 px-3 py-3"
       >
         <div
@@ -2586,7 +2781,9 @@ useEffect(() => {
                   className="w-44 max-w-[60vw]"
                 />
                 <div className="w-full max-w-[520px] rounded-3xl border border-border bg-surface/90 p-8 shadow-surface-lg backdrop-blur-sm">
-                  <h2 className="text-center text-[22px] font-semibold text-text-primary">Create a New Session</h2>
+                  <h2 className="text-center text-[22px] font-semibold text-text-primary">
+                    Create a New Session
+                  </h2>
                   <p className="mt-2 text-center text-[13px] text-text-secondary">
                     Enter the guest name to begin. You can adjust details later if needed.
                   </p>
@@ -2623,7 +2820,11 @@ useEffect(() => {
                           setFirstNameInput(first);
                           setLastNameInput(last);
                           const createdName = formatFullName(created.first_name, created.last_name);
-                          setStatus(createdName ? `Drop the folder for ${createdName}.` : "Ready for the next guest folder.");
+                          setStatus(
+                            createdName
+                              ? `Drop the folder for ${createdName}.`
+                              : "Ready for the next guest folder.",
+                          );
                           try {
                             await setDisplaySession({
                               stagedSessionId: created.id,
@@ -2644,52 +2845,57 @@ useEffect(() => {
                       })();
                     }}
                   >
-                <div className="flex flex-col gap-2.5 sm:flex-row">
-                  <input
-                    className={cn(darkInputClasses, "flex-1 text-[14px]" )}
-                    placeholder="First name"
-                    value={firstNameInput}
-                    onChange={(e) => setFirstNameInput(e.target.value)}
-                    autoFocus
-                  />
-                  <input
-                    className={cn(darkInputClasses, "flex-1 text-[14px]")}
-                    placeholder="Last name"
-                    value={lastNameInput}
-                    onChange={(e) => setLastNameInput(e.target.value)}
-                  />
+                    <div className="flex flex-col gap-2.5 sm:flex-row">
+                      <input
+                        className={cn(darkInputClasses, "flex-1 text-[14px]")}
+                        placeholder="First name"
+                        value={firstNameInput}
+                        onChange={(e) => setFirstNameInput(e.target.value)}
+                        autoFocus
+                      />
+                      <input
+                        className={cn(darkInputClasses, "flex-1 text-[14px]")}
+                        placeholder="Last name"
+                        value={lastNameInput}
+                        onChange={(e) => setLastNameInput(e.target.value)}
+                      />
+                    </div>
+                    <fieldset className="flex flex-wrap items-center gap-3 text-[13px] text-text-secondary">
+                      <legend className="sr-only">Gender</legend>
+                      <span>Gender:</span>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name="session-sex-full"
+                          value="male"
+                          checked={sexSelection === "male"}
+                          onChange={() => setSexSelection("male")}
+                          className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
+                        />
+                        Male
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name="session-sex-full"
+                          value="female"
+                          checked={sexSelection === "female"}
+                          onChange={() => setSexSelection("female")}
+                          className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
+                        />
+                        Female
+                      </label>
+                    </fieldset>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={!firstNameInput.trim() || !lastNameInput.trim() || !sexSelection}
+                      className="mt-2"
+                    >
+                      Create Session
+                    </Button>
+                  </form>
                 </div>
-                <fieldset className="flex flex-wrap items-center gap-3 text-[13px] text-text-secondary">
-                  <legend className="sr-only">Gender</legend>
-                  <span>Gender:</span>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="session-sex-full"
-                      value="male"
-                      checked={sexSelection === "male"}
-                      onChange={() => setSexSelection("male")}
-                      className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
-                    />
-                    Male
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="session-sex-full"
-                      value="female"
-                      checked={sexSelection === "female"}
-                      onChange={() => setSexSelection("female")}
-                      className="h-4 w-4 text-accent-info focus:ring-accent-info/40"
-                    />
-                    Female
-                  </label>
-                </fieldset>
-                <Button type="submit" variant="primary" disabled={!firstNameInput.trim() || !lastNameInput.trim() || !sexSelection} className="mt-2">
-                  Create Session
-                </Button>
-              </form>
-            </div>
               </div>
             )}
 
@@ -2723,148 +2929,157 @@ useEffect(() => {
           </div>
         </div>
 
-      <div className="sticky top-3 flex min-w-[280px] flex-1 self-stretch">
-        <div className="flex h-[calc(100vh-24px)] min-h-[480px] flex-1 flex-col gap-3.5 rounded-2xl border border-[#e5e7eb] bg-white p-3.5 pb-0">
-          <div className="flex items-start justify-between gap-2.5">
-            <div className="flex flex-1 flex-col gap-1.5">
-              <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
-                <span className="flex h-2.5 w-2.5 items-center justify-center">
-                  <span className="h-2.5 w-2.5 rounded-full bg-accent" />
-                </span>
-                <span>Live Monitor</span>
-                <span className="text-[#d1d5e0]">|</span>
-                <span className="font-medium normal-case text-[11px] text-[#6b7280]">
-                  Message Displayed:&nbsp;
-                  <span className="text-[#111827]">{liveMonitorMessage}</span>
-                </span>
+        <div className="sticky top-3 flex min-w-[280px] flex-1 self-stretch">
+          <div className="flex h-[calc(100vh-24px)] min-h-[480px] flex-1 flex-col gap-3.5 rounded-2xl border border-[#e5e7eb] bg-white p-3.5 pb-0">
+            <div className="flex items-start justify-between gap-2.5">
+              <div className="flex flex-1 flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
+                  <span className="flex h-2.5 w-2.5 items-center justify-center">
+                    <span className="h-2.5 w-2.5 rounded-full bg-accent" />
+                  </span>
+                  <span>Live Monitor</span>
+                  <span className="text-[#d1d5e0]">|</span>
+                  <span className="font-medium normal-case text-[11px] text-[#6b7280]">
+                    Message Displayed:&nbsp;
+                    <span className="text-[#111827]">{liveMonitorMessage}</span>
+                  </span>
+                </div>
+                <div className="text-[11px] text-[#6b7280]">Mirrors the active guest display.</div>
               </div>
-              <div className="text-[11px] text-[#6b7280]">
-                Mirrors the active guest display.
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-1 text-right">
-              <button
-                type="button"
-                aria-pressed={fitPreview}
-                aria-label={previewToggleLabel}
-                title={previewToggleLabel}
-                onClick={() => setFitPreview((current) => !current)}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.6px] transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0ea5e9]",
-                  fitPreview
-                    ? "border-[#0ea5e9] bg-[#0ea5e9]/15 text-[#0ea5e9]"
-                    : "border-[#d1d5db] bg-white text-[#374151] hover:border-[#0ea5e9] hover:text-[#0ea5e9]",
-                )}
-              >
-                <span
+              <div className="flex flex-col items-end gap-1 text-right">
+                <button
+                  type="button"
+                  aria-pressed={fitPreview}
+                  aria-label={previewToggleLabel}
+                  title={previewToggleLabel}
+                  onClick={() => setFitPreview((current) => !current)}
                   className={cn(
-                    "flex h-2.5 w-2.5 items-center justify-center rounded-full border",
-                    fitPreview ? "border-[#0ea5e9] bg-[#0ea5e9]" : "border-[#9ca3af] bg-transparent",
+                    "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.6px] transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0ea5e9]",
+                    fitPreview
+                      ? "border-[#0ea5e9] bg-[#0ea5e9]/15 text-[#0ea5e9]"
+                      : "border-[#d1d5db] bg-white text-[#374151] hover:border-[#0ea5e9] hover:text-[#0ea5e9]",
                   )}
-                />
-                {fitPreview ? "Original Size" : "Fit to Screen"}
-              </button>
-              <span className="text-[10px] text-[#6b7280]">
-                {fitPreview ? "Full frame preview (scaled to fit)." : "Operator preview scale applied."}
-              </span>
+                >
+                  <span
+                    className={cn(
+                      "flex h-2.5 w-2.5 items-center justify-center rounded-full border",
+                      fitPreview
+                        ? "border-[#0ea5e9] bg-[#0ea5e9]"
+                        : "border-[#9ca3af] bg-transparent",
+                    )}
+                  />
+                  {fitPreview ? "Original Size" : "Fit to Screen"}
+                </button>
+                <span className="text-[10px] text-[#6b7280]">
+                  {fitPreview
+                    ? "Full frame preview (scaled to fit)."
+                    : "Operator preview scale applied."}
+                </span>
+              </div>
             </div>
-          </div>
-          {!guestWindowOpen && (
-            <div className="rounded-lg bg-[#fef2f2] px-2.5 py-2 text-[12px] text-[#b91c1c]">
-              Guest window is closed. Use the session header controls to launch it again.
-            </div>
-          )}
-          <div
-            className={cn(
-              "flex min-h-0 flex-1 flex-col gap-3.5 pr-2",
-              fitPreview ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden",
+            {!guestWindowOpen && (
+              <div className="rounded-lg bg-[#fef2f2] px-2.5 py-2 text-[12px] text-[#b91c1c]">
+                Guest window is closed. Use the session header controls to launch it again.
+              </div>
             )}
-          >
             <div
               className={cn(
-                "rounded-[10px] border border-[#d1d5db] bg-white shadow-inner",
-                stagedPreviewVisible ? "p-3" : "flex-1 p-0",
+                "flex min-h-0 flex-1 flex-col gap-3.5 pr-2",
+                fitPreview ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden",
               )}
             >
-              {!stagedPreviewVisible ? (
-                <div
-                  ref={livePreviewContainerRef}
-                  onScroll={() => {
-                    if (!fitPreview) {
-                      livePreviewUserScrolledRef.current = true;
-                    }
-                  }}
-                  className={cn(
-                    "relative flex h-full w-full items-start",
-                    fitPreview ? "justify-center overflow-hidden" : "justify-start overflow-y-auto overflow-x-hidden",
-                  )}
-                >
+              <div
+                className={cn(
+                  "rounded-[10px] border border-[#d1d5db] bg-white shadow-inner",
+                  stagedPreviewVisible ? "p-3" : "flex-1 p-0",
+                )}
+              >
+                {!stagedPreviewVisible ? (
                   <div
-                    ref={livePreviewContentRef}
-                    className={cn("relative", fitPreview ? "inline-block" : "w-full max-w-full")}
-                    style={previewContainerStyle}
+                    ref={livePreviewContainerRef}
+                    onScroll={() => {
+                      if (!fitPreview) {
+                        livePreviewUserScrolledRef.current = true;
+                      }
+                    }}
+                    className={cn(
+                      "relative flex h-full w-full items-start",
+                      fitPreview
+                        ? "justify-center overflow-hidden"
+                        : "justify-start overflow-y-auto overflow-x-hidden",
+                    )}
                   >
-                    <iframe
-                      title="Live Guest Monitor"
-                      src={liveMonitorUrl}
-                      scrolling="no"
-                      className="absolute inset-0 border-0"
-                      style={scaledFrameStyle}
-                    />
+                    <div
+                      ref={livePreviewContentRef}
+                      className={cn("relative", fitPreview ? "inline-block" : "w-full max-w-full")}
+                      style={previewContainerStyle}
+                    >
+                      <iframe
+                        title="Live Guest Monitor"
+                        src={liveMonitorUrl}
+                        scrolling="no"
+                        className="absolute inset-0 border-0"
+                        style={scaledFrameStyle}
+                      />
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="text-[11px] text-[#6b7280]">
-                  Live monitor is standing by. Go Live to reveal the staged data.
+                ) : (
+                  <div className="text-[11px] text-[#6b7280]">
+                    Live monitor is standing by. Go Live to reveal the staged data.
+                  </div>
+                )}
+              </div>
+              {showStagedPreviewBlock && stagedPreviewVisible && (
+                <div className="flex flex-1 flex-col gap-3 rounded-[10px] border border-[#d1d5db] bg-white p-3 shadow-inner">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
+                    Staged Preview
+                  </div>
+                  <div className="text-[11px] text-[#6b7280]">
+                    Review the staged data before revealing it to the guest.
+                  </div>
+                  <div
+                    className={cn(
+                      "flex-1 rounded-[8px] border border-[#d1d5db]",
+                      fitPreview ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden",
+                    )}
+                  >
+                    {stagedPreviewUrl && (
+                      <div
+                        ref={stagedPreviewContainerRef}
+                        className={cn(
+                          "relative flex h-full w-full items-start",
+                          fitPreview
+                            ? "justify-center overflow-hidden"
+                            : "justify-start overflow-y-auto overflow-x-hidden",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "relative",
+                            fitPreview ? "inline-block" : "w-full max-w-full",
+                          )}
+                          style={previewContainerStyle}
+                        >
+                          <iframe
+                            key={`${stagedPreviewSessionId}-${stagedPreviewVersion}`}
+                            title="Staged Guest Preview"
+                            src={stagedPreviewUrl}
+                            scrolling="no"
+                            className="absolute inset-0 border-0"
+                            style={scaledFrameStyle}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
-            {showStagedPreviewBlock && stagedPreviewVisible && (
-              <div className="flex flex-1 flex-col gap-3 rounded-[10px] border border-[#d1d5db] bg-white p-3 shadow-inner">
-                <div className="text-[12px] font-semibold uppercase tracking-[0.6px] text-[#4b5563]">
-                  Staged Preview
-                </div>
-                <div className="text-[11px] text-[#6b7280]">
-                  Review the staged data before revealing it to the guest.
-                </div>
-                <div
-                  className={cn(
-                    "flex-1 rounded-[8px] border border-[#d1d5db]",
-                    fitPreview ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden",
-                  )}
-                >
-                  {stagedPreviewUrl && (
-                    <div
-                      ref={stagedPreviewContainerRef}
-                      className={cn(
-                        "relative flex h-full w-full items-start",
-                        fitPreview ? "justify-center overflow-hidden" : "justify-start overflow-y-auto overflow-x-hidden",
-                      )}
-                    >
-                      <div
-                        className={cn("relative", fitPreview ? "inline-block" : "w-full max-w-full")}
-                        style={previewContainerStyle}
-                      >
-                        <iframe
-                          key={`${stagedPreviewSessionId}-${stagedPreviewVersion}`}
-                          title="Staged Guest Preview"
-                          src={stagedPreviewUrl}
-                          scrolling="no"
-                          className="absolute inset-0 border-0"
-                          style={scaledFrameStyle}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
-      </div>
-        {diagnosticsModal}
-        {licenseModal}
-      </>
-    );
+      {diagnosticsModal}
+      {licenseModal}
+    </>
+  );
 }
